@@ -26,10 +26,14 @@ describe('_default/03-channels/07-channel_management/09-pinning.md', () => {
     cleanup.channels.push(`messaging:${channelId}`, `messaging:${otherChannelId}`);
     // created first, so without the pinned_at sort it would come after the other channel
     await client
-      .channel('messaging', channelId, { members: [userId, amyId, benId] })
+      .channel('messaging', channelId, {
+        members: [{ user_id: userId }, { user_id: amyId }, { user_id: benId }],
+      })
       .create();
     await client
-      .channel('messaging', otherChannelId, { members: [userId, amyId, benId] })
+      .channel('messaging', otherChannelId, {
+        members: [{ user_id: userId }, { user_id: amyId }, { user_id: benId }],
+      })
       .create();
   });
 
@@ -48,13 +52,15 @@ describe('_default/03-channels/07-channel_management/09-pinning.md', () => {
     await channel.pin();
 
     // Query for channels that are pinned
-    const resp = await client.queryChannels({ pinned: true });
+    const resp = await client.queryChannelsAndHydrate({
+      filter_conditions: { pinned: true },
+    });
 
     // Query for channels for specific members and show pinned first
-    const pinnedFirst = await client.queryChannels(
-      { members: { $in: [amyId, benId] } },
-      { pinned_at: -1 },
-    );
+    const pinnedFirst = await client.queryChannelsAndHydrate({
+      filter_conditions: { members: { $in: [amyId, benId] } },
+      sort: [{ field: 'pinned_at', direction: -1 }],
+    });
 
     // Unpin the channel
     await channel.unpin();

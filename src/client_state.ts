@@ -1,21 +1,16 @@
-import type { UserResponse } from './types';
+import type { OwnUserResponse, UserResponse } from './types';
 import type { StreamChat } from './client';
 
-/**
- * ClientState - A container class for the client state.
- */
 export class ClientState {
   private client: StreamChat;
   users: {
-    [key: string]: UserResponse;
+    [key: string]: UserResponse | OwnUserResponse;
   };
+  /** User ID -> cids of the channels that reference the user. */
   userChannelReferences: { [key: string]: { [key: string]: boolean } };
   constructor({ client }: { client: StreamChat }) {
-    // show the status for a certain user...
-    // ie online, offline etc
     this.client = client;
     this.users = {};
-    // store which channels contain references to the specified user...
     this.userChannelReferences = {};
   }
 
@@ -25,14 +20,14 @@ export class ClientState {
     }
   }
 
-  updateUser(user?: UserResponse) {
-    if (user != null && this.client._cacheEnabled()) {
+  updateUser(user?: UserResponse | OwnUserResponse) {
+    if (user != null) {
       this.users[user.id] = user;
     }
   }
 
   updateUserReference(user: UserResponse, channelID: string) {
-    if (user == null || !this.client._cacheEnabled()) {
+    if (user == null) {
       return;
     }
     this.updateUser(user);

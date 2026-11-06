@@ -3,14 +3,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { StreamChat } from '../../../src/client';
 import { UserGroupPaginator } from '../../../src/pagination';
 import type { UserGroupResponse } from '../../../src/types';
+import { convertDateToTimestamp } from '../test-utils/time';
+import { nsToRfc3339 } from '../../../src/utils/time';
 
 const createUserGroup = (
   overrides: Partial<UserGroupResponse> = {},
 ): UserGroupResponse => ({
   id: 'group-1',
   name: 'Backend Support',
-  created_at: '2026-01-01T00:00:00.000000000Z',
-  updated_at: '2026-01-01T00:00:00.000000000Z',
+  created_at: convertDateToTimestamp('2026-01-01T00:00:00.000Z'),
+  updated_at: convertDateToTimestamp(new Date('2026-01-01T00:00:00.000Z')),
   ...overrides,
 });
 
@@ -24,103 +26,108 @@ describe('UserGroupPaginator', () => {
   it('starts as a forward-only paginator', () => {
     const paginator = new UserGroupPaginator(client);
 
-    expect(paginator.hasNext).toBe(true);
-    expect(paginator.hasPrev).toBe(false);
+    expect(paginator.hasMoreTail).toBe(true);
+    expect(paginator.hasMoreHead).toBe(false);
     expect(paginator.items).toBeUndefined();
-    expect(paginator.cursor).toBeUndefined();
+    expect(paginator.cursor).toEqual({ tailward: undefined, headward: null });
   });
 
   it('paginates listed user groups using synthesized cursors', async () => {
     const firstPage = [
-      createUserGroup({ id: 'group-1', created_at: '2026-01-01T00:00:00.000000000Z' }),
+      createUserGroup({
+        id: 'group-1',
+        created_at: convertDateToTimestamp('2026-01-01T00:00:00.000Z'),
+      }),
       createUserGroup({
         id: 'group-2',
         name: 'Frontend Support',
-        created_at: '2026-01-02T00:00:00.000000000Z',
-        updated_at: '2026-01-02T00:00:00.000000000Z',
+        created_at: convertDateToTimestamp('2026-01-02T00:00:00.000Z'),
+        updated_at: convertDateToTimestamp(new Date('2026-01-02T00:00:00.000Z')),
       }),
     ];
     const secondPage = [
       createUserGroup({
         id: 'group-3',
         name: 'QA Support',
-        created_at: '2026-01-03T00:00:00.000000000Z',
-        updated_at: '2026-01-03T00:00:00.000000000Z',
+        created_at: convertDateToTimestamp('2026-01-03T00:00:00.000Z'),
+        updated_at: convertDateToTimestamp(new Date('2026-01-03T00:00:00.000Z')),
       }),
     ];
 
     const querySpy = vi
-      .spyOn(client, 'queryUserGroups')
+      .spyOn(client, 'listUserGroups')
       .mockResolvedValueOnce({ duration: '0.01s', user_groups: firstPage })
       .mockResolvedValueOnce({ duration: '0.01s', user_groups: secondPage });
 
     const paginator = new UserGroupPaginator(client, { pageSize: 2 });
 
-    await paginator.next();
+    await paginator.toTail();
 
     expect(querySpy).toHaveBeenNthCalledWith(1, { limit: 2 });
     expect(paginator.items).toEqual(firstPage);
-    expect(paginator.hasNext).toBe(true);
-    expect(paginator.hasPrev).toBe(false);
-    expect(JSON.parse(paginator.cursor?.next ?? '{}')).toEqual({
-      created_at_gt: firstPage[1].created_at,
+    expect(paginator.hasMoreTail).toBe(true);
+    expect(paginator.hasMoreHead).toBe(false);
+    expect(JSON.parse(paginator.cursor?.tailward ?? '{}')).toEqual({
+      created_at_gt: nsToRfc3339(firstPage[1].created_at),
       id_gt: firstPage[1].id,
     });
 
-    await paginator.next();
+    await paginator.toTail();
 
     expect(querySpy).toHaveBeenNthCalledWith(2, {
       limit: 2,
-      created_at_gt: firstPage[1].created_at,
+      created_at_gt: nsToRfc3339(firstPage[1].created_at),
       id_gt: firstPage[1].id,
     });
     expect(paginator.items).toEqual([...firstPage, ...secondPage]);
-    expect(paginator.hasNext).toBe(false);
-    expect(paginator.hasPrev).toBe(false);
-    expect(paginator.cursor).toEqual({ next: null, prev: null });
+    expect(paginator.hasMoreTail).toBe(false);
+    expect(paginator.hasMoreHead).toBe(false);
+    // forward-only: headward stays exhausted, tailward exhausted after the short page
+    expect(paginator.cursor?.headward).toBeNull();
+    expect(paginator.cursor?.tailward == null).toBe(true);
   });
 
   it('resets paginator state when team id changes', async () => {
-    vi.spyOn(client, 'queryUserGroups').mockResolvedValue({
+    vi.spyOn(client, 'listUserGroups').mockResolvedValue({
       duration: '0.01s',
       user_groups: [createUserGroup()],
     });
 
     const paginator = new UserGroupPaginator(client, { pageSize: 1 });
 
-    await paginator.next();
+    await paginator.toTail();
 
     paginator.teamId = 'engineering';
 
     expect(paginator.items).toBeUndefined();
-    expect(paginator.cursor).toBeUndefined();
-    expect(paginator.hasNext).toBe(true);
-    expect(paginator.hasPrev).toBe(false);
+    expect(paginator.cursor).toEqual({ tailward: undefined, headward: null });
+    expect(paginator.hasMoreTail).toBe(true);
+    expect(paginator.hasMoreHead).toBe(false);
   });
 
   it('ignores malformed stored cursors and retries from the first page options', async () => {
-    const querySpy = vi.spyOn(client, 'queryUserGroups').mockResolvedValue({
+    const querySpy = vi.spyOn(client, 'listUserGroups').mockResolvedValue({
       duration: '0.01s',
       user_groups: [createUserGroup()],
     });
 
     const paginator = new UserGroupPaginator(client, { pageSize: 1 });
     paginator.state.partialNext({
-      cursor: { next: '{not-json', prev: null },
+      cursor: { tailward: '{not-json', headward: null },
     });
 
-    await paginator.next();
+    await paginator.toTail();
 
     expect(querySpy).toHaveBeenCalledWith({ limit: 1 });
   });
 
   it('does not execute prev pagination requests', async () => {
-    const querySpy = vi.spyOn(client, 'queryUserGroups');
+    const querySpy = vi.spyOn(client, 'listUserGroups');
     const paginator = new UserGroupPaginator(client);
 
-    await paginator.prev();
+    await paginator.toHead();
 
     expect(querySpy).not.toHaveBeenCalled();
-    expect(paginator.hasPrev).toBe(false);
+    expect(paginator.hasMoreHead).toBe(false);
   });
 });

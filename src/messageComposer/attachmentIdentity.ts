@@ -1,4 +1,4 @@
-import type { Attachment, SharedLocationResponse } from '../types';
+import type { Attachment, SharedLocationResponseData } from '../types';
 import type {
   AttachmentLoadingState,
   AudioAttachment,
@@ -28,13 +28,7 @@ export const isLocalUploadAttachment = (
 ): attachment is LocalUploadAttachment =>
   !!(attachment as LocalAttachment)?.localMetadata?.uploadState;
 
-/**
- * Upload states meaning "the bytes are not on the CDN yet, but they are on their way".
- * `blocked` and `failed` are excluded - those never resolve on their own.
- *
- * Typed against {@link AttachmentLoadingState} rather than `string`, so renaming a state fails
- * the build instead of silently making this list match nothing - it decides what gets sent.
- */
+/** Upload states that still resolve on their own (`blocked` and `failed` never do). */
 const PENDING_UPLOAD_STATES: ReadonlyArray<AttachmentLoadingState> = [
   'pending',
   'uploading',
@@ -54,14 +48,49 @@ export const isFinishedUpload = (
   isLocalUploadAttachment(attachment) &&
   attachment.localMetadata.uploadState === 'finished';
 
+/** Whether this attachment's upload failed in a way that can be retried (unlike `blocked`). */
+export const isFailedUpload = (
+  attachment: unknown,
+): attachment is LocalUploadAttachment =>
+  isLocalUploadAttachment(attachment) &&
+  attachment.localMetadata.uploadState === 'failed';
+
+/**
+ * Whether this attachment's upload can still resolve to a URL: `pending` and `uploading` ones on their
+ * own, `failed` ones by a retry. Sending the message awaits or retries them. `blocked` ones never
+ * resolve.
+ */
+export const isResolvableUpload = (attachment: unknown) =>
+  isPendingUpload(attachment) || isFailedUpload(attachment);
+
+/**
+ * Whether this local attachment has nothing to upload: neither an upload state nor a file, such as
+ * a custom-type or a `giphy` attachment.
+ */
+export const isNonUploadAttachment = (attachment: unknown) =>
+  isLocalAttachment(attachment) &&
+  !isLocalUploadAttachment(attachment) &&
+  !attachment.localMetadata.file;
+
+/**
+ * Whether the composer sends this attachment as it is: an upload that resolved to a URL, or an
+ * attachment with nothing to upload. Attachments restored from an edited message or a draft are one
+ * or the other. Leaving a non-upload out would drop it from the message: on an edit, the API removes
+ * every attachment missing from the payload.
+ */
+export const isSendableAttachment = (attachment: unknown) =>
+  isFinishedUpload(attachment) || isNonUploadAttachment(attachment);
+
 export const isFileAttachment = (
   attachment: Attachment | LocalAttachment,
   supportedVideoFormat: string[] = [],
 ): attachment is FileAttachment =>
   attachment.type === 'file' ||
   !!(
-    attachment.mime_type &&
-    supportedVideoFormat.indexOf(attachment.mime_type) === -1 &&
+    (attachment as FileAttachment).custom?.mime_type &&
+    supportedVideoFormat.indexOf(
+      (attachment as FileAttachment).custom?.mime_type as string,
+    ) === -1 &&
     attachment.type !== 'video'
   );
 
@@ -103,7 +132,12 @@ export const isVideoAttachment = (
   supportedVideoFormat: string[] = [],
 ): attachment is VideoAttachment =>
   attachment.type === 'video' ||
-  !!(attachment.mime_type && supportedVideoFormat.indexOf(attachment.mime_type) !== -1);
+  !!(
+    (attachment as VideoAttachment).custom?.mime_type &&
+    supportedVideoFormat.indexOf(
+      (attachment as VideoAttachment).custom?.mime_type as string,
+    ) !== -1
+  );
 
 export const isLocalVideoAttachment = (
   attachment: Attachment | LocalAttachment,
@@ -119,12 +153,12 @@ export const isUploadedAttachment = (
   isVideoAttachment(attachment) ||
   isVoiceRecordingAttachment(attachment);
 
-export const isSharedLocationResponse = (
+export const isSharedLocationResponseData = (
   location: unknown,
-): location is SharedLocationResponse =>
-  !!(location as SharedLocationResponse).latitude &&
-  !!(location as SharedLocationResponse).longitude &&
-  !!(location as SharedLocationResponse).channel_cid;
+): location is SharedLocationResponseData =>
+  !!(location as SharedLocationResponseData).latitude &&
+  !!(location as SharedLocationResponseData).longitude &&
+  !!(location as SharedLocationResponseData).channel_cid;
 
 export const isGiphyAttachment = (
   attachment: Attachment,

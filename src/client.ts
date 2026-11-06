@@ -1,634 +1,430 @@
 /* eslint no-unused-vars: "off" */
 /* global process */
 
-import type { AxiosError, AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
+import type { AxiosInstance, AxiosRequestConfig } from 'axios';
 import axios from 'axios';
-import https from 'https';
 
-import { Channel } from './channel';
+import type { Channel } from './channel';
+import type { ChannelMuteStatus } from './channel_state';
+import { ChannelWatchStatus } from './channel_state';
 import { ClientState } from './client_state';
-import { StableWSConnection } from './connection';
 import { UploadManager } from './uploadManager';
+import { DevToken } from './signing';
+import { TokenManager, type TokenManagerMinimalUser } from './token_manager';
+import { ApiClient } from './api-client';
 import {
-  DevToken,
-  InvalidWebhookError,
-  JWTUserToken,
-  parseSns as parseSnsHelper,
-  parseSqs as parseSqsHelper,
-  verifyAndParseWebhook as verifyAndParseWebhookHelper,
-  verifySignature,
-} from './signing';
-import { TokenManager } from './token_manager';
-import { WSConnectionFallback } from './connection_fallback';
-import { Campaign } from './campaign';
-import { ChannelBatchUpdater } from './channel_batch_updater';
-import { Segment } from './segment';
-import { isErrorResponse, isWSFailure } from './errors';
-import {
-  addFileToFormData,
   axiosParamsSerializer,
-  chatCodes,
-  generateChannelTempCid,
+  formatMessage,
+  getEnv,
   invokeEventListener,
-  isFunction,
-  isOnline,
   isOwnUserBaseProperty,
-  messageSetPagination,
-  noopLogger,
-  normalizeQuerySort,
   randomId,
-  retryInterval,
   sanitizeOutgoingAttachments,
-  sleep,
-  toUpdatedMessagePayload,
 } from './utils';
+import { nowNs } from './utils/time';
+import { normalizeUploadFile } from './upload-utils';
 
 import type {
-  ActiveLiveLocationsAPIResponse,
-  AddUserGroupMembersOptions,
-  AddUserGroupMembersResponse,
-  APIErrorResponse,
   APIResponse,
   AppIdentifier,
-  AppSettings,
-  AppSettingsAPIResponse,
-  BannedUsersFilters,
-  BannedUsersPaginationOptions,
-  BannedUsersResponse,
-  BannedUsersSort,
-  BanUserOptions,
-  BaseDeviceFields,
-  BlockList,
-  BlockListResponse,
-  BlockUserAPIResponse,
-  CampaignData,
-  CampaignFilters,
-  CampaignQueryOptions,
-  CampaignResponse,
-  CampaignSort,
-  CastVoteAPIResponse,
-  ChannelAPIResponse,
-  ChannelData,
-  ChannelFilters,
+  ChannelInput,
   ChannelMute,
   ChannelOptions,
   ChannelResponse,
-  ChannelSort,
   ChannelStateOptions,
-  CheckPushResponse,
-  CheckSNSResponse,
-  CheckSQSResponse,
+  ChannelStateResponseFields,
   Configs,
   ConnectAPIResponse,
-  CreateChannelOptions,
-  CreateChannelResponse,
-  CreateCommandOptions,
-  CreateCommandResponse,
-  CreateImportOptions,
-  CreateImportResponse,
-  CreateImportURLResponse,
-  CreatePollAPIResponse,
-  CreatePollData,
-  CreatePollOptionAPIResponse,
-  CreatePredefinedFilterOptions,
-  CreateReminderOptions,
-  CreateRoleAPIResponse,
-  CreateUserGroupOptions,
-  CreateUserGroupResponse,
-  CustomPermissionOptions,
-  DeactivateUsersOptions,
-  DeleteChannelsResponse,
-  DeleteCommandResponse,
-  DeleteMessageOptions,
-  DeleteRetentionPolicyResponse,
-  DeleteUserGroupOptions,
-  DeleteUserOptions,
-  Device,
   DeviceIdentifier,
-  DraftFilters,
-  DraftSort,
-  EndpointName,
   Event,
-  EventAPIResponse,
   EventHandler,
-  ExportChannelOptions,
-  ExportChannelRequest,
-  ExportChannelResponse,
-  ExportChannelStatusResponse,
-  ExportUsersRequest,
-  ExportUsersResponse,
-  FlagMessageResponse,
-  FlagReportsFilters,
-  FlagReportsPaginationOptions,
-  FlagReportsResponse,
-  FlagsFilters,
-  FlagsPaginationOptions,
-  FlagsResponse,
-  FlagUserResponse,
-  FutureChannelBansResponse,
-  GetBlockedUsersAPIResponse,
-  GetCampaignOptions,
-  GetChannelTypeResponse,
-  GetCommandResponse,
-  GetHookEventsResponse,
-  GetImportResponse,
-  GetMessageAPIResponse,
-  GetMessageOptions,
-  GetPollAPIResponse,
-  GetPollOptionAPIResponse,
-  GetRateLimitsResponse,
-  GetRetentionPolicyResponse,
-  GetRetentionPolicyRunsOptions,
-  GetRetentionPolicyRunsResponse,
-  GetThreadAPIResponse,
+  EventType,
+  FileUploadInput,
   GetThreadOptions,
-  GetUnreadCountAPIResponse,
-  GetUnreadCountBatchAPIResponse,
-  GetUserGroupOptions,
-  GetUserGroupResponse,
-  ListChannelResponse,
-  ListCommandsResponse,
-  ListImportsPaginationOptions,
-  ListImportsResponse,
-  ListPredefinedFiltersOptions,
-  ListPredefinedFiltersResponse,
-  ListRolesAPIResponse,
   LocalMessage,
-  Logger,
-  MarkChannelsReadOptions,
-  MarkDeliveredOptions,
-  MessageFilters,
-  MessageFlagsFilters,
-  MessageFlagsPaginationOptions,
-  MessageFlagsResponse,
-  MessageResponse,
-  Mute,
-  MuteUserOptions,
-  MuteUserResponse,
-  NewMemberPayload,
-  OGAttachment,
   OwnUserResponse,
-  Pager,
-  PartialMessageUpdate,
-  PartialPollUpdate,
-  PartialThreadUpdate,
-  PartialUserUpdate,
-  PermissionAPIResponse,
-  PermissionsAPIResponse,
-  PollAnswersAPIResponse,
-  PollData,
-  PollOptionData,
-  PollSort,
-  PollVote,
-  PollVoteData,
-  PollVotesAPIResponse,
-  PredefinedFilterResponse,
-  Product,
-  PushPreference,
-  PushProvider,
-  PushProviderConfig,
-  PushProviderID,
-  PushProviderListResponse,
-  PushProviderUpsertResponse,
-  QueryChannelsAPIResponse,
-  QueryDraftsResponse,
-  QueryFutureChannelBansOptions,
-  QueryMessageHistoryFilters,
-  QueryMessageHistoryOptions,
-  QueryMessageHistoryResponse,
-  QueryMessageHistorySort,
-  QueryPollsFilters,
-  QueryPollsOptions,
-  QueryPollsResponse,
-  QueryReactionsAPIResponse,
-  QueryReactionsOptions,
-  QueryRemindersOptions,
-  QueryRemindersResponse,
-  QuerySegmentsOptions,
-  QuerySegmentTargetsFilter,
-  QueryTeamUsageStatsOptions,
-  QueryTeamUsageStatsResponse,
-  QueryThreadsAPIResponse,
-  QueryThreadsOptions,
-  QueryUserGroupsOptions,
-  QueryUserGroupsResponse,
-  QueryVotesFilters,
-  QueryVotesOptions,
-  ReactionFilters,
+  PartializeAllBut,
+  PinMessageOptions,
+  QueryChannelsRequest,
+  QueryChannelsResponse,
+  QueryThreadsRequest,
   ReactionResponse,
-  ReactionSort,
-  ReactivateUserOptions,
-  ReactivateUsersOptions,
-  ReminderAPIResponse,
-  RemoveUserGroupMembersOptions,
-  RemoveUserGroupMembersResponse,
-  RequestOptions,
-  ReviewFlagReportOptions,
-  ReviewFlagReportResponse,
   SdkIdentifier,
-  SearchAPIResponse,
-  SearchMessageSortBase,
-  SearchOptions,
-  SearchPayload,
-  SearchRolesAPIResponse,
-  SearchRolesOptions,
-  SearchUserGroupsOptions,
-  SearchUserGroupsResponse,
-  SegmentData,
-  SegmentResponse,
-  SegmentTargetsResponse,
-  SegmentType,
-  SendFileAPIResponse,
-  SetRetentionPolicyResponse,
-  SharedLocationResponse,
-  SortParam,
-  StreamChatOptions,
-  SyncOptions,
-  SyncResponse,
-  TaskResponse,
-  TaskStatus,
-  TestPushDataInput,
-  TestSNSDataInput,
-  TestSQSDataInput,
+  StreamRequestOptions,
   TokenOrProvider,
-  TranslateResponse,
   UnBanUserOptions,
-  UpdateChannelsBatchOptions,
-  UpdateChannelsBatchResponse,
-  UpdateChannelTypeRequest,
-  UpdateChannelTypeResponse,
-  UpdateCommandOptions,
-  UpdateCommandResponse,
-  UpdateLocationPayload,
-  UpdateMessageAPIResponse,
-  UpdateMessageOptions,
-  UpdatePollAPIResponse,
-  UpdatePollOptionAPIResponse,
-  UpdatePredefinedFilterOptions,
-  UpdateReminderOptions,
-  UpdateSegmentData,
-  UpdateUserGroupOptions,
-  UpdateUserGroupResponse,
-  UpdateUsersAPIResponse,
-  UpsertPushPreferencesResponse,
-  UserCustomEvent,
-  UserFilters,
-  UserOptions,
+  UpdateUserPartialRequest,
+  UserMuteResponse,
+  UserRequest,
   UserResponse,
-  UserSort,
-  VoteSort,
 } from './types';
-import { ErrorFromResponse } from './types';
-import { InsightMetrics, postInsights } from './insights';
-import { Thread } from './thread';
+import { isWSFailure } from './errors';
+import type { APIError } from './errors';
+import { chatLoggerSystem } from './logger';
+import { DEFAULT_THREAD_PARTICIPANT_LIMIT, type Thread } from './thread';
 import { Moderation } from './moderation';
 import { ThreadManager } from './thread_manager';
 import { DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE } from './constants';
 import { PollManager } from './poll_manager';
-import type {
-  ChannelManagerEventHandlerOverrides,
-  ChannelManagerOptions,
-  QueryChannelsRequestType,
-} from './channel_manager';
-import { ChannelManager } from './channel_manager';
+import { EntityStore } from './entityStore/EntityStore';
+import { ChannelManager } from './ChannelManager';
+import {
+  ConnectionIdManager,
+  ConnectionRecoveryManager,
+  NetworkConnectionObserver,
+  WSConnection,
+} from './connection';
 import { MessageDeliveryReporter } from './messageDelivery';
 import { NotificationManager } from './notifications';
 import { ReminderManager } from './reminders';
-import { StateStore } from './store';
-import type { MessageComposer } from './messageComposer';
 import type { AbstractOfflineDB } from './offline-support';
-import { getPendingTaskChannelData } from './offline-support/util';
 import { FixedSizeQueueCache } from './utils/FixedSizeQueueCache';
+import { isEqual } from './utils/mergeWith/mergeWithCore';
+import type { MessageComposer } from './messageComposer';
+import type { InstanceConfigTree, InstanceSetupState } from './configuration';
+import type { DeepPartial } from './types.utility';
+import { InstanceConfigurationRegistry } from './configuration/InstanceConfigurationRegistry';
+import { applyInstanceConfiguration } from './configuration/utils/applyInstanceConfiguration';
+import { StateStore } from '@stream-io/state-store';
+import type { Unsubscribe } from '@stream-io/state-store';
+import type {
+  ConnectUserDetailsRequest,
+  FileUploadRequest,
+  GetApplicationResponse as Gen_GetApplicationResponse,
+  MarkDeliveredRequest as Gen_MarkDeliveredRequest,
+  ImageUploadRequest,
+  WSAuthMessage,
+  WSEvent,
+} from './gen/models';
+import { ChatApi } from './gen-imports';
+import type { StreamResponse } from './types';
 
-function isString(x: unknown): x is string {
-  return typeof x === 'string' || x instanceof String;
-}
-
-type MessageComposerTearDownFunction = () => void;
+const logger = chatLoggerSystem.getLogger('client');
+const offlineDbLogger = chatLoggerSystem.getLogger('offline-db');
 
 export type QueryChannelsResponseWithChannels = Omit<
-  QueryChannelsAPIResponse,
+  QueryChannelsResponse,
   'channels'
 > & {
   channels: Channel[];
 };
 
-type MessageComposerSetupFunction = ({
-  composer,
-}: {
-  composer: MessageComposer;
-}) => void | MessageComposerTearDownFunction;
-
 export type BlockedUsersState = { userIds: string[] };
 
-export type MessageComposerSetupState = {
-  /**
-   * Each `MessageComposer` runs this function each time its signature changes or
-   * whenever you run `MessageComposer.registerSubscriptions`. Function returned
-   * from `applyModifications` will be used as a cleanup function - it will be stored
-   * and ran before new modification is applied. Cleaning up only the
-   * modified parts is the general way to go but if your setup gets a bit
-   * complicated, feel free to restore the whole composer with `MessageComposer.restore`.
-   */
-  setupFunction: MessageComposerSetupFunction | null;
+export type ChannelConfigsState = {
+  configs: Configs;
 };
 
-export class StreamChat {
+export type ClientUser = PartializeAllBut<OwnUserResponse, 'id'> & { anon?: boolean };
+
+/**
+ * After a thread query with `watch: true` the server watches the thread's channel, as for
+ * `channel.watch()` and `queryChannels`.
+ */
+const markThreadChannelWatched = ({ channel }: Thread) => {
+  channel.watchStatus = ChannelWatchStatus.Watching;
+};
+
+export class StreamChat extends ChatApi {
   private static _instance?: unknown | StreamChat; // type is undefined|StreamChat, unknown is due to TS limitations with statics
   messageDeliveryReporter: MessageDeliveryReporter;
-  /**
-   * @internal
-   */
+  /** @internal */
   uploadManager: UploadManager;
-  _user?: OwnUserResponse | UserResponse;
-  appSettingsPromise?: Promise<AppSettingsAPIResponse>;
-  activeChannels: {
-    [key: string]: Channel;
-  };
+  /** @private */
+  _user?: ClientUser;
+  appSettingsPromise?: Promise<StreamResponse<Gen_GetApplicationResponse>>;
   threads: ThreadManager;
   polls: PollManager;
+  /**
+   * Channel lists (`ChannelPaginator`s kept in sync with WS events, with ownership arbitration
+   * between them). Register lists with `insertPaginator()` / `removePaginator()`. It handles events
+   * only once something calls its ref-counted `registerSubscriptions()`. It is configured on the
+   * manager itself (`setOwnershipResolver`, `addEventHandler`, ...), not through the client
+   * options.
+   */
+  channelManager: ChannelManager;
+  /**
+   * On reconnect, re-runs each loaded channel list's first-page query and reloads each active
+   * channel and thread, then dispatches `connection.recovered`. Disable it when the app recovers
+   * state itself: `client.config.set({ client: { connectionRecovery: { enabled: false } } })`.
+   */
+  connectionRecovery: ConnectionRecoveryManager;
+  /**
+   * The device's network status, separate from the WebSocket's ({@link wsConnection}). Platforms
+   * report it through `client.config.set({ client: { networkConnection: { statusReporter } } })` or
+   * `client.networkConnection.setStatusReporter(...)`. Browsers get a reporter automatically;
+   * elsewhere a stand-in mirrors the WebSocket. `isOnline` is `undefined` (unknown, not offline)
+   * until something reports.
+   */
+  networkConnection: NetworkConnectionObserver;
+  /**
+   * The connection ID (the WebSocket's, or the long-poll's after an `enableWSFallback` switch). A
+   * request with `watch` or `presence` waits here for the handshake (see `requiresConnectionId`).
+   */
+  connectionIdManager: ConnectionIdManager;
+  /**
+   * Client-global store with one canonical copy of each message. The channel and thread paginators
+   * read and write messages through it, so a message held in several of them stays consistent.
+   */
+  messageStore: EntityStore<LocalMessage>;
   offlineDb?: AbstractOfflineDB;
   notifications: NotificationManager;
   reminders: ReminderManager;
-  anonymous: boolean;
-  persistUserOnConnectionFailure?: boolean;
   axiosInstance: AxiosInstance;
   baseURL?: string;
-  browser: boolean;
-  cleaningIntervalRef?: NodeJS.Timeout;
-  clientID?: string;
-  configs: Configs;
+  cleaningIntervalRef?: ReturnType<typeof setTimeout>;
+  clientId?: string;
   key: string;
-  listeners: Record<string, Array<(event: Event) => void>>;
-  logger: Logger;
+  listeners: Map<EventType, Set<EventHandler>>;
   /**
-   * When network is recovered, we re-query the active channels on client. But in single query, you can recover
-   * only 30 channels. So its not guaranteed that all the channels in activeChannels object have updated state.
-   * Thus in UI sdks, state recovery is managed by components themselves, they don't rely on js client for this.
-   *
-   * `recoverStateOnReconnect` parameter can be used in such cases, to disable state recovery within js client.
-   * When false, user/consumer of this client will need to make sure all the channels present on UI by
-   * manually calling queryChannels endpoint.
-   */
-  recoverStateOnReconnect?: boolean;
-  /**
-   * If true, we will not clean up threads when channel state is in initializing state.
-   * The main use case for SDKs who do independent state recovery for channels.
+   * When true, threads are not cleaned up while the channel state is initializing (for SDKs that
+   * recover channel state themselves).
    */
   preventThreadCleanup = false;
   moderation: Moderation;
   mutedChannels: ChannelMute[];
-  mutedUsers: Mute[];
+  readonly mutedUsersStore: StateStore<{ mutedUsers: UserMuteResponse[] }>;
+  /**
+   * Reactive store behind {@link channelServerConfigs}: the backend's channel configs, not the ones
+   * registered through {@link config}.
+   *
+   * @internal
+   */
+  readonly channelServerConfigsStore: StateStore<ChannelConfigsState>;
   blockedUsers: StateStore<BlockedUsersState>;
-  node: boolean;
-  options: StreamChatOptions;
-  secret?: string;
   setUserPromise: ConnectAPIResponse | null;
   state: ClientState;
   tokenManager: TokenManager;
-  user?: OwnUserResponse | UserResponse;
+  user?: ClientUser;
   userAgent?: string;
-  userID?: string;
   wsBaseURL?: string;
-  wsConnection: StableWSConnection | null;
-  wsFallback?: WSConnectionFallback;
+  wsConnection: WSConnection;
   wsPromise: ConnectAPIResponse | null;
   private _wsPromiseSettled = true;
   private _wsConnectId = 0;
   private _resolveWsPromise?: (value: Awaited<ConnectAPIResponse>) => void;
   private _rejectWsPromise?: (reason?: unknown) => void;
-  consecutiveFailures: number;
-  insightMetrics: InsightMetrics;
-  defaultWSTimeoutWithFallback: number;
-  defaultWSTimeout: number;
+
+  /**
+   * Whether the client runs in a browser: the `client.browser` option, else whether `window`
+   * exists.
+   */
+  get browser(): boolean {
+    return this.config.getConfig('client')?.browser ?? typeof window !== 'undefined';
+  }
+  get node(): boolean {
+    return !this.browser;
+  }
+  get anonymous(): boolean {
+    return this.tokenManager.isAnonymous;
+  }
+  get userId() {
+    return this.user?.id;
+  }
+  /** @deprecated Use `userId` instead. */
+  get userID() {
+    return this.user?.id;
+  }
+  /** @deprecated Use `clientId` instead. */
+  get clientID() {
+    return this.clientId;
+  }
+  set clientID(id: string | undefined) {
+    this.clientId = id;
+  }
+  get api() {
+    return this.apiClient;
+  }
   sdkIdentifier?: SdkIdentifier;
   deviceIdentifier?: DeviceIdentifier;
   appIdentifier?: AppIdentifier;
   private cachedUserAgent?: string;
   readonly messageComposerCache: FixedSizeQueueCache<string, MessageComposer>;
-  private nextRequestAbortController: AbortController | null = null;
   /**
-   * @private
+   * Configuration registered for the instances the SDK creates (channels, threads, composers, the
+   * client's own managers). Not the server-provided channel configs ({@link channelServerConfigs}).
    */
-  _messageComposerSetupState = new StateStore<MessageComposerSetupState>({
-    setupFunction: null,
-  });
+  readonly config = new InstanceConfigurationRegistry();
+  /** Teardown for the `'client'` setup function, released by {@link disconnectUser}. */
+  private unsubscribeClientConfiguration?: Unsubscribe;
 
   /**
-   * Initialize a client
+   * Initializes a client.
    *
-   * **Only use constructor for advanced usages. It is strongly advised to use `StreamChat.getInstance()` instead of `new StreamChat()` to reduce integration issues due to multiple WebSocket connections**
-   * @param {string} key - the api key
-   * @param {string} [secret] - the api secret
-   * @param {StreamChatOptions} [options] - additional options, here you can pass custom options to axios instance
-   * @param {boolean} [options.browser] - enforce the client to be in browser mode
-   * @param {boolean} [options.warmUp] - default to false, if true, client will open a connection as soon as possible to speed up following requests
-   * @param {Logger} [options.Logger] - custom logger
-   * @param {number} [options.timeout] - default to 3000
-   * @param {httpsAgent} [options.httpsAgent] - custom httpsAgent, in node it's default to https.agent()
+   * **Prefer `StreamChat.getInstance()`: a second client opens a second WebSocket connection.**
+   *
    * @example <caption>initialize the client in user mode</caption>
    * new StreamChat('api_key')
-   * @example <caption>initialize the client in user mode with options</caption>
-   * new StreamChat('api_key', { warmUp:true, timeout:5000 })
-   * @example <caption>secret is optional and only used in server side mode</caption>
-   * new StreamChat('api_key', "secret", { httpsAgent: customAgent })
+   * @example <caption>initialize the client with configuration</caption>
+   * new StreamChat('api_key', { client: { axiosRequestConfig: { timeout: 5000 } } })
+   *
+   * @param key - The API key.
+   * @param config - Declarative configuration, the tree `client.config.set()` takes (optional).
+   *   Applied before anything is built, so it reaches the managers and the options read once at
+   *   construction (`client.baseURL`, `client.axiosRequestConfig`, `client.notificationManager`).
    */
-  constructor(key: string, options?: StreamChatOptions);
-  constructor(key: string, secret?: string, options?: StreamChatOptions);
-  constructor(
-    key: string,
-    secretOrOptions?: StreamChatOptions | string,
-    options?: StreamChatOptions,
-  ) {
-    // set the key
+  constructor(key: string, config?: DeepPartial<InstanceConfigTree>) {
+    // The generated base class needs the ApiClient before `this` exists, so it is bound afterwards.
+    super(new ApiClient());
+    this.apiClient.client = this;
+
     this.key = key;
-    this.listeners = {};
+
+    // Seeded first: the options read below come from the `client` slice.
+    if (config) this.config.set(config);
+    const clientConfig = this.config.getConfig('client');
+    this.listeners = new Map();
     this.state = new ClientState({ client: this });
-    // a list of channels to hide ws events from
+    // channels to hide ws events from
     this.mutedChannels = [];
-    this.mutedUsers = [];
+    this.mutedUsersStore = new StateStore<{ mutedUsers: UserMuteResponse[] }>({
+      mutedUsers: [],
+    });
+    this.channelServerConfigsStore = new StateStore<ChannelConfigsState>({
+      configs: {},
+    });
     this.blockedUsers = new StateStore<BlockedUsersState>({ userIds: [] });
 
     this.moderation = new Moderation(this);
 
-    this.notifications = options?.notifications ?? new NotificationManager();
+    this.notifications = clientConfig?.notificationManager ?? new NotificationManager();
     this.uploadManager = new UploadManager(this);
 
-    // set the secret
-    if (secretOrOptions && isString(secretOrOptions)) {
-      this.secret = secretOrOptions;
-    }
-
-    // set the options... and figure out defaults...
-    const inputOptions = options
-      ? options
-      : secretOrOptions && !isString(secretOrOptions)
-        ? secretOrOptions
-        : {};
-
-    this.browser =
-      typeof inputOptions.browser !== 'undefined'
-        ? inputOptions.browser
-        : typeof window !== 'undefined';
-    this.node = !this.browser;
-
-    this.options = {
+    this.axiosInstance = axios.create({
       timeout: 3000,
-      withCredentials: false, // making sure cookies are not sent
-      warmUp: false,
-      recoverStateOnReconnect: true,
-      disableCache: false,
-      isLocalUnreadCountEnabled: false,
-      wsUrlParams: new URLSearchParams({}),
-      ...inputOptions,
-    };
+      withCredentials: false,
+      ...(clientConfig?.axiosRequestConfig as AxiosRequestConfig | undefined),
+      paramsSerializer: axiosParamsSerializer,
+    });
 
-    if (this.node && !this.options.httpsAgent) {
-      this.options.httpsAgent = new https.Agent({
-        keepAlive: true,
-        keepAliveMsecs: 3000,
-      });
-    }
+    this.setBaseURL(clientConfig?.baseURL || 'https://chat.stream-io-api.com');
 
-    this.axiosInstance = axios.create(this.options);
-
-    this.setBaseURL(this.options.baseURL || 'https://chat.stream-io-api.com');
-
-    if (
-      typeof process !== 'undefined' &&
-      'env' in process &&
-      process.env.STREAM_LOCAL_TEST_RUN
-    ) {
+    const streamLocalTestRun = getEnv('STREAM_LOCAL_TEST_RUN');
+    const streamLocalTestHost = getEnv('STREAM_LOCAL_TEST_HOST');
+    if (streamLocalTestRun) {
       this.setBaseURL('http://localhost:3030');
     }
-
-    if (
-      typeof process !== 'undefined' &&
-      'env' in process &&
-      process.env.STREAM_LOCAL_TEST_HOST
-    ) {
-      this.setBaseURL('http://' + process.env.STREAM_LOCAL_TEST_HOST);
+    if (streamLocalTestHost) {
+      this.setBaseURL(`http://${streamLocalTestHost}`);
     }
 
-    // WS connection is initialized when setUser is called
-    this.wsConnection = null;
+    // Both before the WebSocket, which subscribes to the network store and drives the ID's
+    // lifecycle.
+    this.connectionIdManager = new ConnectionIdManager();
+    this.networkConnection = new NetworkConnectionObserver({ client: this });
+    this.networkConnection.registerSubscriptions();
+
+    // The socket itself opens in `connectUser`.
+    this.wsConnection = new WSConnection({ client: this });
+    this.wsConnection.registerSubscriptions();
     this.wsPromise = null;
     this.setUserPromise = null;
-    // keeps a reference to all the channels that are in use
-    this.activeChannels = {};
 
-    // mapping between channel groups and configs
-    this.configs = {};
-    this.anonymous = false;
-    this.persistUserOnConnectionFailure = this.options?.persistUserOnConnectionFailure;
+    this.tokenManager = new TokenManager();
 
-    // If its a server-side client, then lets initialize the tokenManager, since token will be
-    // generated from secret.
-    this.tokenManager = new TokenManager(this.secret);
-    this.consecutiveFailures = 0;
-    this.insightMetrics = new InsightMetrics();
-
-    this.defaultWSTimeoutWithFallback = 6 * 1000;
-    this.defaultWSTimeout = 15 * 1000;
-
-    this.axiosInstance.defaults.paramsSerializer = axiosParamsSerializer;
-
-    /**
-     * logger function should accept 3 parameters:
-     * @param logLevel string
-     * @param message   string
-     * @param extraData object
-     *
-     * e.g.,
-     * const client = new StreamChat('api_key', {}, {
-     *    logger = (logLevel, message, extraData) => {
-     *      console.log(message);
-     *    }
-     * })
-     *
-     * extraData contains tags array attached to log message. Tags can have one/many of following values:
-     * 1. api
-     * 2. api_request
-     * 3. api_response
-     * 4. client
-     * 5. channel
-     * 6. connection
-     * 7. event
-     *
-     * It may also contains some extra data, some examples have been mentioned below:
-     * 1. {
-     *    tags: ['api', 'api_request', 'client'],
-     *    url: string,
-     *    payload: object,
-     *    config: object
-     * }
-     * 2. {
-     *    tags: ['api', 'api_response', 'client'],
-     *    url: string,
-     *    response: object
-     * }
-     * 3. {
-     *    tags: ['api', 'api_response', 'client'],
-     *    url: string,
-     *    error: object
-     * }
-     * 4. {
-     *    tags: ['event', 'client'],
-     *    event: object
-     * }
-     * 5. {
-     *    tags: ['channel'],
-     *    channel: object
-     * }
-     */
-    this.logger = isFunction(inputOptions.logger) ? inputOptions.logger : noopLogger;
-    this.recoverStateOnReconnect = this.options.recoverStateOnReconnect;
+    this.messageStore = new EntityStore<LocalMessage>({
+      getEntityId: (message) => message.id,
+    });
+    // Before the managers that claim channels in its store.
+    this.channelManager = new ChannelManager({ client: this });
     this.threads = new ThreadManager({ client: this });
     this.polls = new PollManager({ client: this });
+    this.connectionRecovery = new ConnectionRecoveryManager({ client: this });
+    this.connectionRecovery.registerSubscriptions();
     this.reminders = new ReminderManager({ client: this });
     this.messageDeliveryReporter = new MessageDeliveryReporter({ client: this });
     this.messageComposerCache = new FixedSizeQueueCache<string, MessageComposer>(64);
+    // a cached composer, such as a message edit's, keeps the channel it was built with
+    this.channelManager.channelStore.addClaim({
+      heldBy: () =>
+        this.messageComposerCache.values().map((composer) => composer.channel),
+      name: 'message-composer-cache',
+    });
+
+    // Last: everything a setup function might reach exists now. Subscribing applies the current
+    // configuration at once, so deriving it here too would run every `initializeConfig` twice.
+    this.wireClientConfiguration();
   }
 
   /**
-   * Get a client instance
+   * Subscribes the client's managers to the `'client'` configuration key. Called by the constructor
+   * and by {@link _setUser}, because {@link disconnectUser} releases the subscription (to run the
+   * setup function's teardown) while the managers outlive the user. Idempotent.
+   */
+  private wireClientConfiguration() {
+    if (this.unsubscribeClientConfiguration) return;
+    this.unsubscribeClientConfiguration = applyInstanceConfiguration({
+      args: { client: this },
+      config: this.config,
+      key: 'client',
+      applyConfig: () => this.initializeManagerConfig(),
+      reinitializeConfig: () => this.initializeManagerConfig(),
+    });
+  }
+
+  /**
+   * Derives each manager's configuration from the package defaults plus the `client` subtree. Every
+   * manager is written unconditionally: it is a derivation, not a merge, so `config.reset()` and
+   * removed fields take effect.
+   */
+  private initializeManagerConfig() {
+    const config = this.config.getConfig('client');
+
+    this.connectionRecovery.initializeConfig(config?.connectionRecovery);
+    // Installs the platform listener named by the slice, falling back to the browser default.
+    this.networkConnection.initializeConfig(config?.networkConnection);
+    this.wsConnection.initializeConfig(config?.wsConnection);
+    this.reminders.initializeConfig(config?.reminders);
+    this.threads.initializeConfig(config?.threads);
+    this.messageDeliveryReporter.initializeConfig(config?.messageDelivery);
+    this.notifications.initializeConfig(config?.notifications);
+  }
+
+  get mutedUsers() {
+    return this.mutedUsersStore.getLatestValue().mutedUsers;
+  }
+
+  set mutedUsers(mutedUsers: UserMuteResponse[]) {
+    this.mutedUsersStore.next({ mutedUsers });
+  }
+
+  /**
+   * Cache of server-provided channel configuration, keyed by cid (a channel's `config_overrides`
+   * can make it differ from other channels of its type). Read it through
+   * {@link Channel.serverConfig}. Assigning through the setter notifies subscribers, mutating the
+   * record in place does not (prefer {@link _addChannelConfig}).
    *
-   * This function always returns the same Client instance to avoid issues raised by multiple Client and WS connections
+   * @internal
+   */
+  get channelServerConfigs() {
+    return this.channelServerConfigsStore.getLatestValue().configs;
+  }
+
+  /** @internal */
+  set channelServerConfigs(configs: Configs) {
+    this.channelServerConfigsStore.next({ configs });
+  }
+
+  /**
+   * Returns the shared client instance, so there is only one client and WebSocket connection.
    *
-   * **After the first call, the client configuration will not change if the key or options parameters change**
+   * **After the first call, the `key` and `config` parameters are ignored.**
    *
-   * @param {string} key - the api key
-   * @param {string} [secret] - the api secret
-   * @param {StreamChatOptions} [options] - additional options, here you can pass custom options to axios instance
-   * @param {boolean} [options.browser] - enforce the client to be in browser mode
-   * @param {boolean} [options.warmUp] - default to false, if true, client will open a connection as soon as possible to speed up following requests
-   * @param {Logger} [options.Logger] - custom logger
-   * @param {number} [options.timeout] - default to 3000
-   * @param {httpsAgent} [options.httpsAgent] - custom httpsAgent, in node it's default to https.agent()
    * @example <caption>initialize the client in user mode</caption>
    * StreamChat.getInstance('api_key')
-   * @example <caption>initialize the client in user mode with options</caption>
-   * StreamChat.getInstance('api_key', { timeout:5000 })
-   * @example <caption>secret is optional and only used in server side mode</caption>
-   * StreamChat.getInstance('api_key', "secret", { httpsAgent: customAgent })
+   * @example <caption>initialize the client with configuration</caption>
+   * StreamChat.getInstance('api_key', { client: { axiosRequestConfig: { timeout: 5000 } } })
+   *
+   * @param key - The API key.
+   * @param config - Declarative configuration, as for the constructor (optional).
+   * @returns The shared client instance.
    */
-  public static getInstance(key: string, options?: StreamChatOptions): StreamChat;
   public static getInstance(
     key: string,
-    secret?: string,
-    options?: StreamChatOptions,
-  ): StreamChat;
-  public static getInstance(
-    key: string,
-    secretOrOptions?: StreamChatOptions | string,
-    options?: StreamChatOptions,
+    config?: DeepPartial<InstanceConfigTree>,
   ): StreamChat {
     if (!StreamChat._instance) {
-      if (typeof secretOrOptions === 'string') {
-        StreamChat._instance = new StreamChat(key, secretOrOptions, options);
-      } else {
-        StreamChat._instance = new StreamChat(key, secretOrOptions);
-      }
+      StreamChat._instance = new StreamChat(key, config);
     }
 
     return StreamChat._instance as StreamChat;
@@ -642,8 +438,15 @@ export class StreamChat {
     this.offlineDb = offlineDBInstance;
   }
 
-  devToken(userID: string) {
-    return DevToken(userID);
+  /**
+   * Creates a development token for apps with auth checks disabled. Never use one in production.
+   * See {@link DevToken}.
+   *
+   * @param userId - The ID of the user the token is for.
+   * @returns The development token.
+   */
+  devToken(userId: string) {
+    return DevToken(userId);
   }
 
   getAuthType() {
@@ -655,62 +458,53 @@ export class StreamChat {
     this.wsBaseURL = this.baseURL.replace('http', 'ws').replace(':3030', ':8800');
   }
 
-  _getConnectionID = () =>
-    this.wsConnection?.connectionID || this.wsFallback?.connectionID;
+  _getConnectionID = () => this.connectionIdManager.connectionId;
 
   _hasConnectionID = () => Boolean(this._getConnectionID());
 
+  /** @deprecated Use `client.config.setSetupFunction('messageComposer', fn)`. */
   public setMessageComposerSetupFunction = (
-    setupFunction: MessageComposerSetupState['setupFunction'],
+    setupFunction: InstanceSetupState<'messageComposer'>['setupFunction'],
   ) => {
-    this._messageComposerSetupState.partialNext({ setupFunction });
+    this.config.setSetupFunction('messageComposer', setupFunction);
   };
 
   /**
-   * connectUser - Set the current user and open a WebSocket connection
+   * Sets the current user and opens the WebSocket connection.
    *
-   * @param {OwnUserResponse | UserResponse} user Data about this user. IE {name: "john"}
-   * @param {TokenOrProvider} userTokenOrProvider Token or provider
-   *
-   * @return {ConnectAPIResponse} Returns a promise that resolves when the connection is setup
+   * @param user - The user, with its required `id`, e.g. `{ id: 'john', name: 'John' }`.
+   * @param userTokenOrProvider - A token string, or an async provider that resolves to one.
+   * @returns A promise that resolves when the connection is set up.
+   * @throws For a different user, unless `disconnectUser()` ran first.
    */
-  connectUser = async (
-    user: OwnUserResponse | UserResponse,
-    userTokenOrProvider: TokenOrProvider,
-  ) => {
+  connectUser = async (user: ClientUser, userTokenOrProvider: TokenOrProvider) => {
     if (!user.id) {
       throw new Error('The "id" field on the user is missing');
     }
 
-    /**
-     * Calling connectUser multiple times is potentially the result of a  bad integration, however,
-     * If the user id remains the same we don't throw error
-     */
-    if (this.userID === user.id && this.setUserPromise) {
-      console.warn(
-        'Consecutive calls to connectUser is detected, ideally you should only call this function once in your app.',
-      );
+    // Repeated calls for the same user warn and return the existing promise.
+    if (this.userId === user.id && this.setUserPromise) {
+      logger
+        .withExtraTags('connectUser')
+        .warn(
+          'Detected consecutive calls to connectUser. Ideally, this function should only be called once.',
+        );
       return this.setUserPromise;
     }
 
-    if (this.userID) {
+    if (this.userId) {
       throw new Error(
         'Use client.disconnect() before trying to connect as a different user. connectUser was called twice.',
       );
     }
 
-    if (
-      (this._isUsingServerAuth() || this.node) &&
-      !this.options.allowServerSideConnect
-    ) {
-      console.warn(
-        'Please do not use connectUser server side. connectUser impacts MAU and concurrent connection usage and thus your bill. If you have a valid use-case, add "allowServerSideConnect: true" to the client options to disable this warning.',
-      );
+    if (this.node && !this.config.getConfig('client')?.allowServerSideConnect) {
+      logger
+        .withExtraTags('connectUser')
+        .warn(
+          'Do not use connectUser server-side. connectUser impacts MAU and concurrent connection usage, and therefore your bill. If you have a valid use case, set `client.allowServerSideConnect: true` in the client configuration to disable this warning.',
+        );
     }
-
-    // we generate the client id client side
-    this.userID = user.id;
-    this.anonymous = false;
 
     const setTokenPromise = this._setToken(user, userTokenOrProvider);
     this._setUser(user);
@@ -718,23 +512,24 @@ export class StreamChat {
     const wsPromise = this.openConnection();
 
     const setUserPromise = Promise.all([setTokenPromise, wsPromise]).then(
-      (result) => result[1], // We only return connection promise;
+      (result) => result[1], // only the connection promise
     );
     this.setUserPromise = setUserPromise;
 
     try {
       return await setUserPromise;
     } catch (err) {
-      // disconnectUser() rejects an in-flight handshake so this catch can run *after* something else has taken over.
-      // Cleaning up then would tear down whatever replaced us. setUserPromise catches a
-      // newer connectUser(); userID additionally catches connectAnonymousUser(), which
-      // never sets setUserPromise, and a bare disconnectUser() that already cleaned up.
-      if (this.setUserPromise === setUserPromise && this.userID === user.id) {
-        if (this.persistUserOnConnectionFailure) {
-          // cleanup client to allow the user to retry connectUser again
-          this.closeConnection();
-        } else {
+      // `disconnectUser()` rejects an in-flight handshake, so clean up only if nothing has taken
+      // over: a newer `connectUser()` changes `setUserPromise`; `connectAnonymousUser()` (which
+      // never sets it) or a bare `disconnectUser()` changes `userId`.
+      if (this.setUserPromise === setUserPromise && this.userId === user.id) {
+        if (!this.config.getConfig('client')?.persistUserOnConnectionFailure) {
+          // No user is kept: the app is expected to call `connectUser` again.
           this.disconnectUser();
+        } else if (!isWSFailure(err as APIError)) {
+          // A terminal failure (rejected token, bad API key) will not fix itself: close the socket
+          // so `StableWSConnection` stops retrying.
+          this.closeConnection();
         }
       }
       throw err;
@@ -742,60 +537,54 @@ export class StreamChat {
   };
 
   /**
-   * @deprecated Please use connectUser() function instead. Its naming is more consistent with its functionality.
+   * Sets the current user and opens the WebSocket connection.
    *
-   * setUser - Set the current user and open a WebSocket connection
+   * @deprecated Use {@link StreamChat.connectUser} instead.
    *
-   * @param {OwnUserResponse | UserResponse} user Data about this user. IE {name: "john"}
-   * @param {TokenOrProvider} userTokenOrProvider Token or provider
-   *
-   * @return {ConnectAPIResponse} Returns a promise that resolves when the connection is setup
+   * @param user - The user, with its required `id`, e.g. `{ id: 'john', name: 'John' }`.
+   * @param userTokenOrProvider - A token string, or an async provider that resolves to one.
+   * @returns A promise that resolves when the connection is set up.
    */
   setUser = this.connectUser;
 
-  _setToken = (user: UserResponse, userTokenOrProvider: TokenOrProvider) =>
+  _setToken = (user: TokenManagerMinimalUser, userTokenOrProvider: TokenOrProvider) =>
     this.tokenManager.setTokenOrProvider(userTokenOrProvider, user);
 
-  _setUser(user: OwnUserResponse | UserResponse) {
-    /**
-     * This one is used by the frontend. This is a copy of the current user object stored on backend.
-     * It contains reserved properties and own user properties which are not present in `this._user`.
-     */
+  _setUser(user: TokenManagerMinimalUser) {
+    // Mirrors the backend's copy of the user, with reserved and own-user properties.
     this.user = user;
-    this.userID = user.id;
-    // this one is actually used for requests. This is a copy of current user provided to `connectUser` function.
+    // The copy given to `connectUser`, used for requests.
     this._user = { ...user };
+    // Re-arms the `'client'` key if a previous `disconnectUser` released it.
+    this.wireClientConfiguration();
   }
 
   /**
-   * Disconnects the websocket connection, without removing the user set on client.
-   * client.closeConnection will not trigger default auto-retry mechanism for reconnection. You need
-   * to call client.openConnection to reconnect to websocket.
+   * Closes the WebSocket without removing the user, and without auto-reconnect: call
+   * `openConnection` to reconnect. Mainly for mobile: push notifications arrive only while no
+   * WebSocket is active, so close on background and reopen on foreground. After an
+   * `enableWSFallback` switch it also closes the long-poll, telling the server to close its
+   * connection ID.
    *
-   * This is mainly useful on mobile side. You can only receive push notifications
-   * if you don't have active websocket connection.
-   * So when your app goes to background, you can call `client.closeConnection`.
-   * And when app comes back to foreground, call `client.openConnection`.
-   *
-   * @param timeout Max number of ms, to wait for close event of websocket, before forcefully assuming succesful disconnection.
-   *                https://developer.mozilla.org/en-US/docs/Web/API/CloseEvent
+   * @param timeout - Milliseconds to wait for the WebSocket close event and for the long-poll close
+   *   request. Defaults to 1s and 2s respectively.
    */
   closeConnection = async (timeout?: number) => {
+    this.channelManager.resetAIStateOnChannels();
+    this.channelManager.markChannelsWatchInterrupted();
+
     if (this.cleaningIntervalRef != null) {
       clearInterval(this.cleaningIntervalRef);
       this.cleaningIntervalRef = undefined;
     }
 
-    await Promise.all([
-      this.wsConnection?.disconnect(timeout),
-      this.wsFallback?.disconnect(timeout),
-    ]);
+    await this.wsConnection?.disconnect(timeout);
 
     this.offlineDb?.executeQuerySafely(
       async (db) => {
-        if (this.userID) {
+        if (this.userId) {
           await db.upsertUserSyncStatus({
-            userId: this.userID,
+            userId: this.userId,
             lastSyncedAt: new Date().toString(),
           });
         }
@@ -807,70 +596,40 @@ export class StreamChat {
   };
 
   /**
-   * Creates an instance of ChannelManager.
+   * Opens a WebSocket connection for the current user. After an `enableWSFallback` switch it
+   * reconnects the long-poll instead: the client never goes back to the WebSocket.
    *
-   * @internal
-   *
-   * @param eventHandlerOverrides - the overrides for event handlers to be used
-   * @param options - the options used for the channel manager
-   */
-  createChannelManager = ({
-    eventHandlerOverrides = {},
-    options = {},
-    queryChannelsOverride,
-  }: {
-    eventHandlerOverrides?: ChannelManagerEventHandlerOverrides;
-    options?: ChannelManagerOptions;
-    queryChannelsOverride?: QueryChannelsRequestType;
-  }) =>
-    new ChannelManager({
-      client: this,
-      eventHandlerOverrides,
-      options,
-      queryChannelsOverride,
-    });
-
-  /**
-   * Creates a new WebSocket connection with the current user. Returns empty promise, if there is an active connection
+   * @returns The connect promise, or `undefined` when a healthy connection already exists.
    */
   openConnection = () => {
-    if (!this.userID) {
+    if (!this.userId) {
       throw Error(
         'User is not set on client, use client.connectUser or client.connectAnonymousUser instead',
       );
     }
 
     if (this.wsConnection?.isConnecting && this.wsPromise) {
-      this.logger('info', 'client:openConnection() - connection already in progress', {
-        tags: ['connection', 'client'],
-      });
+      logger
+        .withExtraTags('openConnection')
+        .debug('A connection attempt is already in progress.');
       return this.wsPromise;
     }
 
-    if (
-      (this.wsConnection?.isHealthy || this.wsFallback?.isHealthy()) &&
-      this._hasConnectionID()
-    ) {
-      this.logger(
-        'info',
-        'client:openConnection() - openConnection called twice, healthy connection already exists',
-        {
-          tags: ['connection', 'client'],
-        },
-      );
+    if (this.wsConnection?.isHealthy && this.connectionIdManager.connectionId) {
+      logger
+        .withExtraTags('openConnection')
+        .debug('openConnection was called twice; a healthy connection already exists.');
 
       return;
     }
 
-    this.clientID = `${this.userID}--${randomId()}`;
+    this.clientId = `${this.userId}--${randomId()}`;
     const wsPromise = this._bindWsPromise(this.connect());
     this._startCleaning();
     return wsPromise;
   };
 
-  /**
-   * Rejects the shared `wsPromise`, invalidates any in-flight connect attempt
-   */
+  /** Rejects the shared `wsPromise` and invalidates any in-flight connect attempt. */
   private _rejectPendingWsPromise = (reason: Error) => {
     if (!this._wsPromiseSettled) {
       // invalidate in-flight attempts so a late settle cannot revive this promise
@@ -885,8 +644,8 @@ export class StreamChat {
   };
 
   /**
-   * Keep a single pending `wsPromise` across close/reopen so callers that already
-   * `await this.wsPromise` are not stranded when `openConnection` starts a new connect.
+   * Keeps a single pending `wsPromise` across close/reopen, so callers already awaiting it are not
+   * stranded when `openConnection` starts a new connect.
    */
   private _bindWsPromise = (connectPromise: ConnectAPIResponse): ConnectAPIResponse => {
     const connectId = ++this._wsConnectId;
@@ -918,572 +677,292 @@ export class StreamChat {
   };
 
   /**
-   * @deprecated Please use client.openConnction instead.
-   * @private
+   * Revokes the connected user's tokens issued before the given time.
    *
-   * Creates a new websocket connection with current user.
+   * @param before - Cutoff date; tokens issued before it are revoked (optional). Defaults to now.
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
+   * @returns The updated users response.
    */
-  _setupConnection = this.openConnection;
-
-  /**
-   * updateAppSettings - updates application settings
-   *
-   * @param {AppSettings} options App settings.
-   * IE: {
-      'apn_config': {
-        'auth_type': 'token',
-        'auth_key": fs.readFileSync(
-          './apn-push-auth-key.p8',
-          'utf-8',
-        ),
-        'key_id': 'keyid',
-        'team_id': 'teamid',
-        'notification_template": 'notification handlebars template',
-        'bundle_id': 'com.apple.your.app',
-        'development': true
-      },
-      'firebase_config': {
-        'server_key': 'server key from fcm',
-        'notification_template': 'notification handlebars template',
-        'data_template': 'data handlebars template',
-        'apn_template': 'apn notification handlebars template under v2'
-      },
-      'webhook_url': 'https://acme.com/my/awesome/webhook/',
-      'event_hooks': [
-        {
-          'hook_type': 'webhook',
-          'enabled': true,
-          'event_types': ['message.new'],
-          'webhook_url': 'https://acme.com/my/awesome/webhook/'
-        },
-        {
-          'hook_type': 'sqs',
-          'enabled': true,
-          'event_types': ['message.new'],
-          'sqs_url': 'https://sqs.us-east-1.amazonaws.com/1234567890/my-queue',
-          'sqs_auth_type': 'key',
-          'sqs_key': 'my-access-key',
-          'sqs_secret': 'my-secret-key'
-        }
-      ]
-    }
-   */
-  async updateAppSettings(options: AppSettings) {
-    const apn_config = options.apn_config;
-    if (apn_config?.p12_cert) {
-      options = {
-        ...options,
-        apn_config: {
-          ...apn_config,
-          p12_cert: Buffer.from(apn_config.p12_cert).toString('base64'),
-        },
-      };
-    }
-    return await this.patch<APIResponse>(this.baseURL + '/app', options);
-  }
-
-  _normalizeDate = (before: Date | string | null): string | null => {
-    if (before instanceof Date) {
-      before = before.toISOString();
+  async revokeTokens(before?: Date | null, requestOptions?: StreamRequestOptions) {
+    if (!before) {
+      before = new Date();
     }
 
-    if (before === '') {
-      throw new Error(
-        "Don't pass blank string for since, use null instead if resetting the token revoke",
-      );
-    }
-
-    return before;
-  };
-
-  /**
-   * Revokes all tokens on application level issued before given time
-   */
-  async revokeTokens(before: Date | string | null) {
-    return await this.updateAppSettings({
-      revoke_tokens_issued_before: this._normalizeDate(before),
-    });
-  }
-
-  /**
-   * Revokes token for a user issued before given time
-   */
-  async revokeUserToken(userID: string, before?: Date | string | null) {
-    return await this.revokeUsersToken([userID], before);
-  }
-
-  /**
-   * Revokes tokens for a list of users issued before given time
-   */
-  async revokeUsersToken(userIDs: string[], before?: Date | string | null) {
-    if (before === undefined) {
-      before = new Date().toISOString();
-    } else {
-      before = this._normalizeDate(before);
-    }
-
-    const users: PartialUserUpdate[] = [];
-    for (const userID of userIDs) {
-      users.push({
-        id: userID,
-        set: <Partial<UserResponse>>{
+    const users: UpdateUserPartialRequest[] = [
+      {
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        id: this.userId!,
+        set: {
           revoke_tokens_issued_before: before,
         },
-      });
+      },
+    ];
+
+    return await this.updateUsersPartial({ users }, requestOptions);
+  }
+
+  /**
+   * Retrieves application settings.
+   *
+   * @param   _request - Unused. Holds the request position so `requestOptions` stays the
+   *   second argument, as on the generated methods; pass `undefined`.
+   * @param   requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
+   * @returns The application settings response. A failed request is not kept in
+   *   {@link appSettingsPromise}, so the next call fetches again.
+   */
+  async getAppSettings(
+    _request?: Record<string, never>,
+    requestOptions?: StreamRequestOptions,
+  ) {
+    const promise = this.getApp(undefined, requestOptions);
+    this.appSettingsPromise = promise;
+    try {
+      return await promise;
+    } catch (error) {
+      if (this.appSettingsPromise === promise) this.appSettingsPromise = undefined;
+      throw error;
     }
-
-    return await this.partialUpdateUsers(users);
   }
 
   /**
-   * getAppSettings - retrieves application settings
-   */
-  async getAppSettings() {
-    this.appSettingsPromise = this.get<AppSettingsAPIResponse>(this.baseURL + '/app');
-    return await this.appSettingsPromise;
-  }
-
-  /**
-   * testPushSettings - Tests the push settings for a user with a random chat message and the configured push templates
+   * Disconnects the WebSocket and removes the user and its state.
    *
-   * @param {string} userID User ID. If user has no devices, it will error
-   * @param {TestPushDataInput} [data] Overrides for push templates/message used
-   *  IE: {
-   messageID: 'id-of-message', // will error if message does not exist
-   apnTemplate: '{}', // if app doesn't have apn configured it will error
-   firebaseTemplate: '{}', // if app doesn't have firebase configured it will error
-   firebaseDataTemplate: '{}', // if app doesn't have firebase configured it will error
-   skipDevices: true, // skip config/device checks and sending to real devices
-   pushProviderName: 'staging' // one of your configured push providers
-   pushProviderType: 'apn' // one of supported provider types
-   }
-   */
-  async testPushSettings(userID: string, data: TestPushDataInput = {}) {
-    return await this.post<CheckPushResponse>(this.baseURL + '/check_push', {
-      user_id: userID,
-      ...(data.messageID ? { message_id: data.messageID } : {}),
-      ...(data.apnTemplate ? { apn_template: data.apnTemplate } : {}),
-      ...(data.firebaseTemplate ? { firebase_template: data.firebaseTemplate } : {}),
-      ...(data.firebaseDataTemplate
-        ? { firebase_data_template: data.firebaseDataTemplate }
-        : {}),
-      ...(data.skipDevices ? { skip_devices: true } : {}),
-      ...(data.pushProviderName ? { push_provider_name: data.pushProviderName } : {}),
-      ...(data.pushProviderType ? { push_provider_type: data.pushProviderType } : {}),
-    });
-  }
-
-  /**
-   * testSQSSettings - Tests that the given or configured SQS configuration is valid
-   *
-   * @param {TestSQSDataInput} [data] Overrides SQS settings for testing if needed
-   *  IE: {
-   sqs_key: 'auth_key',
-   sqs_secret: 'auth_secret',
-   sqs_url: 'url_to_queue',
-   }
-   */
-  async testSQSSettings(data: TestSQSDataInput = {}) {
-    return await this.post<CheckSQSResponse>(this.baseURL + '/check_sqs', data);
-  }
-
-  /**
-   * testSNSSettings - Tests that the given or configured SNS configuration is valid
-   *
-   * @param {TestSNSDataInput} [data] Overrides SNS settings for testing if needed
-   *  IE: {
-   sns_key: 'auth_key',
-   sns_secret: 'auth_secret',
-   sns_topic_arn: 'topic_to_publish_to',
-   }
-   */
-  async testSNSSettings(data: TestSNSDataInput = {}) {
-    return await this.post<CheckSNSResponse>(this.baseURL + '/check_sns', data);
-  }
-
-  /**
-   * Disconnects the websocket and removes the user from client.
-   *
-   * @param timeout Max number of ms, to wait for close event of websocket, before forcefully assuming successful disconnection.
-   *                https://developer.mozilla.org/en-US/docs/Web/API/CloseEvent
+   * @param timeout - Passed to {@link closeConnection} (optional).
    */
   disconnectUser = (timeout?: number) => {
-    this.logger('info', 'client:disconnect() - Disconnecting the client', {
-      tags: ['connection', 'client'],
-    });
+    logger.withExtraTags('disconnectUser').info('Disconnecting the client.');
 
-    // remove the user specific fields
     delete this.user;
     delete this._user;
-    delete this.userID;
 
-    this.anonymous = false;
-
-    this._rejectPendingWsPromise(
-      new Error('Connection was closed because disconnectUser() was called'),
+    const teardownReason = new Error(
+      'Connection was closed because disconnectUser() was called',
     );
+
+    this._rejectPendingWsPromise(teardownReason);
     this.wsPromise = null;
 
     const closePromise = this.closeConnection(timeout);
+    // After starting the close, which reads the connection ID synchronously (the long-poll's close
+    // request carries it).
+    this.connectionIdManager.rejectConnectionId(teardownReason);
 
-    for (const channel of Object.values(this.activeChannels)) {
-      channel._disconnect();
+    // Empties the channel lists (they hold the disconnected user's channels) but keeps them
+    // registered: which lists exist is app configuration. Reset first so each list empties in one
+    // update.
+    this.channelManager.resetPaginatorStates();
+    // Disconnects every channel and empties the store, then rethrows the first error a holder
+    // threw. Logged, not propagated, so the rest of the logout still runs.
+    try {
+      this.channelManager.clearChannels();
+    } catch (error) {
+      logger
+        .withExtraTags('disconnectUser')
+        .error('Clearing the channels failed during disconnect.', { error });
     }
-    // ensure we no longer return inactive channels
-    this.activeChannels = {};
-    // reset client state
     this.state = new ClientState({ client: this });
-    // reset thread manager
     this.threads.resetState();
+    // Channel mutes are per-user: stale ones would resolve `muted` filters against the previous
+    // user.
+    this.mutedChannels = [];
     this.uploadManager.reset();
     this.messageComposerCache.clear();
+    // Runs the `'client'` setup function's teardown. Cleared so repeated calls cannot double-run
+    // it.
+    this.unsubscribeClientConfiguration?.();
+    this.unsubscribeClientConfiguration = undefined;
 
-    // Since we wipe all user data already, we should reset token manager as well
+    // Deferred so the long-poll close can still authenticate; a newer connect may have set the next
+    // user and token by then.
     closePromise
       .finally(() => {
-        this.tokenManager.reset();
+        if (!this.userId) this.tokenManager.reset();
       })
-      .catch((err) => console.error(err));
+      .catch((err) =>
+        logger
+          .withExtraTags('disconnectUser')
+          .error('The close promise rejected during disconnect.', { error: err }),
+      );
 
-    // close the WS connection
     return closePromise;
   };
 
-  /**
-   *
-   * @deprecated Please use client.disconnectUser instead.
-   *
-   * Disconnects the websocket and removes the user from client.
-   */
+  /** @deprecated Use `client.disconnectUser` instead. */
   disconnect = this.disconnectUser;
 
   /**
-   * connectAnonymousUser - Set an anonymous user and open a WebSocket connection
+   * Sets an anonymous user and opens the WebSocket connection.
+   *
+   * @returns A promise that resolves when the connection is set up.
    */
   connectAnonymousUser = () => {
-    if (
-      (this._isUsingServerAuth() || this.node) &&
-      !this.options.allowServerSideConnect
-    ) {
-      console.warn(
-        'Please do not use connectUser server side. connectUser impacts MAU and concurrent connection usage and thus your bill. If you have a valid use-case, add "allowServerSideConnect: true" to the client options to disable this warning.',
-      );
+    if (this.node && !this.config.getConfig('client')?.allowServerSideConnect) {
+      logger
+        .withExtraTags('connectAnonymousUser')
+        .warn(
+          'Do not use connectUser server-side. connectUser impacts MAU and concurrent connection usage, and therefore your bill. If you have a valid use case, set `client.allowServerSideConnect: true` in the client configuration to disable this warning.',
+        );
     }
 
-    this.anonymous = true;
-    this.userID = randomId();
     const anonymousUser = {
-      id: this.userID,
+      id: randomId(),
       anon: true,
-    } as UserResponse;
+    } satisfies TokenManagerMinimalUser;
 
     this._setToken(anonymousUser, '');
     this._setUser(anonymousUser);
 
-    return this._setupConnection();
+    return this.openConnection();
   };
 
   /**
-   * @deprecated Please use connectAnonymousUser. Its naming is more consistent with its functionality.
+   * Creates a guest user.
+   *
+   * @param ...args - `[request, requestOptions]`. `request.user` is the guest user to create;
+   *   `requestOptions` carries per-request options such as an abort `signal` and is never
+   *   serialized into the request.
+   * @returns The created guest user and its access token.
    */
-  setAnonymousUser = this.connectAnonymousUser;
+  override async createGuest(...args: Parameters<ChatApi['createGuest']>) {
+    if (this.tokenManager.token || this.tokenManager.tokenProvider) {
+      return await super.createGuest(...args);
+    }
+
+    // Set token to anonymous so API accepts the request
+    await this.tokenManager.setTokenOrProvider('', {
+      id: this.userId ?? '!anon',
+      anon: true,
+    });
+
+    try {
+      return await super.createGuest(...args);
+    } finally {
+      this.tokenManager.reset();
+    }
+  }
 
   /**
-   * setGuestUser - Setup a temporary guest user
+   * Creates a temporary guest user and connects as it.
    *
-   * @param {UserResponse} user Data about this user. IE {name: "john"}
-   *
-   * @return {ConnectAPIResponse} Returns a promise that resolves when the connection is setup
+   * @param user - The guest user, with its required `id`, e.g. `{ id: 'john', name: 'John' }`.
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
+   * @returns A promise that resolves when the connection is set up.
    */
-  async setGuestUser(user: UserResponse) {
-    let response: { access_token: string; user: UserResponse } | undefined;
-    this.anonymous = true;
-    try {
-      response = await this.post<
-        APIResponse & {
-          access_token: string;
-          user: UserResponse;
-        }
-      >(this.baseURL + '/guest', { user });
-    } catch (e) {
-      this.anonymous = false;
-      throw e;
-    }
-    this.anonymous = false;
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { created_at, updated_at, last_active, online, ...guestUser } = response.user;
+  async setGuestUser(user: UserRequest, requestOptions?: StreamRequestOptions) {
+    const response = await this.createGuest({ user }, requestOptions);
+
+    const {
+      created_at: _created_at,
+      updated_at: _updated_at,
+      last_active: _last_active,
+      online: _online,
+      ...guestUser
+    } = response.user;
+
     return await this.connectUser(guestUser as UserResponse, response.access_token);
   }
 
   /**
-   * createToken - Creates a token to authenticate this user. This function is used server side.
-   * The resulting token should be passed to the client side when the users registers or logs in.
+   * Listens to events on all channels and users you're watching.
    *
-   * @param {string} userID The User ID
-   * @param {number} [exp] The expiration time for the token expressed in the number of seconds since the epoch
+   * @example
+   * client.on('message.new', (event) => {
+   *   console.log('my new message', event, channel.state.messages);
+   * });
    *
-   * @return {string} Returns a token
-   */
-  createToken(userID: string, exp?: number, iat?: number) {
-    if (this.secret == null) {
-      throw Error(`tokens can only be created server-side using the API Secret`);
-    }
-    const extra: { exp?: number; iat?: number } = {};
-
-    if (exp) {
-      extra.exp = exp;
-    }
-
-    if (iat) {
-      extra.iat = iat;
-    }
-
-    return JWTUserToken(this.secret, userID, extra, {});
-  }
-
-  /**
-   * on - Listen to events on all channels and users your watching
+   * @example
+   * client.on((event) => {
+   *   console.log(event.type);
+   * });
    *
-   * client.on('message.new', event => {console.log("my new message", event, channel.state.messages)})
-   * or
-   * client.on(event => {console.log(event.type)})
-   *
-   * @param {EventHandler | string} callbackOrString  The event type to listen for (optional)
-   * @param {EventHandler} [callbackOrNothing] The callback to call
-   *
-   * @return {{ unsubscribe: () => void }} Description
+   * @param callback - Called with every event.
+   * @returns An object with an `unsubscribe()` method.
    */
   on(callback: EventHandler): { unsubscribe: () => void };
-  on(eventType: string, callback: EventHandler): { unsubscribe: () => void };
+  /**
+   * Listens to one event type on all channels and users you're watching.
+   *
+   * @param eventType - The event type to listen for.
+   * @param callback - Called with each event of that type.
+   * @returns An object with an `unsubscribe()` method.
+   */
+  on<T extends EventType>(
+    eventType: T,
+    callback: EventHandler<T>,
+  ): { unsubscribe: () => void };
   on(
-    callbackOrString: EventHandler | string,
+    callbackOrString: EventHandler | EventType,
     callbackOrNothing?: EventHandler,
   ): { unsubscribe: () => void } {
-    const key = callbackOrNothing ? (callbackOrString as string) : 'all';
+    const key = callbackOrNothing ? (callbackOrString as EventType) : 'all';
     const callback = callbackOrNothing
       ? callbackOrNothing
       : (callbackOrString as EventHandler);
-    if (!(key in this.listeners)) {
-      this.listeners[key] = [];
+
+    const set = this.listeners.get(key) ?? new Set();
+
+    logger.withExtraTags('on').debug(`Attaching a listener for the "${key}" event.`);
+    set.add(callback);
+
+    if (!this.listeners.has(key)) {
+      this.listeners.set(key, set);
     }
-    this.logger('info', `Attaching listener for ${key} event`, {
-      tags: ['event', 'client'],
-    });
-    this.listeners[key].push(callback);
+
     return {
       unsubscribe: () => {
-        this.logger('info', `Removing listener for ${key} event`, {
-          tags: ['event', 'client'],
-        });
-        this.listeners[key] = this.listeners[key].filter((el) => el !== callback);
+        logger.withExtraTags('on').debug(`Removing the listener for the "${key}" event.`);
+        set.delete(callback);
+        if (!set.size) {
+          this.listeners.delete(key);
+        }
       },
     };
   }
 
   /**
-   * off - Remove the event handler
+   * Removes a listener for all events.
    *
+   * @param callback - The listener to remove.
    */
   off(callback: EventHandler): void;
-  off(eventType: string, callback: EventHandler): void;
-  off(callbackOrString: EventHandler | string, callbackOrNothing?: EventHandler) {
-    const key = callbackOrNothing ? (callbackOrString as string) : 'all';
+  /**
+   * Removes a listener for one event type.
+   *
+   * @param eventType - The event type it listens to.
+   * @param callback - The listener to remove.
+   */
+  off<T extends EventType>(eventType: T, callback: EventHandler<T>): void;
+  off(callbackOrString: EventHandler | EventType, callbackOrNothing?: EventHandler) {
+    const key = callbackOrNothing ? (callbackOrString as EventType) : 'all';
     const callback = callbackOrNothing
       ? callbackOrNothing
       : (callbackOrString as EventHandler);
-    if (!(key in this.listeners)) {
-      this.listeners[key] = [];
+
+    logger.withExtraTags('off').debug(`Removing the listener for the "${key}" event.`);
+
+    const set = this.listeners.get(key);
+
+    set?.delete(callback);
+
+    if (!set?.size) {
+      this.listeners.delete(key);
     }
-
-    this.logger('info', `Removing listener for ${key} event`, {
-      tags: ['event', 'client'],
-    });
-    this.listeners[key] = this.listeners[key].filter((value) => value !== callback);
-  }
-
-  _logApiRequest(
-    type: string,
-    url: string,
-    data: unknown,
-    config: AxiosRequestConfig & {
-      config?: AxiosRequestConfig & { maxBodyLength?: number };
-    },
-  ) {
-    this.logger('info', `client: ${type} - Request - ${url}`, {
-      tags: ['api', 'api_request', 'client'],
-      url,
-      payload: data,
-      config,
-    });
-  }
-
-  _logApiResponse<T>(type: string, url: string, response: AxiosResponse<T>) {
-    this.logger(
-      'info',
-      `client:${type} - Response - url: ${url} > status ${response.status}`,
-      {
-        tags: ['api', 'api_response', 'client'],
-        url,
-        response,
-      },
-    );
-  }
-
-  _logApiError(type: string, url: string, error: unknown) {
-    this.logger('error', `client:${type} - Error - url: ${url}`, {
-      tags: ['api', 'api_response', 'client'],
-      url,
-      error,
-    });
-  }
-
-  doAxiosRequest = async <T>(
-    type: string,
-    url: string,
-    data?: unknown,
-    options: AxiosRequestConfig & {
-      config?: AxiosRequestConfig & { maxBodyLength?: number };
-    } = {},
-  ): Promise<T> => {
-    await this.tokenManager.tokenReady();
-    const requestConfig = this._enrichAxiosOptions(options);
-    try {
-      let response: AxiosResponse<T>;
-      this._logApiRequest(type, url, data, requestConfig);
-      switch (type) {
-        case 'get':
-          response = await this.axiosInstance.get(url, requestConfig);
-          break;
-        case 'delete':
-          response = await this.axiosInstance.delete(url, requestConfig);
-          break;
-        case 'post':
-          response = await this.axiosInstance.post(url, data, requestConfig);
-          break;
-        case 'postForm':
-          response = await this.axiosInstance.postForm(url, data, requestConfig);
-          break;
-        case 'put':
-          response = await this.axiosInstance.put(url, data, requestConfig);
-          break;
-        case 'patch':
-          response = await this.axiosInstance.patch(url, data, requestConfig);
-          break;
-        case 'options':
-          response = await this.axiosInstance.options(url, requestConfig);
-          break;
-        default:
-          throw new Error('Invalid request type');
-      }
-      this._logApiResponse<T>(type, url, response);
-      this.consecutiveFailures = 0;
-      return this.handleResponse(response);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (e: any /**TODO: generalize error types  */) {
-      e.client_request_id = requestConfig.headers?.['x-client-request-id'];
-      // An aborted request is a deliberate cancellation, not a failure - logging it
-      // and counting it towards the token-refresh backoff would be misleading.
-      if (axios.isCancel(e)) throw e;
-      this._logApiError(type, url, e);
-      this.consecutiveFailures += 1;
-      if (e.response) {
-        /** connection_fallback depends on this token expiration logic */
-        if (
-          e.response.data.code === chatCodes.TOKEN_EXPIRED &&
-          !this.tokenManager.isStatic()
-        ) {
-          if (this.consecutiveFailures > 1) {
-            await sleep(retryInterval(this.consecutiveFailures));
-          }
-          this.tokenManager.loadToken();
-          return await this.doAxiosRequest<T>(type, url, data, options);
-        }
-        return this.handleResponse(e.response);
-      } else {
-        throw e as AxiosError<APIErrorResponse>;
-      }
-    }
-  };
-
-  get<T>(
-    url: string,
-    params?: AxiosRequestConfig['params'],
-    // `params` is omitted deliberately: _enrichAxiosOptions spreads `config` after the
-    // enriched params, so a `config.params` would drop api_key/user_id/connection_id.
-    config?: Omit<AxiosRequestConfig, 'params'>,
-  ) {
-    return this.doAxiosRequest<T>('get', url, null, { params, config });
-  }
-
-  put<T>(url: string, data?: unknown) {
-    return this.doAxiosRequest<T>('put', url, data);
-  }
-
-  post<T>(url: string, data?: unknown, config?: Omit<AxiosRequestConfig, 'params'>) {
-    return this.doAxiosRequest<T>('post', url, data, { config });
-  }
-
-  patch<T>(url: string, data?: unknown) {
-    return this.doAxiosRequest<T>('patch', url, data);
-  }
-
-  delete<T>(url: string, params?: AxiosRequestConfig['params']) {
-    return this.doAxiosRequest<T>('delete', url, null, { params });
-  }
-
-  sendFile(
-    url: string,
-    uri: string | NodeJS.ReadableStream | Buffer | File,
-    name?: string,
-    contentType?: string,
-    user?: UserResponse,
-    axiosRequestConfig?: AxiosRequestConfig,
-  ) {
-    const data = addFileToFormData(uri, name, contentType || 'multipart/form-data');
-    if (user != null) data.append('user', JSON.stringify(user));
-
-    return this.doAxiosRequest<SendFileAPIResponse>('postForm', url, data, {
-      headers: data.getHeaders ? data.getHeaders() : {}, // node vs browser
-      config: {
-        timeout: 0,
-        maxContentLength: Infinity,
-        maxBodyLength: Infinity,
-        ...axiosRequestConfig,
-      },
-    });
-  }
-
-  errorFromResponse(response: AxiosResponse<APIErrorResponse>) {
-    const message =
-      typeof response.data.code !== 'undefined'
-        ? `StreamChat error code ${response.data.code}: ${response.data.message}`
-        : `StreamChat error HTTP code: ${response.status}`;
-
-    return new ErrorFromResponse<APIErrorResponse>(message, {
-      code: response.data.code ?? null,
-      response,
-      status: response.status,
-    });
-  }
-
-  handleResponse<T>(response: AxiosResponse<T>) {
-    const data = response.data;
-    if (isErrorResponse(response)) {
-      throw this.errorFromResponse(response);
-    }
-    return data;
   }
 
   dispatchEvent = (event: Event) => {
-    if (!event.received_at) event.received_at = new Date();
+    if (event.received_at == null) event.received_at = nowNs();
 
-    // client event handlers
-    const postListenerCallbacks = this._handleClientEvent(event);
+    const postListenerCallbacks = this._handleClientEvent(event as WSEvent);
 
-    // channel event handlers
-    const cid = event.cid;
-    const channel = cid ? this.activeChannels[cid] : undefined;
-    if (channel) {
+    const cid = (event as Extract<Event, { cid?: any }>).cid;
+    const channel = cid ? this.channelManager.get(cid) : undefined;
+    // A disconnected channel (`pendingDisposal`) may stay stored until `releaseUnusedChannels()`.
+    // Its handlers would throw at `getClient()`, so they are skipped (its own listeners below still
+    // hear it).
+    if (channel && !channel.pendingDisposal) {
       channel._handleChannelEvent(event);
     }
 
@@ -1493,7 +972,16 @@ export class StreamChat {
       channel._callChannelListeners(event);
     }
 
-    postListenerCallbacks.forEach((c) => c());
+    // A failing in-memory cleanup must not skip the other callbacks or the offline DB write below.
+    for (const callback of postListenerCallbacks) {
+      try {
+        callback();
+      } catch (error) {
+        logger
+          .withExtraTags('dispatchEvent', event.type)
+          .error('A post-listener callback failed.', { error });
+      }
+    }
 
     this.offlineDb?.executeQuerySafely((db) => db.handleEvent({ event }), {
       method: `handleEvent;${event.type}`,
@@ -1501,108 +989,113 @@ export class StreamChat {
   };
 
   /**
-   * Updates the members, watchers and read references of the currently active channels that contain this user
+   * Puts `user`'s new object into the members, watchers, own membership and (with `readEntries`)
+   * read entries of the channels that list them, in one state update per channel.
    *
-   * @param {UserResponse} user
+   * @param options.readEntries - Also replace the user in read entries, refreshing read receipts.
+   *   Off for presence changes: receipts never show online status. Defaults to `true`.
    */
-  _updateMemberWatcherReferences = (user: UserResponse) => {
+  _updateMemberWatcherReferences = (
+    user: UserResponse,
+    { readEntries = true }: { readEntries?: boolean } = {},
+  ) => {
     const refMap = this.state.userChannelReferences[user.id] || {};
-    for (const channelID in refMap) {
-      const channel = this.activeChannels[channelID];
-      if (channel?.state) {
-        if (channel.state.members[user.id]) {
-          channel.state.members[user.id].user = user;
-        }
-        if (channel.state.watchers[user.id]) {
-          channel.state.watchers[user.id] = user;
-        }
-        if (channel.state.read[user.id]) {
-          channel.state.read[user.id].user = user;
-        }
+    for (const channelId in refMap) {
+      const channel = this.channelManager.get(channelId);
+      if (!channel?.state) continue;
+      const { members, membership, watchers, read } = channel.state.getLatestValue();
+      const member = members[user.id];
+      const readState = readEntries ? read[user.id] : undefined;
+      const hasWatcher = !!watchers[user.id];
+      const isOwnMembership = membership?.user?.id === user.id;
+      if (!member && !hasWatcher && !readState && !isOwnMembership) continue;
+      // The receipts tracker applies a read-state change only with metadata naming the changed
+      // users.
+      if (readState) {
+        channel.messageReceiptsTracker.setPendingReadStoreReconcileMeta({
+          changedUserIds: [user.id],
+        });
       }
+      channel.state.partialNext({
+        ...(member && { members: { ...members, [user.id]: { ...member, user } } }),
+        ...(hasWatcher && { watchers: { ...watchers, [user.id]: user } }),
+        ...(isOwnMembership && { membership: { ...membership, user } }),
+        ...(readState && { read: { ...read, [user.id]: { ...readState, user } } }),
+      });
+      // consumed by the tracker's read subscription; cleared in case it isn't subscribed
+      channel.messageReceiptsTracker.setPendingReadStoreReconcileMeta(undefined);
     }
   };
 
   /**
-   * @deprecated Please _updateMemberWatcherReferences instead.
+   * @deprecated Please use `_updateMemberWatcherReferences` instead.
    * @private
    */
   _updateUserReferences = this._updateMemberWatcherReferences;
 
   /**
+   * Replaces the user's object in the messages of the loaded channels.
+   *
    * @private
-   *
-   * Updates the messages from the currently active channels that contain this user,
-   * with updated user object.
-   *
-   * @param {UserResponse} user
    */
   _updateUserMessageReferences = (user: UserResponse) => {
-    const refMap = this.state.userChannelReferences[user.id] || {};
-
-    for (const channelID in refMap) {
-      const channel = this.activeChannels[channelID];
-
+    // Scans all loaded channels: `reflectUserUpdate` filters by author ID, so it is a no-op for
+    // channels without this user's messages.
+    for (const channel of this.channelManager.values()) {
       if (!channel) continue;
 
-      const state = channel.state;
-
-      /** update the messages from this user. */
-      state?.updateUserMessages(user);
+      channel.pinnedMessagesPaginator.reflectUserUpdate(user);
+      channel.messagePaginator.reflectUserUpdate(user);
     }
   };
 
   /**
+   * Deletes the user's messages in the loaded channels: stripped of their content with
+   * `hardDelete`, otherwise marked as deleted. `deletedAt` defaults to now.
+   *
    * @private
-   *
-   * Deletes the messages from the currently active channels that contain this user
-   *
-   * If hardDelete is true, all the content of message will be stripped down.
-   * Otherwise, only 'message.type' will be set as 'deleted'.
-   *
-   * @param {UserResponse} user
-   * @param {boolean} hardDelete
    */
   _deleteUserMessageReference = (
     user: UserResponse,
     hardDelete = false,
     deletedAt?: LocalMessage['deleted_at'],
   ) => {
-    const refMap = this.state.userChannelReferences[user.id] || {};
-
-    for (const channelID in refMap) {
-      const channel = this.activeChannels[channelID];
+    // Scans all loaded channels; `applyMessageDeletionForUser` filters by author ID.
+    for (const channel of this.channelManager.values()) {
       if (channel) {
-        const state = channel.state;
-
-        /** deleted the messages from this user. */
-        state?.deleteUserMessages(user, hardDelete, deletedAt);
+        const deletedMessages = channel.messagePaginator.applyMessageDeletionForUser({
+          userId: user.id,
+          hardDelete,
+          deletedAt: deletedAt ?? nowNs(),
+        });
+        // the server keeps the unread count on a soft bulk delete
+        if (hardDelete) channel._lowerUnreadCountForDeletedMessages(deletedMessages);
+        channel.pinnedMessagesPaginator.applyMessageDeletionForUser({
+          userId: user.id,
+          hardDelete,
+          deletedAt: deletedAt ?? nowNs(),
+        });
       }
     }
   };
 
-  /**
-   * @private
-   *
-   * Handle following user related events:
-   * - user.presence.changed
-   * - user.updated
-   * - user.deleted
-   *
-   * @param {Event} event
-   */
-  _handleUserEvent = (event: Event) => {
+  /** @private */
+  _handleUserEvent = (
+    event: Extract<
+      WSEvent,
+      { type: 'user.presence.changed' | 'user.updated' | 'user.deleted' }
+    >,
+  ) => {
     if (!event.user) {
       return;
     }
 
-    /** update the client.state with any changes to users */
     if (event.type === 'user.presence.changed' || event.type === 'user.updated') {
-      if (event.user.id === this.userID) {
+      if (event.user.id === this.userId) {
         const user = { ...this.user } as NonNullable<StreamChat['user']>;
         const _user = { ...this._user } as NonNullable<StreamChat['_user']>;
 
-        // Remove deleted properties from user objects.
+        // Drop properties absent from the event, except own-user-only ones.
         for (const key in this.user) {
           if (key in event.user || isOwnUserBaseProperty(key)) {
             continue;
@@ -1614,7 +1107,7 @@ export class StreamChat {
           delete _user[deleteKey];
         }
 
-        /** Updating only available properties in _user object. */
+        // Update only the properties `_user` already has.
         for (const key in _user) {
           const updateKey = key as keyof typeof _user;
 
@@ -1629,7 +1122,9 @@ export class StreamChat {
       }
 
       this.state.updateUser(event.user);
-      this._updateMemberWatcherReferences(event.user);
+      this._updateMemberWatcherReferences(event.user, {
+        readEntries: event.type === 'user.updated',
+      });
     }
 
     if (event.type === 'user.updated') {
@@ -1638,29 +1133,24 @@ export class StreamChat {
 
     if (
       event.type === 'user.deleted' &&
-      event.user.deleted_at &&
+      event.user.deleted_at != null &&
       (event.mark_messages_deleted || event.hard_delete)
     ) {
       this._deleteUserMessageReference(
         event.user,
         event.hard_delete,
-        event.user.deleted_at ? new Date(event.user.deleted_at) : null,
+        event.user.deleted_at,
       );
     }
   };
 
-  _handleClientEvent(event: Event) {
+  _handleClientEvent(event: WSEvent) {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const client = this;
     const postListenerCallbacks = [];
-    this.logger(
-      'info',
-      `client:_handleClientEvent - Received event of type { ${event.type} }`,
-      {
-        tags: ['event', 'client'],
-        event,
-      },
-    );
+    logger
+      .withExtraTags('_handleClientEvent')
+      .debug(`Received an event of type "${event.type}".`, { event });
 
     if (
       event.type === 'user.presence.changed' ||
@@ -1671,28 +1161,26 @@ export class StreamChat {
     }
 
     if (event.type === 'user.messages.deleted' && !event.cid && event.user) {
-      this._deleteUserMessageReference(
-        event.user,
-        event.hard_delete,
-        event.created_at ? new Date(event.created_at) : null,
-      );
+      this._deleteUserMessageReference(event.user, event.hard_delete, event.created_at);
     }
 
-    if (event.type === 'health.check' && event.me) {
+    if ((event.type === 'health.check' || event.type === 'connection.ok') && event.me) {
       client.user = event.me;
       client.state.updateUser(event.me);
       client.mutedChannels = event.me.channel_mutes;
+      client.channelManager.reflectMutedChannels();
       client.mutedUsers = event.me.mutes;
       client.blockedUsers.partialNext({ userIds: event.me.blocked_user_ids ?? [] });
     }
 
-    if (event.channel && event.type === 'notification.message_new') {
+    if (event.type === 'notification.message_new' && event.channel) {
       const { channel } = event;
       this._addChannelConfig(channel);
     }
 
     if (event.type === 'notification.channel_mutes_updated' && event.me?.channel_mutes) {
       this.mutedChannels = event.me.channel_mutes;
+      this.channelManager.reflectMutedChannels();
     }
 
     if (event.type === 'notification.mutes_updated' && event.me?.mutes) {
@@ -1700,11 +1188,12 @@ export class StreamChat {
     }
 
     if (event.type === 'notification.mark_read' && event.unread_channels === 0) {
-      const activeChannelKeys = Object.keys(this.activeChannels);
-      activeChannelKeys.forEach(
-        (activeChannelKey) =>
-          (this.activeChannels[activeChannelKey].state.unreadCount = 0),
-      );
+      this.channelManager.values().forEach((channel) => {
+        // Resets `read[userId].unread_messages`, which the unread badge reads.
+        if (!channel._setOwnUnreadCount(0)) return;
+        // the event may name no channel (mark-all-read), but here we know which ones changed
+        this.channelManager.dropFromUnmatchedLists(channel);
+      });
     }
 
     if (
@@ -1714,42 +1203,47 @@ export class StreamChat {
     ) {
       const { cid } = event;
       client.state.deleteAllChannelReference(cid);
-      this.activeChannels[event.cid]?._disconnect();
+      const ended = this.channelManager.get(cid);
+      ended?.disconnect();
 
       postListenerCallbacks.push(() => {
-        if (!cid) return;
-
-        delete this.activeChannels[cid];
+        // Only the instance disconnected above: a listener that got the channel again keeps its
+        // fresh instance (`ensure()` replaces a disposed one).
+        if (ended && this.channelManager.get(cid) === ended) {
+          this.channelManager.removeChannel(cid);
+        }
       });
     }
 
-    // Current user removed from a channel: evict it like channel.deleted so
-    // recoverState won't re-watch it and no further events reach it (#2599).
-    // Type-agnostic. We skip deleteAllChannelReference (unlike deletion) since
-    // the channel still exists for its remaining members.
+    // Current user removed from a channel: evict it like channel.deleted so connection recovery
+    // does not re-watch it. `deleteAllChannelReference` is skipped: the channel still
+    // exists for its other members.
     if (event.type === 'notification.removed_from_channel' && event.cid) {
       const { cid } = event;
-      this.activeChannels[cid]?._disconnect();
+      const ended = this.channelManager.get(cid);
+      ended?.disconnect();
 
       postListenerCallbacks.push(() => {
-        delete this.activeChannels[cid];
+        // only the instance disconnected above, as for channel.deleted
+        if (ended && this.channelManager.get(cid) === ended) {
+          this.channelManager.removeChannel(cid);
+        }
       });
     }
 
     return postListenerCallbacks;
   }
 
-  _muteStatus(cid: string) {
-    let muteStatus;
+  _muteStatus(cid: string): ChannelMuteStatus {
+    let muteStatus: ChannelMuteStatus | undefined;
     for (let i = 0; i < this.mutedChannels.length; i++) {
       const mute = this.mutedChannels[i];
       if (mute.channel?.cid === cid) {
         muteStatus = {
-          muted: mute.expires
-            ? new Date(mute.expires).getTime() > new Date().getTime()
-            : true,
-          createdAt: mute.created_at ? new Date(mute.created_at) : new Date(),
-          expiresAt: mute.expires ? new Date(mute.expires) : null,
+          // `expires` is in unix nanoseconds: compare it against `nowNs()`, not `Date.now()`.
+          muted: mute.expires != null ? mute.expires > nowNs() : true,
+          createdAt: mute.created_at ?? nowNs(),
+          expiresAt: mute.expires ?? null,
         };
         break;
       }
@@ -1767,506 +1261,189 @@ export class StreamChat {
   }
 
   _callClientListeners = (event: Event) => {
-    // snapshot before dispatching: `on` pushes into these arrays in place, so a
-    // listener that subscribes while handling an event must not be invoked for it
+    // Snapshot first: a listener subscribed while handling an event must not be invoked for it.
     const listeners = [
-      ...(this.listeners.all ?? []),
-      ...(this.listeners[event.type] ?? []),
+      ...(this.listeners.get('all') ?? []),
+      ...(this.listeners.get(event.type) ?? []),
     ];
 
     for (const listener of listeners) {
-      invokeEventListener(listener, event, this.logger);
+      invokeEventListener(listener, event, logger);
     }
   };
 
-  recoverState = async () => {
-    this.logger(
-      'info',
-      `client:recoverState() - Start of recoverState with connectionID ${this._getConnectionID()}`,
-      {
-        tags: ['connection'],
-      },
-    );
-
-    const cids = Object.keys(this.activeChannels);
-    if (cids.length && this.recoverStateOnReconnect) {
-      this.logger(
-        'info',
-        `client:recoverState() - Start the querying of ${cids.length} channels`,
-        {
-          tags: ['connection', 'client'],
-        },
+  /**
+   * Settles the connect promises after a successful reconnect, so a held `wsPromise` /
+   * `setUserPromise` stops resolving against a superseded (possibly rejected) attempt. Called by
+   * `StableWSConnection._reconnect()` and `WSConnectionFallback.connect(true)`. Recovery itself
+   * belongs to {@link ConnectionRecoveryManager}.
+   *
+   * @internal
+   */
+  _settleConnectPromises = () => {
+    logger
+      .withExtraTags('_settleConnectPromises')
+      .info(
+        `Connection re-established with connection ID ${this.connectionIdManager.connectionId}.`,
       );
 
-      await this.queryChannels(
-        { cid: { $in: cids } } as ChannelFilters,
-        { last_message_at: -1 },
-        { limit: 30 },
-      );
-
-      this.logger('info', 'client:recoverState() - Querying channels finished', {
-        tags: ['connection', 'client'],
-      });
-      this.dispatchEvent({
-        type: 'connection.recovered',
-      } as Event);
-    } else {
-      this.dispatchEvent({
-        type: 'connection.recovered',
-      } as Event);
-    }
-
-    // If state recovery happens afer a failed connect (for example on persistUserOnConnectionFailure: true) we need to flip the wsPromise from rejected to resolved
-    // Otherwise all API calls that wait for the promise will fail
-    // If promise is not yet settled - we leave it for the connect sequence to resolve the promise
+    // After a failed connect (e.g. `persistUserOnConnectionFailure: true`) recovery must flip
+    // `wsPromise` from rejected to resolved, or calls waiting on it fail. An unsettled promise is
+    // left to the connect sequence.
     if (this._wsPromiseSettled) {
       this.wsPromise = Promise.resolve();
     }
     this.setUserPromise = Promise.resolve();
   };
 
-  /**
-   * @private
-   */
+  /** @private */
   async connect() {
-    if (!this.userID || !this._user) {
+    if (!this.userId || !this._user) {
       throw Error(
         'Call connectUser or connectAnonymousUser before starting the connection',
       );
     }
     if (!this.wsBaseURL) {
-      throw Error('Websocket base url not set');
+      throw Error('Property wsBaseURL is not set');
     }
-    if (!this.clientID) {
-      throw Error('clientID is not set');
-    }
-
-    if (!this.wsConnection && (this.options.warmUp || this.options.enableInsights)) {
-      this._sayHi();
-    }
-    // The StableWSConnection handles all the reconnection logic.
-    if (this.options.wsConnection && this.node) {
-      // Intentionally avoiding adding ts generics on wsConnection in options since its only useful for unit test purpose.
-      (this.options.wsConnection as unknown as StableWSConnection).setClient(this);
-      this.wsConnection = this.options.wsConnection as unknown as StableWSConnection;
-    } else {
-      this.wsConnection = new StableWSConnection({
-        client: this,
-      });
+    if (!this.clientId) {
+      throw Error('Property clientId is not set');
     }
 
-    try {
-      // if fallback is used before, continue using it instead of waiting for WS to fail
-      if (this.wsFallback) {
-        return await this.wsFallback.connect();
-      }
-
-      // if WSFallback is enabled, ws connect should timeout faster so fallback can try
-      return await this.wsConnection.connect(
-        this.options.enableWSFallback
-          ? this.defaultWSTimeoutWithFallback
-          : this.defaultWSTimeout,
-      );
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (error: any) {
-      // run fallback only if it's WS/Network error and not a normal API error
-      // make sure browser is online before even trying the longpoll
-      if (this.options.enableWSFallback && isWSFailure(error) && isOnline()) {
-        this.logger('info', 'client:connect() - WS failed, fallback to longpoll', {
-          tags: ['connection', 'client'],
-        });
-        this.dispatchEvent({ type: 'transport.changed', mode: 'longpoll' });
-
-        this.wsConnection._destroyCurrentWSConnection();
-        this.wsConnection.disconnect().then(); // close WS so no retry
-        this.wsFallback = new WSConnectionFallback({
-          client: this,
-        });
-        return await this.wsFallback.connect();
-      }
-
-      throw error;
-    }
+    // `wsConnection` owns the socket, the long-poll fallback (`enableWSFallback`), reconnection and
+    // the connect timeout.
+    return await this.wsConnection.connect();
   }
 
   /**
-   * Check the connectivity with server for warmup purpose.
+   * Queries users and stores them in `client.state.users`. Watches presence only when
+   * `request.payload.presence` is set.
    *
-   * @private
+   * @param ...args - `[request, requestOptions]`. The optional `request.payload` accepts
+   *   MongoDB-style filter conditions, sort directions (e.g.
+   *   `[{ field: 'last_active', direction: -1 }]`), and options such as `presence`.
+   *   `requestOptions` carries per-request options such as an abort `signal` and is never
+   *   serialized into the request.
+   * @returns The user query response.
    */
-  _sayHi() {
-    const client_request_id = randomId();
-    const opts = { headers: { 'x-client-request-id': client_request_id } };
-    this.doAxiosRequest('get', this.baseURL + '/hi', null, opts).catch((e) => {
-      if (this.options.enableInsights) {
-        postInsights('http_hi_failed', {
-          api_key: this.key,
-          err: e,
-          client_request_id,
-        });
-      }
-    });
-  }
-
-  /**
-   * queryUsers - Query users and watch user presence
-   *
-   * @param {UserFilters} filterConditions MongoDB style filter conditions
-   * @param {UserSort} sort Sort options, for instance [{last_active: -1}].
-   * When using multiple fields, make sure you use array of objects to guarantee field order, for instance [{last_active: -1}, {created_at: 1}]
-   * @param {UserOptions} options Option object, {presence: true}
-   * @param {RequestOptions} [requestOptions] Carries an abort signal. Not sent in the request.
-   *
-   * @return {Promise<{ users: Array<UserResponse> }>} User Query Response
-   */
-  async queryUsers(
-    filterConditions: UserFilters,
-    sort: UserSort = [],
-    options: UserOptions = {},
-    requestOptions: RequestOptions = {},
-  ) {
-    const defaultOptions = {
-      presence: false,
-    };
-
-    // Make sure we wait for the connect promise if there is a pending one
-    await this.wsPromise;
-
-    if (!this._hasConnectionID()) {
-      defaultOptions.presence = false;
-    }
-
-    // Return a list of users
-    const data = await this.get<APIResponse & { users: Array<UserResponse> }>(
-      this.baseURL + '/users',
-      {
-        payload: {
-          filter_conditions: filterConditions,
-          sort: normalizeQuerySort(sort),
-          ...defaultOptions,
-          ...options,
-        },
-      },
-      requestOptions,
-    );
-
+  override async queryUsers(...args: Parameters<ChatApi['queryUsers']>) {
+    const [request, requestOptions] = args;
+    const data = await super.queryUsers(request ?? {}, requestOptions);
     this.state.updateUsers(data.users);
 
     return data;
   }
 
   /**
-   * queryUserGroups - List user groups with cursor-based pagination.
+   * Stops watching a channel on this client's connection. It carries no `watch` flag, but it waits
+   * for the connection ID like a watching request (through a handshake or reconnect, until the
+   * caller's abort signal fires) and throws when there is no connection and none is being
+   * established.
    *
-   * @param {QueryUserGroupsOptions} options The query options
-   *
-   * @return {Promise<QueryUserGroupsResponse>} User Group Query Response
+   * @param ...args - `[pathParams, request, requestOptions]`. `pathParams` identifies the channel
+   *   (`{ type, id }`); `request.connection_id` is replaced by this client's connection ID.
+   * @returns The server response.
    */
-  async queryUserGroups(options: QueryUserGroupsOptions = {}) {
-    return await this.get<QueryUserGroupsResponse>(this.baseURL + '/usergroups', options);
-  }
-
-  /**
-   * createUserGroup - Create a user group
-   *
-   * @param {CreateUserGroupOptions} options The create options
-   *
-   * @return {Promise<CreateUserGroupResponse>} User Group Create Response
-   */
-  async createUserGroup(options: CreateUserGroupOptions) {
-    return await this.post<CreateUserGroupResponse>(
-      this.baseURL + '/usergroups',
-      options,
-    );
-  }
-
-  /**
-   * getUserGroup - Get a user group by ID
-   *
-   * @param {string} id The user group ID
-   * @param {GetUserGroupOptions} options Optional query options
-   *
-   * @return {Promise<GetUserGroupResponse>} User Group Get Response
-   */
-  async getUserGroup(id: string, options: GetUserGroupOptions = {}) {
-    return await this.get<GetUserGroupResponse>(
-      `${this.baseURL}/usergroups/${encodeURIComponent(id)}`,
-      options,
-    );
-  }
-
-  /**
-   * searchUserGroups - Search user groups by prefix for autocomplete
-   *
-   * @param {SearchUserGroupsOptions} options The search options
-   * @param {RequestOptions} [requestOptions] Carries an abort signal. Not sent in the request.
-   * @return {Promise<SearchUserGroupsResponse>} User Group Search Response
-   */
-  async searchUserGroups(
-    options: SearchUserGroupsOptions,
-    requestOptions: RequestOptions = {},
+  override async stopWatchingChannel(
+    ...args: Parameters<ChatApi['stopWatchingChannel']>
   ) {
-    return await this.get<SearchUserGroupsResponse>(
-      this.baseURL + '/usergroups/search',
-      options,
+    const [pathParams, request, requestOptions] = args;
+    const signal = requestOptions?.signal;
+    const connectionId = await this.connectionIdManager.getConnectionId(
+      // A signal revived from the offline DB has lost `addEventListener`.
+      typeof signal?.addEventListener === 'function' ? signal : undefined,
+    );
+
+    return super.stopWatchingChannel(
+      pathParams,
+      { ...request, connection_id: connectionId },
       requestOptions,
     );
   }
 
   /**
-   * updateUserGroup - Update a user group by ID
+   * Queries channels and returns the raw API response. See {@link queryChannelsAndHydrate} for
+   * `Channel` instances.
    *
-   * @param {string} id The user group ID
-   * @param {UpdateUserGroupOptions} options The update options
-   *
-   * @return {Promise<UpdateUserGroupResponse>} User Group Update Response
+   * @param ...args - `[request, requestOptions]`. The optional `request` accepts MongoDB-style
+   *   filter conditions, sort directions (e.g. `[{ field: 'created_at', direction: -1 }]`), and
+   *   options such as `predefined_filter`, `filter_values`, and `sort_values`. `state`, `watch` and
+   *   `presence` default to `true`, `true` and `false`. `requestOptions` carries per-request
+   *   options such as an abort `signal` and is never serialized into the request.
+   * @returns The full query channels response, including metadata such as `predefined_filter`.
    */
-  async updateUserGroup(id: string, options: UpdateUserGroupOptions) {
-    return await this.put<UpdateUserGroupResponse>(
-      `${this.baseURL}/usergroups/${encodeURIComponent(id)}`,
-      options,
-    );
-  }
-
-  /**
-   * deleteUserGroup - Delete a user group by ID
-   *
-   * @param {string} id The user group ID
-   * @param {DeleteUserGroupOptions} options Optional query options
-   *
-   * @return {Promise<APIResponse>} User Group Delete Response
-   */
-  async deleteUserGroup(id: string, options: DeleteUserGroupOptions = {}) {
-    return await this.delete<APIResponse>(
-      `${this.baseURL}/usergroups/${encodeURIComponent(id)}`,
-      options,
-    );
-  }
-
-  /**
-   * addUserGroupMembers - Add members to a user group
-   *
-   * @param {string} id The user group ID
-   * @param {AddUserGroupMembersOptions} options The add-members options
-   *
-   * @return {Promise<AddUserGroupMembersResponse>} User Group Add Members Response
-   */
-  async addUserGroupMembers(id: string, options: AddUserGroupMembersOptions) {
-    return await this.post<AddUserGroupMembersResponse>(
-      `${this.baseURL}/usergroups/${encodeURIComponent(id)}/members`,
-      options,
-    );
-  }
-
-  /**
-   * removeUserGroupMembers - Remove members from a user group
-   *
-   * @param {string} id The user group ID
-   * @param {RemoveUserGroupMembersOptions} options The remove-members options
-   *
-   * @return {Promise<RemoveUserGroupMembersResponse>} User Group Remove Members Response
-   */
-  async removeUserGroupMembers(id: string, options: RemoveUserGroupMembersOptions) {
-    return await this.post<RemoveUserGroupMembersResponse>(
-      `${this.baseURL}/usergroups/${encodeURIComponent(id)}/members/delete`,
-      options,
-    );
-  }
-
-  /**
-   * queryBannedUsers - Query user bans
-   *
-   * @param {BannedUsersFilters} filterConditions MongoDB style filter conditions
-   * @param {BannedUsersSort} sort Sort options [{created_at: 1}].
-   * @param {BannedUsersPaginationOptions} options Option object, {limit: 10, offset:0, exclude_expired_bans: true}
-   *
-   * @return {Promise<BannedUsersResponse>} Ban Query Response
-   */
-  async queryBannedUsers(
-    filterConditions: BannedUsersFilters = {},
-    sort: BannedUsersSort = [],
-    options: BannedUsersPaginationOptions = {},
-  ) {
-    // Return a list of user bans
-    return await this.get<BannedUsersResponse>(this.baseURL + '/query_banned_users', {
-      payload: {
-        filter_conditions: filterConditions,
-        sort: normalizeQuerySort(sort),
-        ...options,
-      },
-    });
-  }
-
-  /**
-   * queryFutureChannelBans - Query future channel bans created by a user
-   *
-   * @param {QueryFutureChannelBansOptions} options Option object with user_id, exclude_expired_bans, limit, offset
-   * @returns {Promise<FutureChannelBansResponse>} Future Channel Bans Response
-   */
-  async queryFutureChannelBans(options: QueryFutureChannelBansOptions = {}) {
-    return await this.get<FutureChannelBansResponse>(
-      this.baseURL + '/query_future_channel_bans',
-      {
-        payload: options,
-      },
-    );
-  }
-
-  /**
-   * queryMessageFlags - Query message flags
-   *
-   * @param {MessageFlagsFilters} filterConditions MongoDB style filter conditions
-   * @param {MessageFlagsPaginationOptions} options Option object, {limit: 10, offset:0}
-   *
-   * @return {Promise<MessageFlagsResponse>} Message Flags Response
-   */
-  async queryMessageFlags(
-    filterConditions: MessageFlagsFilters = {},
-    options: MessageFlagsPaginationOptions = {},
-  ) {
-    // Return a list of message flags
-    return await this.get<MessageFlagsResponse>(
-      this.baseURL + '/moderation/flags/message',
-      {
-        payload: { filter_conditions: filterConditions, ...options },
-      },
-    );
-  }
-
-  /**
-   * queryChannelsRequestWithResponse - Queries channels and returns the full API response
-   * including top-level metadata such as `predefined_filter`.
-   *
-   * This exists as a compatibility bridge, as changing `queryChannelsRequest()` to return
-   * `QueryChannelsAPIResponse` would be a breaking change because it currently returns
-   * only the channel list. In the next major release, the request/response APIs should
-   * be consolidated so callers can access the full response through the primary API.
-   *
-   * @param {ChannelFilters} filterConditions object MongoDB style filters. Can be empty object when using predefined_filter in options.
-   * @param {ChannelSort} [sort] Sort options, for instance {created_at: -1}.
-   * When using multiple fields, make sure you use array of objects to guarantee field order, for instance [{last_updated: -1}, {created_at: 1}]
-   * @param {ChannelOptions} [options] Options object. Can include predefined_filter, filter_values, and sort_values for using predefined filters.
-   * @param {RequestOptions} [requestOptions] Carries an abort signal. Not sent in the request.
-   *
-   * @return {Promise<QueryChannelsAPIResponse>} full search channels response
-   */
-  async queryChannelsRequestWithResponse(
-    filterConditions: ChannelFilters,
-    sort: ChannelSort = [],
-    options: ChannelOptions = {},
-    requestOptions: RequestOptions = {},
-  ): Promise<QueryChannelsAPIResponse> {
+  override async queryChannels(...args: Parameters<ChatApi['queryChannels']>) {
+    const [request, requestOptions] = args;
     const defaultOptions: ChannelOptions = {
       state: true,
       watch: true,
       presence: false,
     };
 
-    // Make sure we wait for the connect promise if there is a pending one
-    await this.wsPromise;
-    if (!this._hasConnectionID()) {
-      defaultOptions.watch = false;
-    }
+    const {
+      predefined_filter,
+      filter_values,
+      sort_values,
+      filter_conditions,
+      ...restOptions
+    } = request ?? {};
 
-    const { predefined_filter, filter_values, sort_values, ...restOptions } = options;
-    const normalizedSort = normalizeQuerySort(sort);
-
-    // Build payload based on whether we're using a predefined filter or traditional filters
-    const payload = predefined_filter
+    // With a predefined filter, `filter_conditions` is not sent.
+    const payload: QueryChannelsRequest = predefined_filter
       ? {
           predefined_filter,
           filter_values,
           sort_values,
-          sort: normalizedSort,
           ...defaultOptions,
           ...restOptions,
         }
       : {
-          filter_conditions: filterConditions,
-          sort: normalizedSort,
+          filter_conditions,
           ...defaultOptions,
           ...restOptions,
         };
 
-    return await this.post<QueryChannelsAPIResponse>(
-      this.baseURL + '/channels',
-      payload,
-      requestOptions,
-    );
+    // `ApiClient` waits for a connection ID only when the payload sets `watch` or `presence`.
+    return await super.queryChannels(payload, requestOptions);
   }
 
   /**
-   * queryChannelsRequest - Queries channels and returns the raw channel response list.
+   * Queries channels and hydrates them into `Channel` instances on this client, dispatching
+   * `channels.queried` and syncing the offline DB. Use `queryChannels()` for the raw API response.
    *
-   * This preserves the historical return shape for backwards compatibility. Use
-   * `queryChannelsRequestWithResponse()` when response level metadata such as
-   * `predefined_filter` is needed. In the next major release these APIs should be
-   * consolidated into a single full-response API.
-   *
-   * @param {ChannelFilters} filterConditions object MongoDB style filters. Can be empty object when using predefined_filter in options.
-   * @param {ChannelSort} [sort] Sort options, for instance {created_at: -1}.
-   * When using multiple fields, make sure you use array of objects to guarantee field order, for instance [{last_updated: -1}, {created_at: 1}]
-   * @param {ChannelOptions} [options] Options object. Can include predefined_filter, filter_values, and sort_values for using predefined filters.
-   *
-   * @return {Promise<Array<ChannelAPIResponse>>} search channels response
+   * @param options - The query channels request payload (optional). Accepts MongoDB-style filter
+   *   conditions, sort directions (e.g. `[{ field: 'created_at', direction: -1 }]`), and options
+   *   such as `predefined_filter`, `filter_values`, and `sort_values`.
+   * @param stateOptions - Options that only affect state management and are not sent in the
+   *   request. Defaults to `{}`.
+   * @param stateOptions.skipHydration - Not read: it has no effect.
+   * @param stateOptions.withResponse - Returns the full query response (with hydrated `channels`)
+   *   instead of `Channel[]`.
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
+   * @returns The hydrated channel list, or the full response when `withResponse` is `true`.
    */
-  async queryChannelsRequest(
-    filterConditions: ChannelFilters,
-    sort: ChannelSort = [],
-    options: ChannelOptions = {},
-  ) {
-    const data = await this.queryChannelsRequestWithResponse(
-      filterConditions,
-      sort,
-      options,
-    );
-
-    // FIXME: In the next major release, return the full QueryChannelsAPIResponse
-    // instead of only `data.channels` so top-level metadata such as
-    // `predefined_filter` is not lost.
-    return data.channels;
-  }
-
-  /**
-   * queryChannels - Query channels
-   *
-   * @param {ChannelFilters} filterConditions object MongoDB style filters
-   * @param {ChannelSort} [sort] Sort options, for instance {created_at: -1}.
-   * When using multiple fields, make sure you use array of objects to guarantee field order, for instance [{last_updated: -1}, {created_at: 1}]
-   * @param {ChannelOptions} [options] Options object
-   * @param {ChannelStateOptions} [stateOptions] State options object. These options will only be used for state management and won't be sent in the request.
-   * - stateOptions.skipInitialization - Skips the initialization of the state for the channels matching the ids in the list.
-   * - stateOptions.skipHydration - Skips returning the channels as instances of the Channel class and rather returns the raw query response.
-   * - stateOptions.withResponse - Returns the full query response with hydrated channels. This is a compatibility bridge for internal callers that need response-level metadata while the default return value remains `Channel[]`.
-   * - stateOptions.signal - Aborts the request. See AbortController.
-   *
-   * @return {Promise<Array<Channel>>} search channels response
-   */
-  async queryChannels(
-    filterConditions: ChannelFilters,
-    sort: ChannelSort,
-    options: ChannelOptions,
+  async queryChannelsAndHydrate(
+    options: QueryChannelsRequest | undefined,
     stateOptions: ChannelStateOptions & { withResponse: true },
+    requestOptions?: StreamRequestOptions,
   ): Promise<QueryChannelsResponseWithChannels>;
-  async queryChannels(
-    filterConditions?: ChannelFilters,
-    sort?: ChannelSort,
-    options?: ChannelOptions,
+  async queryChannelsAndHydrate(
+    options?: QueryChannelsRequest,
     stateOptions?: ChannelStateOptions,
+    requestOptions?: StreamRequestOptions,
   ): Promise<Channel[]>;
-  async queryChannels(
-    filterConditions: ChannelFilters,
-    sort: ChannelSort = [],
-    options: ChannelOptions = {},
+  async queryChannelsAndHydrate(
+    options?: QueryChannelsRequest,
     stateOptions: ChannelStateOptions = {},
+    requestOptions?: StreamRequestOptions,
   ): Promise<Channel[] | QueryChannelsResponseWithChannels> {
-    const queryChannelsResponse = await this.queryChannelsRequestWithResponse(
-      filterConditions,
-      sort,
-      options,
-      // stateOptions is never serialized, so it carries the abort signal
-      { signal: stateOptions.signal },
-    );
+    const headIntervalItemIdsAtRequestByCid = new Map<string, ReadonlySet<string>>();
+    for (const channel of this.channelManager.values()) {
+      const idsAtRequest = channel.messagePaginator?.getHeadIntervalItemIdsAtRequest();
+      if (idsAtRequest) headIntervalItemIdsAtRequestByCid.set(channel.cid, idsAtRequest);
+    }
+    const queryChannelsResponse = await this.queryChannels(options, requestOptions);
     const channels = queryChannelsResponse.channels;
 
     this.dispatchEvent({
@@ -2283,7 +1460,12 @@ export class StreamChat {
       });
     }
 
-    const hydratedChannels = this.hydrateActiveChannels(channels, stateOptions, options);
+    const hydratedChannels = this.hydrateChannels(
+      channels,
+      stateOptions,
+      options,
+      headIntervalItemIdsAtRequestByCid,
+    );
 
     if (stateOptions.withResponse) {
       return {
@@ -2296,33 +1478,26 @@ export class StreamChat {
   }
 
   /**
-   * queryReactions - Query reactions
+   * Queries a message's reactions. On the first page, cached offline reactions are dispatched
+   * (`offline_reactions.queried`) before the network request.
    *
-   * @param {ReactionFilters} filter object MongoDB style filters
-   * @param {ReactionSort} [sort] Sort options, for instance {created_at: -1}.
-   * @param {QueryReactionsOptions} [options] Pagination object
-   *
-   * @return {Promise<{ QueryReactionsAPIResponse } search channels response
+   * @param ...args - `[pathParams, request, requestOptions]`. `pathParams.id` is the target message
+   *   ID; `request` carries MongoDB-style filters, sort directions (e.g.
+   *   `[{ field: 'created_at', direction: -1 }]`) and pagination options; `requestOptions` carries
+   *   per-request options such as an abort `signal` and is never serialized into the request.
+   * @returns The query reactions response.
    */
-  async queryReactions(
-    messageID: string,
-    filter: ReactionFilters,
-    sort: ReactionSort = [],
-    options: QueryReactionsOptions = {},
-  ) {
-    const payload = {
-      filter,
-      sort: normalizeQuerySort(sort),
-      ...options,
-    };
+  async queryReactionsAndHydrate(...args: Parameters<ChatApi['queryReactions']>) {
+    const [{ id: messageId }, request] = args;
+    const { filter, next, sort, limit } = request ?? {};
 
-    if (this.offlineDb?.getReactions && !options.next) {
+    if (this.offlineDb?.getReactions && !next) {
       try {
         const reactionsFromDb = await this.offlineDb.getReactions({
-          messageId: messageID,
+          messageId,
           filters: filter,
           sort,
-          limit: options.limit,
+          limit,
         });
 
         if (reactionsFromDb) {
@@ -2332,71 +1507,89 @@ export class StreamChat {
           });
         }
       } catch (e) {
-        this.logger('warn', 'An error has occurred while querying offline reactions', {
-          error: e,
-        });
+        offlineDbLogger
+          .withExtraTags('queryReactionsAndHydrate')
+          .warn('An error occurred while querying offline reactions.', { error: e });
       }
     }
 
-    // Make sure we wait for the connect promise if there is a pending one
-    await this.wsPromise;
-
-    return await this.post<QueryReactionsAPIResponse>(
-      this.baseURL + '/messages/' + encodeURIComponent(messageID) + '/reactions',
-      payload,
-    );
+    return await this.queryReactions(...args);
   }
 
-  hydrateActiveChannels(
-    channelsFromApi: ChannelAPIResponse[] = [],
+  hydrateChannels(
+    channelsFromApi: ChannelStateResponseFields[] = [],
     stateOptions: ChannelStateOptions = {},
     queryChannelsOptions?: ChannelOptions,
+    headIntervalItemIdsAtRequestByCid?: Map<string, ReadonlySet<string>>,
   ) {
-    const { skipInitialization, offlineMode = false } = stateOptions;
+    const { offlineMode = false } = stateOptions;
     const channels: Channel[] = [];
 
     for (const channelState of channelsFromApi) {
+      if (!channelState.channel) continue;
+
       this._addChannelConfig(channelState.channel);
-      const c = this.channel(channelState.channel.type, channelState.channel.id);
+      const c = this.channelManager.ensure({
+        type: channelState.channel.type,
+        id: channelState.channel.id,
+      });
       c.data = channelState.channel;
-      c.offlineMode = offlineMode;
-      c.initialized = !offlineMode;
+      // A live result initializes the channel; one restored from the offline database doesn't.
+      c.state.partialNext(
+        offlineMode
+          ? { initialized: false, offlineMode: true }
+          : { initialized: true, offlineMode: false },
+      );
+      // Unless events were arriving before this response, the loaded messages may lack newer ones.
+      const wasWatching = c.watchStatus === ChannelWatchStatus.Watching;
+      // An explicit `watch` choice wins, otherwise watch only on a healthy socket
+      // (`hydrateChannels` is public, so there may be no gated request behind it). Offline
+      // hydration never counts, and a query that did not watch leaves the status untouched.
+      if (!offlineMode && (queryChannelsOptions?.watch ?? this.wsConnection.isHealthy)) {
+        c.watchStatus = ChannelWatchStatus.Watching;
+      }
       c.push_preferences = channelState.push_preferences;
 
-      let updatedMessagesSet;
-      let filteredMessageIds: string[] = [];
-      if (skipInitialization === undefined) {
-        const { messageSet, filteredMessageIds: _filteredMessageIds } =
-          c._initializeState(channelState, 'latest');
-        filteredMessageIds = _filteredMessageIds;
-        updatedMessagesSet = messageSet;
-      } else if (!skipInitialization.includes(channelState.channel.id)) {
-        c.state.clearMessages();
-        const { messageSet, filteredMessageIds: _filteredMessageIds } =
-          c._initializeState(channelState, 'latest');
-        filteredMessageIds = _filteredMessageIds;
-        updatedMessagesSet = messageSet;
+      const requestedPageSize =
+        queryChannelsOptions?.message_limit ??
+        DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE;
+
+      // Place the page before _initializeState applies the read state, which reads the loaded
+      // messages: read and delivery positions that come without a message id are looked up among
+      // them (see `Channel.runChannelQuery`). Not for an active channel, whose own
+      // `channel.reload()` owns its message list (see `Channel.activate()`).
+      const placesNewestPage = !c.active;
+      let placedFirstPage = false;
+      if (placesNewestPage) {
+        // The response's `last_message_at` first, so the paginator can tell whether the page
+        // reaches it.
+        c.messagePaginator.setQueriedLatestMessageAt(
+          channelState.channel?.last_message_at,
+        );
+        placedFirstPage = c.messagePaginator.placeExternalNewestPage(
+          channelState.messages.map(formatMessage),
+          {
+            headIntervalItemIdsAtRequest: headIntervalItemIdsAtRequestByCid?.get(c.cid),
+            requestedLimit: requestedPageSize,
+          },
+        );
       }
 
-      if (updatedMessagesSet) {
-        updatedMessagesSet.pagination = {
-          ...updatedMessagesSet.pagination,
-          ...messageSetPagination({
-            parentSet: updatedMessagesSet,
-            requestedPageSize:
-              queryChannelsOptions?.message_limit ??
-              DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE,
-            returnedPage: channelState.messages,
-            filteredReturnedPage: channelState.messages.filter(
-              (m) => !filteredMessageIds.includes(m.id),
-            ),
-            logger: this.logger,
-          }),
-        };
-        this.polls.hydratePollCache(channelState.messages, true);
-        this.reminders.hydrateState(channelState.messages);
+      // The message list's page is placed above; the pinned list's comes with _initializeState.
+      // An active channel takes the response's members, read state and pinned messages as well:
+      // they are newer than the ones it holds.
+      c._initializeState(channelState);
+      // from the read state the response brought, as `channel.watch()` does
+      if (placedFirstPage) c.messagePaginator.seedUnreadSnapshot();
+      // Unless the newest page was placed, which brings the interval up to date, the head interval
+      // is checked against this response's `last_message_at`, as `Channel.requestChannelState` does
+      // for a channel query; an on-screen channel is left to its own `channel.reload()`, as above.
+      if (placesNewestPage && !wasWatching && !channelState.messages.length) {
+        c.messagePaginator.unmarkStaleHead();
       }
 
+      this.polls.hydratePollCache(channelState.messages, true);
+      this.reminders.hydrateState(channelState.messages);
       c.messageComposer.initStateFromChannelResponse(channelState);
       c.cooldownTimer.refresh();
       channels.push(c);
@@ -2406,1323 +1599,253 @@ export class StreamChat {
   }
 
   /**
-   * search - Query messages
+   * Returns the channel with the given type and ID: the stored instance for the cid, or a new one,
+   * stored (one instance per cid; a channel disposed with `disconnect()` is replaced by a fresh
+   * one). Use it instead of `new Channel()`.
    *
-   * @param {ChannelFilters} filterConditions MongoDB style filter conditions
-   * @param {MessageFilters | string} query search query or object MongoDB style filters
-   * @param {SearchOptions} [options] Option object, {user_id: 'tommaso'}
-   * @param {RequestOptions} [requestOptions] Carries an abort signal. Not sent in the request.
+   * For a distinct channel between users, leave out the ID and pass the members. It is stored under
+   * a temporary cid until the response of `channel.watch()`, `query()` or `create()` brings the
+   * real one; a stored distinct channel with the same loaded members is returned instead. If
+   * another instance holds the real cid by then, it stays stored and takes over from this one
+   * (`channel.supersededBy`; `watch()` resolves with it). A group with the same members as another
+   * needs its own ID. Until its query is answered such a channel is
+   * {@link Channel.isProvisional}: it has no ID yet, so nothing but that query can be sent for it.
    *
-   * @return {Promise<SearchAPIResponse>} search messages response
+   * ```ts
+   * const general = client.channel('messaging', 'general');
+   * const dm = await client
+   *   .channel('messaging', { members: [{ user_id: 'ann' }, { user_id: 'bob' }] })
+   *   .watch();
+   * ```
+   *
+   * @param channelType - The channel type.
+   * @param channelId - The channel ID; leave it out for a distinct channel created from members
+   *   (optional).
+   * @param custom - Data for a new channel, e.g. `members` or `custom`; for a stored channel only
+   *   `custom` is applied. Defaults to `{}`.
+   * @returns The channel; initialize it with `channel.watch()`.
    */
-  async search(
-    filterConditions: ChannelFilters,
-    query: string | MessageFilters,
-    options: SearchOptions = {},
-    requestOptions: RequestOptions = {},
-  ) {
-    if (options.offset && options.next) {
-      throw Error(`Cannot specify offset with next`);
-    }
-    const payload: SearchPayload = {
-      filter_conditions: filterConditions,
-      ...options,
-      sort: options.sort
-        ? normalizeQuerySort<SearchMessageSortBase>(options.sort)
-        : undefined,
-    };
-    if (typeof query === 'string') {
-      payload.query = query;
-    } else if (typeof query === 'object') {
-      payload.message_filter_conditions = query;
-    } else {
-      throw Error(`Invalid type ${typeof query} for query parameter`);
-    }
-
-    // Make sure we wait for the connect promise if there is a pending one
-    await this.wsPromise;
-
-    return await this.get<SearchAPIResponse>(
-      this.baseURL + '/search',
-      { payload },
-      requestOptions,
-    );
-  }
-
-  /**
-   * setLocalDevice - Set the device info for the current client(device) that will be sent via WS connection automatically
-   *
-   * @param {BaseDeviceFields} device the device object
-   * @param {string} device.id device id
-   * @param {string} device.push_provider the push provider
-   *
-   */
-  setLocalDevice(device: BaseDeviceFields) {
-    if (
-      (this.wsConnection?.isConnecting && this.wsPromise) ||
-      ((this.wsConnection?.isHealthy || this.wsFallback?.isHealthy()) &&
-        this._hasConnectionID())
-    ) {
-      throw new Error('you can only set device before opening a websocket connection');
-    }
-
-    this.options.device = device;
-  }
-
-  /**
-   * addDevice - Adds a push device for a user.
-   *
-   * @param {string} id the device id
-   * @param {PushProvider} push_provider the push provider
-   * @param {string} [userID] the user id (defaults to current user)
-   * @param {string} [push_provider_name] user provided push provider name for multi bundle support
-   *
-   */
-  async addDevice(
-    id: string,
-    push_provider: PushProvider,
-    userID?: string,
-    push_provider_name?: string,
-  ) {
-    return await this.post<APIResponse>(this.baseURL + '/devices', {
-      id,
-      push_provider,
-      ...(userID != null ? { user_id: userID } : {}),
-      ...(push_provider_name != null ? { push_provider_name } : {}),
-    });
-  }
-
-  /**
-   * getDevices - Returns the devices associated with a current user
-   *
-   * @param {string} [userID] User ID. Only works on serverside
-   *
-   * @return {Device[]} Array of devices
-   */
-  async getDevices(userID?: string) {
-    return await this.get<APIResponse & { devices?: Device[] }>(
-      this.baseURL + '/devices',
-      userID ? { user_id: userID } : {},
-    );
-  }
-
-  /**
-   * getUnreadCount - Returns unread counts for a single user
-   *
-   * @param {string} [userID] User ID.
-   *
-   * @return {<GetUnreadCountAPIResponse>}
-   */
-  async getUnreadCount(userID?: string) {
-    return await this.get<GetUnreadCountAPIResponse>(
-      this.baseURL + '/unread',
-      userID ? { user_id: userID } : {},
-    );
-  }
-
-  /**
-   * getUnreadCountBatch - Returns unread counts for multiple users at once. Only works server side.
-   *
-   * @param {string[]} [userIDs] List of user IDs to fetch unread counts for.
-   *
-   * @return {<GetUnreadCountBatchAPIResponse>}
-   */
-  async getUnreadCountBatch(userIDs: string[]) {
-    return await this.post<GetUnreadCountBatchAPIResponse>(
-      this.baseURL + '/unread_batch',
-      { user_ids: userIDs },
-    );
-  }
-
-  /**
-   * setPushPreferences - Applies the list of push preferences.
-   *
-   * @param {PushPreference[]} A list of push preferences.
-   *
-   * @return {<UpsertPushPreferencesResponse>}
-   */
-  async setPushPreferences(preferences: PushPreference[]) {
-    return await this.post<UpsertPushPreferencesResponse>(
-      this.baseURL + '/push_preferences',
-      { preferences },
-    );
-  }
-
-  /**
-   * removeDevice - Removes the device with the given id. Clientside users can only delete their own devices
-   *
-   * @param {string} id The device id
-   * @param {string} [userID] The user id. Only specify this for serverside requests
-   *
-   */
-  async removeDevice(id: string, userID?: string) {
-    return await this.delete<APIResponse>(this.baseURL + '/devices', {
-      id,
-      ...(userID ? { user_id: userID } : {}),
-    });
-  }
-
-  /**
-   * getRateLimits - Returns the rate limits quota and usage for the current app, possibly filter for a specific platform and/or endpoints.
-   * Only available server-side.
-   *
-   * @param {object} [params] The params for the call. If none of the params are set, all limits for all platforms are returned.
-   * @returns {Promise<GetRateLimitsResponse>}
-   */
-  getRateLimits(params?: {
-    android?: boolean;
-    endpoints?: EndpointName[];
-    ios?: boolean;
-    serverSide?: boolean;
-    web?: boolean;
-  }) {
-    const { serverSide, web, android, ios, endpoints } = params || {};
-    return this.get<GetRateLimitsResponse>(this.baseURL + '/rate_limits', {
-      server_side: serverSide,
-      web,
-      android,
-      ios,
-      endpoints: endpoints ? endpoints.join(',') : undefined,
-    });
-  }
-
-  /**
-   * getHookEvents - Get available events for hooks (webhook, SQS, and SNS)
-   *
-   * @param {Product[]} [products] Optional array of products to filter events by (e.g., [Product.Chat, Product.Video])
-   * @returns {Promise<GetHookEventsResponse>} Response containing available hook events
-   */
-  async getHookEvents(products?: Product[]) {
-    const params = products && products.length > 0 ? { product: products.join(',') } : {};
-    return await this.get<GetHookEventsResponse>(this.baseURL + '/hook/events', params);
-  }
-
-  _addChannelConfig({ cid, config }: ChannelResponse) {
-    if (this._cacheEnabled()) {
-      this.configs[cid] = config;
-    }
-  }
-
-  /**
-   * channel - Returns a new channel with the given type, id and custom data
-   *
-   * If you want to create a unique conversation between 2 or more users; you can leave out the ID parameter and provide the list of members.
-   * Make sure to await channel.create() or channel.watch() before accessing channel functions:
-   * ie. channel = client.channel("messaging", {members: ["tommaso", "thierry"]})
-   * await channel.create() to assign an ID to channel
-   *
-   * @param {string} channelType The channel type
-   * @param {string | ChannelData | null} [channelIDOrCustom]   The channel ID, you can leave this out if you want to create a conversation channel
-   * @param {object} [custom]    Custom data to attach to the channel
-   *
-   * @return {channel} The channel object, initialize it using channel.watch()
-   */
-  channel(channelType: string, channelID?: string | null, custom?: ChannelData): Channel;
-  channel(channelType: string, custom?: ChannelData): Channel;
+  channel(channelType: string, channelId?: string | null, custom?: ChannelInput): Channel;
+  channel(channelType: string, custom?: ChannelInput): Channel;
   channel(
     channelType: string,
-    channelIDOrCustom?: string | ChannelData | null,
-    custom: ChannelData = {},
-  ) {
-    if (!this.userID && !this._isUsingServerAuth()) {
-      throw Error('Call connectUser or connectAnonymousUser before creating a channel');
+    channelIdOrCustom?: string | ChannelInput | null,
+    custom: ChannelInput = {},
+  ): Channel {
+    // channel('messaging', { members }): the data takes the ID's place
+    if (channelIdOrCustom && typeof channelIdOrCustom === 'object') {
+      return this.channelManager.ensure({ data: channelIdOrCustom, type: channelType });
     }
-
-    if (~channelType.indexOf(':')) {
-      throw new Error(
-        `Invalid channel group ${channelType}, can't contain the : character`,
-      );
-    }
-
-    // support channel("messaging", {options})
-    if (channelIDOrCustom && typeof channelIDOrCustom === 'object') {
-      return this.getChannelByMembers(channelType, channelIDOrCustom);
-    }
-
-    // support channel("messaging", undefined, {options})
-    if (!channelIDOrCustom && typeof custom === 'object' && custom.members?.length) {
-      return this.getChannelByMembers(channelType, custom);
-    }
-
-    // support channel("messaging", null, {options})
-    // support channel("messaging", undefined, {options})
-    // support channel("messaging", "", {options})
-    if (!channelIDOrCustom) {
-      return new Channel(this, channelType, undefined, custom);
-    }
-
-    return this.getChannelById(channelType, channelIDOrCustom, custom);
-  }
-
-  /**
-   * It's a helper method for `client.channel()` method, used to create unique conversation or
-   * channel based on member list instead of id.
-   *
-   * If the channel already exists in `activeChannels` list, then we simply return it, since that
-   * means the same channel was already requested or created.
-   *
-   * Otherwise we create a new instance of Channel class and return it.
-   *
-   * @private
-   *
-   * @param {string} channelType The channel type
-   * @param {object} [custom]    Custom data to attach to the channel
-   *
-   * @return {channel} The channel object, initialize it using channel.watch()
-   */
-  getChannelByMembers = (channelType: string, custom: ChannelData) => {
-    // Check if the channel already exists.
-    // Only allow 1 channel object per cid
-    const memberIds = (custom.members ?? []).map((member: string | NewMemberPayload) =>
-      typeof member === 'string' ? member : (member.user_id ?? ''),
-    );
-    const membersStr = memberIds.sort().join(',');
-    const tempCid = generateChannelTempCid(channelType, memberIds);
-
-    if (!tempCid) {
-      throw Error('Please specify atleast one member when creating unique conversation');
-    }
-
-    // channel could exist in `activeChannels` list with either one of the following two keys:
-    // 1. cid - Which gets set on channel only after calling channel.query or channel.watch or channel.create
-    // 2. Sorted membersStr - E.g., "messaging:amin,vishal" OR "messaging:amin,jaap,tom"
-    //                        This is set when you create a channel, but haven't queried yet. After query,
-    //                        we will replace it with `cid`
-    for (const key in this.activeChannels) {
-      const channel = this.activeChannels[key];
-      if (channel.disconnected) {
-        continue;
-      }
-
-      if (key === tempCid) {
-        return channel;
-      }
-
-      if (key.indexOf(`${channelType}:!members-`) === 0) {
-        const membersStrInExistingChannel = Object.keys(channel.state.members)
-          .sort()
-          .join(',');
-        if (membersStrInExistingChannel === membersStr) {
-          return channel;
-        }
-      }
-    }
-
-    const channel = new Channel(this, channelType, undefined, custom);
-
-    // For the time being set the key as membersStr, since we don't know the cid yet.
-    // In channel.query, we will replace it with 'cid'.
-    if (this._cacheEnabled()) {
-      this.activeChannels[tempCid] = channel;
-    }
-
-    return channel;
-  };
-
-  /**
-   * Its a helper method for `client.channel()` method, used to channel given the id of channel.
-   *
-   * If the channel already exists in `activeChannels` list, then we simply return it, since that
-   * means the same channel was already requested or created.
-   *
-   * Otherwise we create a new instance of Channel class and return it.
-   *
-   * @private
-   *
-   * @param {string} channelType The channel type
-   * @param {string} [channelID] The channel ID
-   * @param {object} [custom]    Custom data to attach to the channel
-   *
-   * @return {channel} The channel object, initialize it using channel.watch()
-   */
-  getChannelById = (channelType: string, channelID: string, custom: ChannelData) => {
-    if (typeof channelID === 'string' && ~channelID.indexOf(':')) {
-      throw Error(`Invalid channel id ${channelID}, can't contain the : character`);
-    }
-
-    // only allow 1 channel object per cid
-    const cid = `${channelType}:${channelID}`;
-    if (
-      cid in this.activeChannels &&
-      this.activeChannels[cid] &&
-      !this.activeChannels[cid].disconnected
-    ) {
-      const channel = this.activeChannels[cid];
-      if (Object.keys(custom).length > 0) {
-        channel.data = { ...channel.data, ...custom };
-        channel._data = { ...channel._data, ...custom };
-      }
-      return channel;
-    }
-    const channel = new Channel(this, channelType, channelID, custom);
-    if (this._cacheEnabled()) {
-      this.activeChannels[channel.cid] = channel;
-    }
-
-    return channel;
-  };
-
-  /**
-   * partialUpdateUser - Update the given user object
-   *
-   * @param {PartialUserUpdate} partialUserObject which should contain id and any of "set" or "unset" params;
-   * example: {id: "user1", set:{field: value}, unset:["field2"]}
-   *
-   * @return {Promise<{ users: { [key: string]: UserResponse } }>} list of updated users
-   */
-  async partialUpdateUser(partialUserObject: PartialUserUpdate) {
-    return await this.partialUpdateUsers([partialUserObject]);
-  }
-
-  /**
-   * upsertUsers - Batch upsert the list of users
-   *
-   * @param {UserResponse[]} users list of users
-   *
-   * @return {Promise<{ users: { [key: string]: UserResponse } }>}
-   */
-  async upsertUsers(users: UserResponse[]) {
-    const userMap: { [key: string]: UserResponse } = {};
-    for (const userObject of users) {
-      if (!userObject.id) {
-        throw Error('User ID is required when updating a user');
-      }
-      userMap[userObject.id] = userObject;
-    }
-
-    return await this.post<UpdateUsersAPIResponse>(this.baseURL + '/users', {
-      users: userMap,
+    return this.channelManager.ensure({
+      data: custom,
+      id: channelIdOrCustom || undefined,
+      type: channelType,
     });
   }
 
   /**
-   * @deprecated Please use upsertUsers() function instead.
+   * Searches messages.
    *
-   * updateUsers - Batch update the list of users
-   *
-   * @param {UserResponse[]} users list of users
-   * @return {Promise<{ users: { [key: string]: UserResponse } }>}
+   * @param ...args - `[request, requestOptions]`. The optional `request.payload` accepts channel
+   *   `filter_conditions`, `message_filter_conditions`, a `query`, and options such as `limit`,
+   *   `offset`, `next` and `sort`. `requestOptions` carries per-request options such as an abort
+   *   `signal` and is never serialized into the request.
+   * @returns The search messages response.
+   * @throws When both `offset` and `next` are given.
    */
-  updateUsers = this.upsertUsers;
-
-  /**
-   * upsertUser - Update or Create the given user object
-   *
-   * @param {UserResponse} userObject user object, the only required field is the user id. IE {id: "myuser"} is valid
-   *
-   * @return {Promise<{ users: { [key: string]: UserResponse } }>}
-   */
-  upsertUser(userObject: UserResponse) {
-    return this.upsertUsers([userObject]);
-  }
-
-  /**
-   * @deprecated Please use upsertUser() function instead.
-   *
-   * updateUser - Update or Create the given user object
-   *
-   * @param {UserResponse} userObject user object, the only required field is the user id. IE {id: "myuser"} is valid
-   * @return {Promise<{ users: { [key: string]: UserResponse } }>}
-   */
-  updateUser = this.upsertUser;
-
-  /**
-   * partialUpdateUsers - Batch partial update of users
-   *
-   * @param {PartialUserUpdate[]} users list of partial update requests
-   *
-   * @return {Promise<{ users: { [key: string]: UserResponse } }>}
-   */
-  async partialUpdateUsers(users: PartialUserUpdate[]) {
-    for (const userObject of users) {
-      if (!userObject.id) {
-        throw Error('User ID is required when updating a user');
-      }
+  override async search(...args: Parameters<ChatApi['search']>) {
+    const [request, requestOptions] = args;
+    if (request?.payload?.offset && request?.payload?.next) {
+      throw Error(`Cannot specify "offset" with "next"`);
     }
 
-    return await this.patch<UpdateUsersAPIResponse>(this.baseURL + '/users', { users });
-  }
-
-  async deleteUser(
-    userID: string,
-    params?: {
-      delete_conversation_channels?: boolean;
-      hard_delete?: boolean;
-      mark_messages_deleted?: boolean;
-    },
-  ) {
-    return await this.delete<
-      APIResponse & { user: UserResponse } & {
-        task_id?: string;
-      }
-    >(this.baseURL + `/users/${encodeURIComponent(userID)}`, params);
+    return await super.search(request, requestOptions);
   }
 
   /**
-   * restoreUsers - Restore soft deleted users
+   * Caches one channel's server configuration, keyed by cid (see {@link Channel.serverConfig}).
+   * Skips the write for a response without `config` (`notification.message_new` omits it) and for a
+   * config deep-equal to the stored one: the API returns a fresh object each time and the store
+   * compares by reference.
    *
-   * @param {string[]} user_ids which users to restore
-   *
-   * @return {APIResponse} An API response
+   * @internal
    */
-  async restoreUsers(user_ids: string[]) {
-    return await this.post<APIResponse>(this.baseURL + `/users/restore`, {
-      user_ids,
-    });
+  _addChannelConfig({ cid, config }: Pick<ChannelResponse, 'cid' | 'config'>) {
+    if (!config) return;
+    if (isEqual(this.channelServerConfigs[cid], config)) return;
+
+    this.channelServerConfigs = {
+      ...this.channelServerConfigs,
+      [cid]: config,
+    };
   }
 
   /**
-   * reactivateUser - Reactivate one user
+   * Revokes a global ban.
    *
-   * @param {string} userID which user to reactivate
-   * @param {ReactivateUserOptions} [options]
-   *
-   * @return {UserResponse} Reactivated user
+   * @param targetUserId - The user to unban.
+   * @param options - Unban options (optional).
+   * @returns The server response.
    */
-  async reactivateUser(userID: string, options?: ReactivateUserOptions) {
-    return await this.post<APIResponse & { user: UserResponse }>(
-      this.baseURL + `/users/${encodeURIComponent(userID)}/reactivate`,
-      { ...options },
-    );
-  }
-
-  /**
-   * reactivateUsers - Reactivate many users asynchronously
-   *
-   * @param {string[]} user_ids which users to reactivate
-   * @param {ReactivateUsersOptions} [options]
-   *
-   * @return {TaskResponse} A task ID
-   */
-  async reactivateUsers(user_ids: string[], options?: ReactivateUsersOptions) {
-    return await this.post<APIResponse & TaskResponse>(
-      this.baseURL + `/users/reactivate`,
-      { user_ids, ...options },
-    );
-  }
-
-  /**
-   * deactivateUser - Deactivate one user
-   *
-   * @param {string} userID which user to deactivate
-   * @param {DeactivateUsersOptions} [options]
-   *
-   * @return {UserResponse} Deactivated user
-   */
-  async deactivateUser(userID: string, options?: DeactivateUsersOptions) {
-    return await this.post<APIResponse & { user: UserResponse }>(
-      this.baseURL + `/users/${encodeURIComponent(userID)}/deactivate`,
-      { ...options },
-    );
-  }
-
-  /**
-   * deactivateUsers - Deactivate many users asynchronously
-   *
-   * @param {string[]} user_ids which users to deactivate
-   * @param {DeactivateUsersOptions} [options]
-   *
-   * @return {TaskResponse} A task ID
-   */
-  async deactivateUsers(user_ids: string[], options?: DeactivateUsersOptions) {
-    return await this.post<APIResponse & TaskResponse>(
-      this.baseURL + `/users/deactivate`,
-      { user_ids, ...options },
-    );
-  }
-
-  async exportUser(userID: string, options?: Record<string, string>) {
-    return await this.get<
-      APIResponse & {
-        messages: MessageResponse[];
-        reactions: ReactionResponse[];
-        user: UserResponse;
-      }
-    >(this.baseURL + `/users/${encodeURIComponent(userID)}/export`, { ...options });
-  }
-
-  /** banUser - bans a user from all channels
-   *
-   * @param {string} targetUserID
-   * @param {BanUserOptions} [options]
-   * @returns {Promise<APIResponse>}
-   */
-  async banUser(targetUserID: string, options?: BanUserOptions) {
-    return await this.post<APIResponse>(this.baseURL + '/moderation/ban', {
-      target_user_id: targetUserID,
+  async unbanUser(targetUserId: string, options?: UnBanUserOptions) {
+    return await this.api.delete<APIResponse>(this.baseURL + '/moderation/ban', {
+      target_user_id: targetUserId,
       ...options,
     });
   }
 
-  /** unbanUser - revoke global ban for a user
-   *
-   * @param {string} targetUserID
-   * @param {UnBanUserOptions} [options]
-   * @returns {Promise<APIResponse>}
-   */
-  async unbanUser(targetUserID: string, options?: UnBanUserOptions) {
-    return await this.delete<APIResponse>(this.baseURL + '/moderation/ban', {
-      target_user_id: targetUserID,
-      ...options,
-    });
-  }
-
-  /** shadowBan - shadow bans a user from all channels
-   *
-   * @param {string} targetUserID
-   * @param {BanUserOptions} [options]
-   * @returns {Promise<APIResponse>}
-   */
-  async shadowBan(targetUserID: string, options?: BanUserOptions) {
-    return await this.banUser(targetUserID, {
-      shadow: true,
-      ...options,
-    });
-  }
-
-  /** removeShadowBan - revoke global shadow ban for a user
-   *
-   * @param {string} targetUserID
-   * @param {UnBanUserOptions} [options]
-   * @returns {Promise<APIResponse>}
-   */
-  async removeShadowBan(targetUserID: string, options?: UnBanUserOptions) {
-    return await this.unbanUser(targetUserID, {
-      shadow: true,
-      ...options,
-    });
-  }
-  async blockUser(blockedUserID: string, user_id?: string) {
-    const result = await this.post<BlockUserAPIResponse>(this.baseURL + '/users/block', {
-      blocked_user_id: blockedUserID,
-      ...(user_id ? { user_id } : {}),
-    });
-    if (this._cacheEnabled()) {
-      this.blockedUsers.next(({ userIds }) => ({
-        userIds: userIds.concat(blockedUserID),
-      }));
-    }
-    return result;
-  }
-
-  async getBlockedUsers(user_id?: string) {
-    const result = await this.get<GetBlockedUsersAPIResponse>(
-      this.baseURL + '/users/block',
+  async blockUser(blockedUserId: string, requestOptions?: StreamRequestOptions) {
+    const result = await this.blockUsers(
       {
-        ...(user_id ? { user_id } : {}),
+        blocked_user_id: blockedUserId,
       },
+      requestOptions,
     );
-    if (this._cacheEnabled()) {
-      this.blockedUsers.partialNext({
-        userIds: result.blocks.map(({ blocked_user_id }) => blocked_user_id),
-      });
-    }
+    this.blockedUsers.next(({ userIds }) => ({
+      userIds: userIds.concat(blockedUserId),
+    }));
     return result;
   }
 
-  async unBlockUser(blockedUserID: string, userID?: string) {
-    const result = await this.post<APIResponse>(this.baseURL + '/users/unblock', {
-      blocked_user_id: blockedUserID,
-      ...(userID ? { user_id: userID } : {}),
+  override async getBlockedUsers(...args: Parameters<ChatApi['getBlockedUsers']>) {
+    const result = await super.getBlockedUsers(...args);
+    this.blockedUsers.partialNext({
+      userIds: result.blocks.map(({ blocked_user_id }) => blocked_user_id),
     });
-    if (this._cacheEnabled()) {
-      this.blockedUsers.next(({ userIds }) => ({
-        userIds: userIds.filter((id) => id !== blockedUserID),
-      }));
-    }
     return result;
   }
 
-  /** getSharedLocations
-   *
-   * @returns {Promise<ActiveLiveLocationsAPIResponse>} The server response
-   *
-   */
-  async getSharedLocations() {
-    return await this.get<ActiveLiveLocationsAPIResponse>(
-      this.baseURL + `/users/live_locations`,
+  async unblockUser(blockedUserId: string, requestOptions?: StreamRequestOptions) {
+    const result = await this.unblockUsers(
+      {
+        blocked_user_id: blockedUserId,
+      },
+      requestOptions,
     );
+    this.blockedUsers.next(({ userIds }) => ({
+      userIds: userIds.filter((id) => id !== blockedUserId),
+    }));
+    return result;
   }
 
-  /** muteUser - mutes a user
+  /**
+   * Checks whether a user is muted.
    *
-   * @param {string} targetID
-   * @param {string} [userID] Only used with serverside auth
-   * @param {MuteUserOptions} [options]
-   * @returns {Promise<MuteUserResponse>}
+   * @param targetId - The user ID to check.
+   * @returns `true` if the user is muted, otherwise `false`.
+   * @throws When no user is connected.
    */
-  async muteUser(targetID: string, userID?: string, options: MuteUserOptions = {}) {
-    return await this.post<MuteUserResponse>(this.baseURL + '/moderation/mute', {
-      target_id: targetID,
-      ...(userID ? { user_id: userID } : {}),
-      ...options,
-    });
-  }
-
-  /** unmuteUser - unmutes a user
-   *
-   * @param {string} targetID
-   * @param {string} [currentUserID] Only used with serverside auth
-   * @returns {Promise<APIResponse>}
-   */
-  async unmuteUser(targetID: string, currentUserID?: string) {
-    return await this.post<APIResponse>(this.baseURL + '/moderation/unmute', {
-      target_id: targetID,
-      ...(currentUserID ? { user_id: currentUserID } : {}),
-    });
-  }
-
-  /** userMuteStatus - check if a user is muted or not, can be used after connectUser() is called
-   *
-   * @param {string} targetID
-   * @returns {boolean}
-   */
-  userMuteStatus(targetID: string) {
+  userMuteStatus(targetId: string) {
     if (!this.user || !this.wsPromise) {
       throw new Error('Make sure to await connectUser() first.');
     }
 
     for (let i = 0; i < this.mutedUsers.length; i += 1) {
-      if (this.mutedUsers[i].target.id === targetID) return true;
+      if (this.mutedUsers[i].target?.id === targetId) return true;
     }
     return false;
   }
 
   /**
-   * flagMessage - flag a message
-   * @param {string} targetMessageID
-   * @param {string} [options.user_id] currentUserID, only used with serverside auth
-   * @returns {Promise<APIResponse>}
-   */
-  async flagMessage(
-    targetMessageID: string,
-    options: { custom?: Record<string, unknown>; reason?: string; user_id?: string } = {},
-  ) {
-    return await this.post<FlagMessageResponse>(this.baseURL + '/moderation/flag', {
-      target_message_id: targetMessageID,
-      ...options,
-    });
-  }
-
-  /**
-   * flagUser - flag a user
-   * @param {string} targetID
-   * @param {string} [options.user_id] currentUserID, only used with serverside auth
-   * @returns {Promise<APIResponse>}
-   */
-  async flagUser(targetID: string, options: { reason?: string; user_id?: string } = {}) {
-    return await this.post<FlagUserResponse>(this.baseURL + '/moderation/flag', {
-      target_user_id: targetID,
-      ...options,
-    });
-  }
-
-  /**
-   * unflagMessage - unflag a message
+   * Pins the message.
    *
-   * @deprecated The `/moderation/unflag` endpoint is deprecated and is a no-op on
-   * the backend - calling this resolves successfully but does not remove the flag.
-   * Use `client.moderation.submitAction()` against the review queue item instead.
-   *
-   * @param {string} targetMessageID
-   * @param {string} [options.user_id] currentUserID, only used with serverside auth
-   * @returns {Promise<APIResponse>}
-   */
-  async unflagMessage(targetMessageID: string, options: { user_id?: string } = {}) {
-    return await this.post<FlagMessageResponse>(this.baseURL + '/moderation/unflag', {
-      target_message_id: targetMessageID,
-      ...options,
-    });
-  }
-
-  /**
-   * unflagUser - unflag a user
-   *
-   * @deprecated The `/moderation/unflag` endpoint is deprecated and is a no-op on
-   * the backend - calling this resolves successfully but does not remove the flag.
-   * Use `client.moderation.submitAction()` against the review queue item instead.
-   *
-   * @param {string} targetID
-   * @param {string} [options.user_id] currentUserID, only used with serverside auth
-   * @returns {Promise<APIResponse>}
-   */
-  async unflagUser(targetID: string, options: { user_id?: string } = {}) {
-    return await this.post<FlagUserResponse>(this.baseURL + '/moderation/unflag', {
-      target_user_id: targetID,
-      ...options,
-    });
-  }
-
-  /**
-   * _queryFlags - Query flags.
-   *
-   * Note: Do not use this.
-   * It is present for internal usage only.
-   * This function can, and will, break and/or be removed at any point in time.
-   *
-   * @private
-   * @param {FlagsFilters} filterConditions MongoDB style filter conditions
-   * @param {FlagsPaginationOptions} options Option object, {limit: 10, offset:0}
-   *
-   * @return {Promise<FlagsResponse>} Flags Response
-   */
-  async _queryFlags(
-    filterConditions: FlagsFilters = {},
-    options: FlagsPaginationOptions = {},
-  ) {
-    // Return a list of flags
-    return await this.post<FlagsResponse>(this.baseURL + '/moderation/flags', {
-      filter_conditions: filterConditions,
-      ...options,
-    });
-  }
-
-  /**
-   * _queryFlagReports - Query flag reports.
-   *
-   * Note: Do not use this.
-   * It is present for internal usage only.
-   * This function can, and will, break and/or be removed at any point in time.
-   *
-   * @private
-   * @param {FlagReportsFilters} filterConditions MongoDB style filter conditions
-   * @param {FlagReportsPaginationOptions} options Option object, {limit: 10, offset:0}
-   *
-   * @return {Promise<FlagReportsResponse>} Flag Reports Response
-   */
-  async _queryFlagReports(
-    filterConditions: FlagReportsFilters = {},
-    options: FlagReportsPaginationOptions = {},
-  ) {
-    // Return a list of message flags
-    return await this.post<FlagReportsResponse>(this.baseURL + '/moderation/reports', {
-      filter_conditions: filterConditions,
-      ...options,
-    });
-  }
-
-  /**
-   * _reviewFlagReport - review flag report
-   *
-   * Note: Do not use this.
-   * It is present for internal usage only.
-   * This function can, and will, break and/or be removed at any point in time.
-   *
-   * @private
-   * @param {string} [id] flag report to review
-   * @param {string} [reviewResult] flag report review result
-   * @param {string} [options.user_id] currentUserID, only used with serverside auth
-   * @param {string} [options.review_details] custom information about review result
-   * @returns {Promise<ReviewFlagReportResponse>>}
-   */
-  async _reviewFlagReport(
-    id: string,
-    reviewResult: string,
-    options: ReviewFlagReportOptions = {},
-  ) {
-    return await this.patch<ReviewFlagReportResponse>(
-      this.baseURL + `/moderation/reports/${encodeURIComponent(id)}`,
-      {
-        review_result: reviewResult,
-        ...options,
-      },
-    );
-  }
-
-  /**
-   * unblockMessage - unblocks message blocked by automod
-   *
-   *
-   * @param {string} targetMessageID
-   * @param {string} [options.user_id] currentUserID, only used with serverside auth
-   * @returns {Promise<APIResponse>}
-   */
-  async unblockMessage(targetMessageID: string, options: { user_id?: string } = {}) {
-    return await this.post<APIResponse>(this.baseURL + '/moderation/unblock_message', {
-      target_message_id: targetMessageID,
-      ...options,
-    });
-  }
-
-  // alias for backwards compatibility
-  _unblockMessage = this.unblockMessage;
-
-  /**
-   * @deprecated use markChannelsRead instead
-   *
-   * markAllRead - marks all channels for this user as read
-   * @param {MarkAllReadOptions} [data]
-   *
-   * @return {Promise<APIResponse>}
-   */
-  markAllRead = this.markChannelsRead;
-
-  /**
-   * markChannelsRead - marks channels read -
-   * it accepts a map of cid:messageid pairs, if messageid is empty, the whole channel will be marked as read
-   *
-   * @param {MarkChannelsReadOptions } [data]
-   *
-   * @return {Promise<APIResponse>}
-   */
-  async markChannelsRead(data: MarkChannelsReadOptions = {}) {
-    await this.post<APIResponse>(this.baseURL + '/channels/read', { ...data });
-  }
-
-  createCommand(data: CreateCommandOptions) {
-    return this.post<CreateCommandResponse>(this.baseURL + '/commands', data);
-  }
-
-  getCommand(name: string) {
-    return this.get<GetCommandResponse>(
-      this.baseURL + `/commands/${encodeURIComponent(name)}`,
-    );
-  }
-
-  updateCommand(name: string, data: UpdateCommandOptions) {
-    return this.put<UpdateCommandResponse>(
-      this.baseURL + `/commands/${encodeURIComponent(name)}`,
-      data,
-    );
-  }
-
-  deleteCommand(name: string) {
-    return this.delete<DeleteCommandResponse>(
-      this.baseURL + `/commands/${encodeURIComponent(name)}`,
-    );
-  }
-
-  listCommands() {
-    return this.get<ListCommandsResponse>(this.baseURL + `/commands`);
-  }
-
-  createChannelType(data: CreateChannelOptions) {
-    const channelData = Object.assign({}, { commands: ['all'] }, data);
-    return this.post<CreateChannelResponse>(this.baseURL + '/channeltypes', channelData);
-  }
-
-  getChannelType(channelType: string) {
-    return this.get<GetChannelTypeResponse>(
-      this.baseURL + `/channeltypes/${encodeURIComponent(channelType)}`,
-    );
-  }
-
-  updateChannelType(channelType: string, data: UpdateChannelTypeRequest) {
-    return this.put<UpdateChannelTypeResponse>(
-      this.baseURL + `/channeltypes/${encodeURIComponent(channelType)}`,
-      data,
-    );
-  }
-
-  deleteChannelType(channelType: string) {
-    return this.delete<APIResponse>(
-      this.baseURL + `/channeltypes/${encodeURIComponent(channelType)}`,
-    );
-  }
-
-  listChannelTypes() {
-    return this.get<ListChannelResponse>(this.baseURL + `/channeltypes`);
-  }
-
-  /**
-   * translateMessage - adds the translation to the message
-   *
-   * @param {string} messageId
-   * @param {string} language
-   *
-   * @return {APIResponse & { message: MessageResponse }} Response that includes the translated message
-   */
-  async translateMessage(messageId: string, language: string) {
-    return await this.post<APIResponse & { message: MessageResponse }>(
-      this.baseURL + `/messages/${encodeURIComponent(messageId)}/translate`,
-      { language },
-    );
-  }
-
-  /**
-   * translate - translates the given text to provided language
-   *
-   * @param {string} text
-   * @param {string} destination_language
-   * @param {string} source_language
-   *
-   * @return {TranslateResponse} Response that includes the message
-   */
-  async translate(text: string, destination_language: string, source_language: string) {
-    return await this.post<APIResponse & TranslateResponse>(this.baseURL + `/translate`, {
-      text,
-      source_language,
-      destination_language,
-    });
-  }
-
-  /**
-   * _normalizeExpiration - transforms expiration value into ISO string
-   * @param {undefined|null|number|string|Date} timeoutOrExpirationDate expiration date or timeout. Use number type to set timeout in seconds, string or Date to set exact expiration date
-   */
-  _normalizeExpiration(timeoutOrExpirationDate?: null | number | string | Date) {
-    let pinExpires: null | string = null;
-    if (typeof timeoutOrExpirationDate === 'number') {
-      const now = new Date();
-      now.setSeconds(now.getSeconds() + timeoutOrExpirationDate);
-      pinExpires = now.toISOString();
-    } else if (isString(timeoutOrExpirationDate)) {
-      pinExpires = timeoutOrExpirationDate;
-    } else if (timeoutOrExpirationDate instanceof Date) {
-      pinExpires = timeoutOrExpirationDate.toISOString();
-    }
-    return pinExpires;
-  }
-
-  /**
-   * _messageId - extracts string message id from either message object or message id
-   * @param {string | { id: string }} messageOrMessageId message object or message id
-   * @param {string} errorText error message to report in case of message id absence
-   */
-  _validateAndGetMessageId(
-    messageOrMessageId: string | { id: string },
-    errorText: string,
-  ) {
-    let messageId: string;
-    if (typeof messageOrMessageId === 'string') {
-      messageId = messageOrMessageId;
-    } else {
-      if (!messageOrMessageId.id) {
-        throw Error(errorText);
-      }
-      messageId = messageOrMessageId.id;
-    }
-    return messageId;
-  }
-
-  /**
-   * pinMessage - pins the message
-   * @param {string | { id: string }} messageOrMessageId message object or message id
-   * @param {undefined|null|number|string|Date} timeoutOrExpirationDate expiration date or timeout. Use number type to set timeout in seconds, string or Date to set exact expiration date
-   * @param {undefined|string | { id: string }} [pinnedBy] who will appear as a user who pinned a message. Only for server-side use. Provide `undefined` when pinning message client-side
-   * @param {undefined|number|string|Date} pinnedAt date when message should be pinned. It affects the order of pinned messages. Use negative number to set relative time in the past, string or Date to set exact date of pin
+   * @param message - The message to pin, or just its `{ id }`.
+   * @param options - When the pin expires and where it sorts (optional).
+   * @param options.pin_expires - When the pin expires, as a `Date` or an RFC3339 string; `null` or
+   *   leaving it out pins without expiry. Hand a server-sent timestamp back with `nsToDate(timestamp)`.
+   * @param options.pinned_at - The pin time, which orders the pinned messages, as a `Date` or an
+   *   RFC3339 string (optional). Defaults to now.
+   * @param   requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
+   * @returns The updated message response.
    */
   pinMessage(
-    messageOrMessageId: string | { id: string },
-    timeoutOrExpirationDate?: null | number | string | Date,
-    pinnedBy?: string | { id: string },
-    pinnedAt?: number | string | Date,
+    { id }: { id: string },
+    { pin_expires = null, pinned_at }: PinMessageOptions = {},
+    requestOptions?: StreamRequestOptions,
   ) {
-    const messageId = this._validateAndGetMessageId(
-      messageOrMessageId,
-      'Please specify the message id when calling unpinMessage',
-    );
-    return this.partialUpdateMessage(
-      messageId,
-      {
-        set: {
-          pinned: true,
-          pin_expires: this._normalizeExpiration(timeoutOrExpirationDate),
-          pinned_at: this._normalizeExpiration(pinnedAt),
-        },
-      } as unknown as PartialMessageUpdate,
-      pinnedBy,
+    if (!id) throw new Error('Please specify the message id when calling pinMessage');
+    return this.updateMessagePartial(
+      { id },
+      { set: { pinned: true, pin_expires, pinned_at: pinned_at ?? null } },
+      requestOptions,
     );
   }
 
   /**
-   * unpinMessage - unpins the message that was previously pinned
-   * @param {string | { id: string }} messageOrMessageId message object or message id
-   * @param {string | { id: string }} [userId]
+   * Unpins the message that was previously pinned.
+   *
+   * @param message - The message to unpin, or just its `{ id }`.
+   * @param   requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
+   * @returns The updated message response.
    */
-  unpinMessage(
-    messageOrMessageId: string | { id: string },
-    userId?: string | { id: string },
-  ) {
-    const messageId = this._validateAndGetMessageId(
-      messageOrMessageId,
-      'Please specify the message id when calling unpinMessage',
-    );
-    return this.partialUpdateMessage(
-      messageId,
-      {
-        set: { pinned: false },
-      } as unknown as PartialMessageUpdate,
-      userId,
+  unpinMessage({ id }: { id: string }, requestOptions?: StreamRequestOptions) {
+    if (!id) throw new Error('Please specify the message id when calling unpinMessage');
+    return this.updateMessagePartial({ id }, { set: { pinned: false } }, requestOptions);
+  }
+
+  /**
+   * Updates a message over HTTP only: no offline queueing and no local state.
+   * `messageOperations.update` on a channel or thread is the full edit.
+   *
+   * @param ...args - `[pathParams, request, requestOptions]`. `pathParams.id` is the message ID;
+   *   `request.message` is the updated message; `requestOptions` carries per-request options such
+   *   as an abort `signal` and is never serialized into the request.
+   * @returns The update message response.
+   */
+  override async updateMessage(...args: Parameters<ChatApi['updateMessage']>) {
+    const [pathParams, request, requestOptions] = args;
+
+    // Sanitized at the wire, which every path reaches: the full edit and an offline replay alike.
+    return await super.updateMessage(
+      pathParams,
+      { ...request, message: sanitizeOutgoingAttachments(request.message) },
+      requestOptions,
     );
   }
 
   /**
-   * updateMessage - Update the given message
+   * Deletes a message over HTTP only: no offline queueing and no local state.
+   * `messageOperations.delete` on a channel or thread is the full delete.
    *
-   * @param {Omit<MessageResponse, 'mentioned_users'> & { mentioned_users?: string[] }} message object, id needs to be specified
-   * @param {string | { id: string }} [partialUserOrUserId]
-   * @param {boolean} [options.skip_enrich_url] Do not try to enrich the URLs within message
-   *
-   * @return {{ message: LocalMessage | MessageResponse }} Response that includes the message
+   * @param ...args - `[pathParams, request, requestOptions]`. `pathParams.id` is the message ID;
+   *   `request.hard` deletes it permanently and `request.delete_for_me` deletes it for the current
+   *   user only; `requestOptions` carries per-request options such as an abort `signal` and is
+   *   never serialized into the request.
+   * @returns The delete message response.
    */
-  async updateMessage(
-    message: LocalMessage | Partial<MessageResponse>,
-    partialUserOrUserId?: string | { id: string },
-    options?: UpdateMessageOptions,
-  ) {
-    if (!message.id) {
-      throw Error('Please specify the message.id when calling updateMessage');
-    }
+  override async deleteMessage(...args: Parameters<ChatApi['deleteMessage']>) {
+    const [, request] = args;
+    const result = await super.deleteMessage(...args);
 
-    const messageId = message.id as string;
-
-    try {
-      if (this.offlineDb) {
-        return await this.offlineDb.queueTask<UpdateMessageAPIResponse>({
-          task: {
-            ...getPendingTaskChannelData(message.cid),
-            messageId,
-            payload: [message, partialUserOrUserId, options],
-            type: 'update-message',
-          },
-        });
-      }
-    } catch (error) {
-      this.logger('error', `offlineDb:updateMessage`, {
-        tags: ['channel', 'offlineDb'],
-        error,
-      });
-    }
-
-    return await this._updateMessage(message, partialUserOrUserId, options);
-  }
-
-  async _updateMessage(
-    message: LocalMessage | Partial<MessageResponse>,
-    partialUserOrUserId?: string | { id: string },
-    options?: UpdateMessageOptions,
-  ) {
-    if (!message.id) {
-      throw Error('Please specify the message.id when calling updateMessage');
-    }
-
-    // should not include user object
-    // Sanitized at the point of sending, which is the only place every path converges: the
-    // offline replay of a queued `update-message` task calls this method directly.
-    const payload = sanitizeOutgoingAttachments({
-      client: this,
-      message: toUpdatedMessagePayload(message),
-    });
-
-    // add user_id (if exists)
-    if (typeof partialUserOrUserId === 'string') {
-      payload.user_id = partialUserOrUserId;
-    } else if (typeof partialUserOrUserId?.id === 'string') {
-      payload.user_id = partialUserOrUserId.id;
-    }
-
-    return await this.post<UpdateMessageAPIResponse>(
-      this.baseURL + `/messages/${encodeURIComponent(message.id as string)}`,
-      {
-        message: payload,
-        ...options,
-      },
-    );
-  }
-
-  /**
-   * partialUpdateMessage - Update the given message id while retaining additional properties
-   *
-   * @param {string} id the message id
-   *
-   * @param {PartialUpdateMessage}  partialMessageObject which should contain id and any of "set" or "unset" params;
-   *         example: {id: "user1", set:{text: "hi"}, unset:["color"]}
-   * @param {string | { id: string }} [userId]
-   *
-   * @param {boolean} [options.skip_enrich_url] Do not try to enrich the URLs within message
-   *
-   * @return {{ message: MessageResponse }} Response that includes the updated message
-   */
-  async partialUpdateMessage(
-    id: string,
-    partialMessageObject: PartialMessageUpdate,
-    partialUserOrUserId?: string | { id: string },
-    options?: UpdateMessageOptions,
-  ) {
-    if (!id) {
-      throw Error('Please specify the message.id when calling partialUpdateMessage');
-    }
-
-    let user: { id: string } | undefined = undefined;
-
-    if (typeof partialUserOrUserId === 'string') {
-      user = { id: partialUserOrUserId };
-    } else if (typeof partialUserOrUserId?.id === 'string') {
-      user = { id: partialUserOrUserId.id };
-    }
-
-    return await this.put<UpdateMessageAPIResponse>(
-      this.baseURL + `/messages/${encodeURIComponent(id)}`,
-      {
-        ...partialMessageObject,
-        ...options,
-        user,
-      },
-    );
-  }
-
-  /**
-   * Updates message fields without storing them in the database, only sends update event.
-   *
-   * Available only on the server-side.
-   *
-   * @param messageId the message id to update.
-   * @param partialMessageObject the message payload.
-   * @param partialUserOrUserId the user id linked to this action.
-   * @param options additional options.
-   */
-  async ephemeralUpdateMessage(
-    messageId: string,
-    partialMessageObject: PartialMessageUpdate,
-    partialUserOrUserId?: string | { id: string },
-    options?: UpdateMessageOptions,
-  ) {
-    if (!messageId) throw Error('messageId is required');
-
-    let user: { id: string } | undefined = undefined;
-    if (typeof partialUserOrUserId === 'string') {
-      user = { id: partialUserOrUserId };
-    } else if (typeof partialUserOrUserId?.id === 'string') {
-      user = { id: partialUserOrUserId.id };
-    }
-
-    return await this.patch<UpdateMessageAPIResponse>(
-      `${this.baseURL}/messages/${encodeURIComponent(messageId)}/ephemeral`,
-      {
-        ...partialMessageObject,
-        ...options,
-        user,
-      },
-    );
-  }
-
-  /**
-   * deleteMessage - Delete a message
-   *
-   * @param {string} messageID The id of the message to delete
-   * @param {boolean | DeleteMessageOptions | undefined} [optionsOrHardDelete]
-   * @return {Promise<APIResponse & { message: MessageResponse }>} The API response
-   */
-  // fixme: remove the signature with optionsOrHardDelete boolean with the next major release
-  async deleteMessage(
-    messageID: string,
-    optionsOrHardDelete?: DeleteMessageOptions | boolean,
-  ): Promise<APIResponse & { message: MessageResponse }> {
-    let options: DeleteMessageOptions = {};
-    if (typeof optionsOrHardDelete === 'boolean') {
-      options = optionsOrHardDelete ? { hardDelete: true } : {};
-    } else if (optionsOrHardDelete?.deleteForMe) {
-      options = { deleteForMe: true };
-    } else if (optionsOrHardDelete?.hardDelete) {
-      options = { hardDelete: true };
-    }
-
-    try {
-      if (this.offlineDb) {
-        if (options.hardDelete) {
-          await this.offlineDb.hardDeleteMessage({ id: messageID });
-        } else {
-          await this.offlineDb.softDeleteMessage({
-            id: messageID,
-            deleteForMe: options.deleteForMe,
-          });
-        }
-        return await this.offlineDb.queueTask<APIResponse & { message: MessageResponse }>(
-          {
-            task: {
-              messageId: messageID,
-              payload: [messageID, options],
-              type: 'delete-message',
-            },
-          },
-        );
-      }
-    } catch (error) {
-      this.logger('error', `offlineDb:deleteMessage`, {
-        tags: ['channel', 'offlineDb'],
-        error,
-      });
-    }
-
-    return this._deleteMessage(messageID, options);
-  }
-
-  // fixme: remove the signature with optionsOrHardDelete boolean with the next major release
-  async _deleteMessage(
-    messageID: string,
-    optionsOrHardDelete?: DeleteMessageOptions | boolean,
-  ): Promise<APIResponse & { message: MessageResponse }> {
-    // this is a API call method, we do not route hardDelete: true and deleteForMe: true to deleteForMe: true
-    // and expect to receive error response from the server
-    const { deleteForMe, hardDelete } = (
-      typeof optionsOrHardDelete === 'boolean'
-        ? { hardDelete: optionsOrHardDelete }
-        : (optionsOrHardDelete ?? {})
-    ) as DeleteMessageOptions;
-
-    let params = {};
-    if (hardDelete) {
-      params = { hard: true };
-    }
-    if (deleteForMe) {
-      params = { ...params, delete_for_me: true };
-    }
-    const result = await this.delete<APIResponse & { message: MessageResponse }>(
-      this.baseURL + `/messages/${encodeURIComponent(messageID)}`,
-      params,
-    );
-
-    // necessary to populate the below values as the server does not return the message in the response as deleted
-    if (deleteForMe) {
+    // The server does not return the message as deleted here.
+    if (request?.delete_for_me) {
       result.message.deleted_for_me = true;
       result.message.type = 'deleted';
     }
+
     return result;
   }
 
   /**
-   * undeleteMessage - Undelete a message
+   * Returns the current user's threads as hydrated `Thread` instances.
    *
-   * undeletes a message that was previous soft deleted. Hard deleted messages
-   * cannot be undeleted. This is only allowed to be called from server-side
-   * clients.
-   *
-   * @param {string} messageID The id of the message to undelete
-   * @param {string} userID The id of the user who undeleted the message
-   *
-   * @return {{ message: MessageResponse }} Response that includes the message
+   * @param options - Pagination and limits for the participants and replies. Defaults to `{}`.
+   * @param options.limit - Limits the number of threads returned. Defaults to 10.
+   * @param options.watch - Subscribes the user to the channels of the threads. Defaults to `true`.
+   * @param options.participant_limit - Limits the participants returned per thread. Defaults to 10.
+   * @param options.reply_limit - Limits the replies returned per thread. Defaults to 3.
+   * @param options.filter - MongoDB-style filters for threads (optional).
+   * @param options.sort - MongoDB-style sort for threads (optional).
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
+   * @returns The threads and the next cursor.
    */
-  async undeleteMessage(messageID: string, userID: string) {
-    return await this.post<APIResponse & { message: MessageResponse }>(
-      this.baseURL + `/messages/${encodeURIComponent(messageID)}/undelete`,
-      { undeleted_by: userID },
-    );
-  }
-
-  async getMessage(messageID: string, options?: GetMessageOptions) {
-    return await this.get<GetMessageAPIResponse>(
-      this.baseURL + `/messages/${encodeURIComponent(messageID)}`,
-      {
-        ...options,
-      },
-    );
-  }
-
-  /**
-   * queryThreads - returns the list of threads of current user.
-   *
-   * @param {QueryThreadsOptions} options Options object for pagination and limiting the participants and replies.
-   * @param {number}  options.limit Limits the number of threads to be returned.
-   * @param {boolean} options.watch Subscribes the user to the channels of the threads.
-   * @param {number}  options.participant_limit Limits the number of participants returned per threads.
-   * @param {number}  options.reply_limit Limits the number of replies returned per threads.
-   * @param {ThreadFilters} options.filter MongoDB style filters for threads
-   * @param {ThreadSort} options.sort MongoDB style sort for threads
-   *
-   * @returns {{ threads: Thread[], next: string }} Returns the list of threads and the next cursor.
-   */
-  async queryThreads(options: QueryThreadsOptions = {}) {
+  async queryThreadsAndHydrate(
+    options: QueryThreadsRequest = {},
+    requestOptions?: StreamRequestOptions,
+  ) {
     const optionsWithDefaults = {
       limit: 10,
       participant_limit: 10,
@@ -3742,103 +1865,64 @@ export class StreamChat {
       requestBody.filter = optionsWithDefaults.filter;
     }
 
-    if (
-      optionsWithDefaults.sort &&
-      (Array.isArray(optionsWithDefaults.sort)
-        ? optionsWithDefaults.sort.length > 0
-        : Object.keys(optionsWithDefaults.sort).length > 0)
-    ) {
-      requestBody.sort = normalizeQuerySort(optionsWithDefaults.sort);
+    if (optionsWithDefaults.sort && optionsWithDefaults.sort.length > 0) {
+      requestBody.sort = optionsWithDefaults.sort;
     }
 
-    const response = await this.post<QueryThreadsAPIResponse>(
-      `${this.baseURL}/threads`,
-      requestBody,
-    );
+    const response = await this.queryThreads(requestBody, requestOptions);
 
-    // Hydrate the polls for the parent messages of the threads
-    const parentMessages = response.threads.map((thread) => thread.parent_message);
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const parentMessages = response.threads.map((thread) => thread.parent_message!);
     this.polls.hydratePollCache(parentMessages);
 
-    return {
-      threads: response.threads.map(
-        (thread) => new Thread({ client: this, threadData: thread }),
-      ),
-      next: response.next,
-    };
+    const threads = response.threads.map((threadData) =>
+      this.threads.resolveQueried(threadData),
+    );
+    if (optionsWithDefaults.watch) threads.forEach(markThreadChannelWatched);
+
+    return { threads, next: response.next };
   }
 
   /**
-   * getThread - returns the thread of a message by its id.
+   * Returns the thread of a message by its ID, wrapped in a hydrated `Thread` instance.
    *
-   * @param {string}            messageId The message id
-   * @param {GetThreadOptions}  options Options object for pagination and limiting the participants and replies.
-   * @param {boolean}           options.watch Subscribes the user to the channel of the thread.
-   * @param {number}            options.participant_limit Limits the number of participants returned per threads.
-   * @param {number}            options.reply_limit Limits the number of replies returned per threads.
-   *
-   * @returns {Thread} Returns the thread.
+   * @param pathParams - The thread's parent message, as for `getThread`.
+   * @param pathParams.message_id - The parent message ID.
+   * @param options - Options object for pagination and limiting the participants and replies.
+   *   Defaults to `{}`.
+   * @param options.watch - Subscribes the user to the channel of the thread. Defaults to `true`.
+   * @param options.participant_limit - Limits the participants returned. Defaults to 100.
+   * @param options.reply_limit - Limits the replies returned. Defaults to 3.
+   * @param   requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
+   * @returns The thread.
    */
-  async getThread(messageId: string, options: GetThreadOptions = {}) {
+  async getThreadAndHydrate(
+    { message_id: messageId }: { message_id: string },
+    options: GetThreadOptions = {},
+    requestOptions?: StreamRequestOptions,
+  ) {
     if (!messageId) {
-      throw new Error('Please specify the messageId when calling getThread');
+      throw new Error('Please specify the messageId when calling getThreadAndHydrate');
     }
 
     const optionsWithDefaults = {
-      participant_limit: 100,
+      participant_limit: DEFAULT_THREAD_PARTICIPANT_LIMIT,
       reply_limit: 3,
       watch: true,
       ...options,
     };
 
-    const response = await this.get<GetThreadAPIResponse>(
-      `${this.baseURL}/threads/${encodeURIComponent(messageId)}`,
+    const response = await this.getThread(
+      { message_id: messageId },
       optionsWithDefaults,
+      requestOptions,
     );
 
-    return new Thread({ client: this, threadData: response.thread });
-  }
+    const thread = this.threads.resolveQueried(response.thread);
+    if (optionsWithDefaults.watch) markThreadChannelWatched(thread);
 
-  /**
-   * partialUpdateThread - updates the given thread
-   *
-   * @param {string}              messageId The id of the thread message which needs to be updated.
-   * @param {PartialThreadUpdate} partialThreadObject should contain "set" or "unset" params for any of the thread's non-reserved fields.
-   *
-   * @returns {GetThreadAPIResponse} Returns the updated thread.
-   */
-  async partialUpdateThread(messageId: string, partialThreadObject: PartialThreadUpdate) {
-    if (!messageId) {
-      throw Error('Please specify the message id when calling partialUpdateThread');
-    }
-
-    // check for reserved fields from ThreadResponse type within partialThreadObject's set and unset.
-    // Throw error if any of the reserved field is found.
-    const reservedThreadFields = [
-      'created_at',
-      'id',
-      'last_message_at',
-      'type',
-      'updated_at',
-      'user',
-      'reply_count',
-      'participants',
-      'channel',
-      'custom',
-    ];
-
-    for (const key in { ...partialThreadObject.set, ...partialThreadObject.unset }) {
-      if (reservedThreadFields.includes(key)) {
-        throw Error(
-          `You cannot set ${key} field on Thread object. ${key} is reserved for server-side use. Please omit ${key} from your set object.`,
-        );
-      }
-    }
-
-    return await this.patch<GetThreadAPIResponse>(
-      `${this.baseURL}/threads/${encodeURIComponent(messageId)}`,
-      partialThreadObject,
-    );
+    return thread;
   }
 
   getUserAgent = (): string => {
@@ -3847,8 +1931,7 @@ export class StreamChat {
       return this.userAgent;
     }
 
-    // Computed once, then memoized for the client's lifetime - inputs read on
-    // the first call (sdk/device identifiers, build-time env) are not re-read.
+    // Memoized on the first call: later changes to the identifiers are not picked up.
     if (!this.cachedUserAgent) {
       const version = process.env.PKG_VERSION;
       const { name: sdkName, version: sdkVersion } = this.sdkIdentifier ?? {};
@@ -3861,8 +1944,7 @@ export class StreamChat {
 
       this.cachedUserAgent = [
         head,
-        // reports the host app, the device OS, the device model, and the picked
-        // exports bundle, each only when a value is present
+        // Each only when a value is present.
         ...Object.entries({
           app: appName,
           app_version: appVersion,
@@ -3879,1658 +1961,137 @@ export class StreamChat {
   };
 
   /**
-   * @deprecated use sdkIdentifier instead
-   * @param userAgent
+   * Sets the user agent string.
+   *
+   * @deprecated Use `sdkIdentifier` instead.
+   *
+   * @param userAgent - The user agent string.
    */
   setUserAgent(userAgent: string) {
     this.userAgent = userAgent;
   }
 
-  /**
-   * _isUsingServerAuth - Returns true if we're using server side auth
-   */
-  _isUsingServerAuth = () => !!this.secret;
-
-  _cacheEnabled = () => !this._isUsingServerAuth() || !this.options.disableCache;
-
-  _enrichAxiosOptions(
-    options: AxiosRequestConfig & { config?: AxiosRequestConfig } = {
-      params: {},
-      headers: {},
-      config: {},
-    },
-  ): AxiosRequestConfig {
-    const token = this._getToken();
-    const authorization = token ? { Authorization: token } : undefined;
-    let signal: AbortSignal | null = null;
-    if (this.nextRequestAbortController !== null) {
-      signal = this.nextRequestAbortController.signal;
-      this.nextRequestAbortController = null;
-    }
-
-    if (!options.headers?.['x-client-request-id']) {
-      options.headers = {
-        ...options.headers,
-        'x-client-request-id': randomId(),
-      };
-    }
-
-    const {
-      params: axiosRequestConfigParams,
-      headers: axiosRequestConfigHeaders,
-      ...axiosRequestConfigRest
-    } = this.options.axiosRequestConfig || {};
-
-    // Most specific wins, and it is spread last so that a config carrying an explicit
-    // `signal: undefined` cannot clobber a client-wide one or an armed
-    // nextRequestAbortController.
-    const resolvedSignal =
-      options.config?.signal ?? axiosRequestConfigRest.signal ?? signal;
-
-    return {
-      params: {
-        user_id: this.userID,
-        connection_id: this._getConnectionID(),
-        api_key: this.key,
-        ...options.params,
-        ...(axiosRequestConfigParams || {}),
-      },
-      headers: {
-        ...authorization,
-        'stream-auth-type': this.getAuthType(),
-        'X-Stream-Client': this.getUserAgent(),
-        ...options.headers,
-        ...(axiosRequestConfigHeaders || {}),
-      },
-      ...options.config,
-      ...axiosRequestConfigRest,
-      ...(resolvedSignal ? { signal: resolvedSignal } : {}),
-    };
-  }
-
-  _getToken() {
-    if (!this.tokenManager || this.anonymous) return null;
-
-    return this.tokenManager.getToken();
-  }
-
   _startCleaning() {
-    // eslint-disable-next-line @typescript-eslint/no-this-alias
-    const that = this;
     if (this.cleaningIntervalRef != null) {
       return;
     }
     this.cleaningIntervalRef = setInterval(() => {
-      // call clean on the channel, used for calling the stop.typing event etc.
-      for (const channel of Object.values(that.activeChannels)) {
-        channel.clean();
+      // `clean()` sends the stop-typing event, among other things.
+      for (const channel of this.channelManager.values()) {
+        // A disposed channel has nothing to clean, and `clean()` would throw on it.
+        if (channel.pendingDisposal) continue;
+        // One channel failing to clean must not stop the others (typing indicators would stick).
+        try {
+          channel.clean();
+        } catch (error) {
+          logger
+            .withExtraTags('clean', channel.cid)
+            .error('Cleaning the channel failed.', { error });
+        }
       }
     }, 500);
   }
 
   /**
-   * encode ws url payload
+   * The JSON-encoded WebSocket auth message, sent as the first frame once the socket opens.
+   *
    * @private
-   * @returns json string
    */
-  _buildWSPayload = (client_request_id?: string) =>
-    JSON.stringify({
-      user_id: this.userID,
-      user_details: this._user,
-      device: this.options.device,
-      client_request_id,
-    });
+  _buildWSAuthMessage = () =>
+    JSON.stringify(this._buildWSAuthPayload(this.tokenManager.getToken()));
 
   /**
-   * checks signature of a request
-   * @param {string | Buffer} rawBody
-   * @param {string} signature from HTTP header
-   * @returns {boolean}
+   * The auth message that {@link _buildWSAuthMessage} encodes for the WebSocket and the long-poll
+   * fallback sends as `longPoll()`'s `json` query param.
+   *
+   * @private
+   *
+   * @param token - The long-poll passes none: it authenticates through the `Authorization` header.
    */
-  verifyWebhook(requestBody: string | Buffer, xSignature: string) {
-    return !!this.secret && verifySignature(requestBody, xSignature, this.secret);
-  }
+  _buildWSAuthPayload = (token?: string): WSAuthMessage => ({
+    // The server requires a non-empty token but ignores one that is not JWT-shaped, so anonymous
+    // users and the long-poll send a placeholder.
+    token: token || 'anonymous',
+    // `connect()` rejects before reaching this when `_user` is unset.
+    user_details: this._user as ConnectUserDetailsRequest,
+    // Without 'chat' the server treats the connection as video-only and drops chat events and
+    // unread counts.
+    products: ['chat'],
+  });
 
   /**
-   * Verify and parse an HTTP webhook event.
+   * Queries poll answers: the votes with `is_answer: true`.
    *
-   * Decompresses `rawBody` when gzipped (detected from the body bytes),
-   * verifies the `X-Signature` header against the app's API secret, and
-   * returns the parsed `Event`. Works whether or not Stream is currently
-   * compressing payloads for this app, and stays correct behind
-   * middleware that auto-decompresses the request.
-   *
-   * @param rawBody Raw HTTP request body bytes Stream signed
-   * @param signature Value of the `X-Signature` header
-   * @throws {InvalidWebhookError} When the signature does not match or
-   *   the gzip envelope is malformed.
+   * @param ...args - `[pathParams, request, requestOptions]`. `pathParams.poll_id` is the poll ID;
+   *   `request` carries optional vote filter conditions, sort directions, and pagination options
+   *   (`limit`, `next`, `prev`); `requestOptions` carries per-request options such as an abort
+   *   `signal` and is never serialized into the request.
+   * @returns The poll answers.
    */
-  verifyAndParseWebhook(rawBody: string | Buffer, signature: string) {
-    if (!this.secret) {
-      throw new InvalidWebhookError(
-        'cannot verify webhook signature without an API secret on the client',
-      );
-    }
-    return verifyAndParseWebhookHelper(rawBody, signature, this.secret);
-  }
+  async queryPollAnswers(...args: Parameters<ChatApi['queryPollVotes']>) {
+    const [pathParams, request, requestOptions] = args;
+    const { filter, ...options } = request ?? {};
 
-  /**
-   * Parse an SQS firehose event: decodes the message `Body` (base64 +
-   * optional gzip) and returns the parsed `Event`. No HMAC verification
-   * (Stream does not sign SQS bodies).
-   *
-   * @param messageBody SQS message `Body` string
-   * @throws {InvalidWebhookError} When the base64 / gzip envelope is malformed.
-   */
-  parseSqs(messageBody: string) {
-    return parseSqsHelper(messageBody);
-  }
-
-  /**
-   * Parse an SNS-delivered event (unwraps envelope JSON when needed, then
-   * same decode path as SQS). No HMAC verification.
-   *
-   * @param notificationBody Raw SNS POST body or pre-extracted `Message` string
-   * @throws {InvalidWebhookError} When the envelope cannot be decoded.
-   */
-  parseSns(notificationBody: string) {
-    return parseSnsHelper(notificationBody);
-  }
-
-  /** getPermission - gets the definition for a permission
-   *
-   * @param {string} name
-   * @returns {Promise<PermissionAPIResponse>}
-   */
-  getPermission(name: string) {
-    return this.get<PermissionAPIResponse>(
-      `${this.baseURL}/permissions/${encodeURIComponent(name)}`,
-    );
-  }
-
-  /** createPermission - creates a custom permission
-   *
-   * @param {CustomPermissionOptions} permissionData the permission data
-   * @returns {Promise<APIResponse>}
-   */
-  createPermission(permissionData: CustomPermissionOptions) {
-    return this.post<APIResponse>(`${this.baseURL}/permissions`, {
-      ...permissionData,
-    });
-  }
-
-  /** updatePermission - updates an existing custom permission
-   *
-   * @param {string} id
-   * @param {Omit<CustomPermissionOptions, 'id'>} permissionData the permission data
-   * @returns {Promise<APIResponse>}
-   */
-  updatePermission(id: string, permissionData: Omit<CustomPermissionOptions, 'id'>) {
-    return this.put<APIResponse>(
-      `${this.baseURL}/permissions/${encodeURIComponent(id)}`,
-      {
-        ...permissionData,
-      },
-    );
-  }
-
-  /** deletePermission - deletes a custom permission
-   *
-   * @param {string} name
-   * @returns {Promise<APIResponse>}
-   */
-  deletePermission(name: string) {
-    return this.delete<APIResponse>(
-      `${this.baseURL}/permissions/${encodeURIComponent(name)}`,
-    );
-  }
-
-  /** listPermissions - returns the list of all permissions for this application
-   *
-   * @returns {Promise<APIResponse>}
-   */
-  listPermissions() {
-    return this.get<PermissionsAPIResponse>(`${this.baseURL}/permissions`);
-  }
-
-  /** createRole - creates a custom role
-   *
-   * @param {string} name the new role name
-   * @returns {Promise<APIResponse>}
-   */
-  createRole(name: string) {
-    return this.post<CreateRoleAPIResponse>(`${this.baseURL}/roles`, { name });
-  }
-
-  /** listRoles - returns the list of all roles for this application
-   *
-   * @returns {Promise<APIResponse>}
-   */
-  listRoles() {
-    return this.get<ListRolesAPIResponse>(`${this.baseURL}/roles`);
-  }
-
-  /** listRoles - returns the list of all roles for this application
-   *
-   * @returns {Promise<APIResponse>}
-   */
-  searchRoles(options: SearchRolesOptions, requestOptions: RequestOptions = {}) {
-    return this.get<SearchRolesAPIResponse>(
-      `${this.baseURL}/roles/search`,
-      options,
+    return await this.queryPollVotes(
+      pathParams,
+      { ...options, filter: { ...filter, is_answer: true } },
       requestOptions,
     );
   }
 
-  /** deleteRole - deletes a custom role
-   *
-   * @param {string} name the role name
-   * @returns {Promise<APIResponse>}
-   */
-  deleteRole(name: string) {
-    return this.delete<APIResponse>(`${this.baseURL}/roles/${encodeURIComponent(name)}`);
-  }
-
-  /** sync - returns all events that happened for a list of channels since last sync
-   * @param {string[]} channel_cids list of channel CIDs
-   * @param {string} last_sync_at last time the user was online and in sync. RFC3339 ie. "2020-05-06T15:05:01.207Z"
-   * @param {SyncOptions} options See JSDoc in the type fields for more info
-   *
-   * @returns {Promise<SyncResponse>}
-   */
-  sync(channel_cids: string[], last_sync_at: string, options: SyncOptions = {}) {
-    return this.post<SyncResponse>(`${this.baseURL}/sync`, {
-      channel_cids,
-      last_sync_at,
-      ...options,
-    });
-  }
-
   /**
-   * sendUserCustomEvent - Send a custom event to a user
+   * Uploads a file to the Stream CDN.
    *
-   * @param {string} targetUserID target user id
-   * @param {UserCustomEvent} event for example {type: 'friendship-request'}
-   *
-   * @return {Promise<APIResponse>} The Server Response
+   * @param request - Upload payload. `request.file` is the file to upload.
+   * @param requestOptions - Per-request options, e.g. `onUploadProgress` or an abort `signal`
+   *   (optional).
+   * @returns The upload response, with the file URL.
    */
-  async sendUserCustomEvent(targetUserID: string, event: UserCustomEvent) {
-    return await this.post<APIResponse>(
-      `${this.baseURL}/users/${encodeURIComponent(targetUserID)}/event`,
-      {
-        event,
-      },
-    );
-  }
-
-  /**
-   * Creates a new block list
-   *
-   * @param {BlockList} blockList - The block list to create
-   * @param {string} blockList.name - The name of the block list
-   * @param {string[]} blockList.words - List of words to block
-   * @param {string} [blockList.team] - Team ID the block list belongs to
-   *
-   * @returns {Promise<APIResponse>} The server response
-   */
-  createBlockList(blockList: BlockList) {
-    return this.post<APIResponse>(`${this.baseURL}/blocklists`, blockList);
-  }
-
-  /**
-   * Lists all block lists
-   *
-   * @param {Object} [data] - Query parameters
-   * @param {string} [data.team] - Team ID to filter block lists by
-   *
-   * @returns {Promise<APIResponse & {blocklists: BlockListResponse[]}>} Response containing array of block lists
-   */
-  listBlockLists(data?: { team?: string }) {
-    return this.get<APIResponse & { blocklists: BlockListResponse[] }>(
-      `${this.baseURL}/blocklists`,
-      data,
-    );
-  }
-
-  /**
-   * Gets a specific block list
-   *
-   * @param {string} name - The name of the block list to retrieve
-   * @param {Object} [data] - Query parameters
-   * @param {string} [data.team] - Team ID that blocklist belongs to
-   *
-   * @returns {Promise<APIResponse & {blocklist: BlockListResponse}>} Response containing the block list
-   */
-  getBlockList(name: string, data?: { team?: string }) {
-    return this.get<APIResponse & { blocklist: BlockListResponse }>(
-      `${this.baseURL}/blocklists/${encodeURIComponent(name)}`,
-      data,
-    );
-  }
-
-  /**
-   * Updates an existing block list
-   *
-   * @param {string} name - The name of the block list to update
-   * @param {Object} data - The update data
-   * @param {string[]} data.words - New list of words to block
-   * @param {string} [data.team] - Team ID that blocklist belongs to
-   *
-   * @returns {Promise<APIResponse>} The server response
-   */
-  updateBlockList(name: string, data: { words: string[]; team?: string }) {
-    return this.put<APIResponse>(
-      `${this.baseURL}/blocklists/${encodeURIComponent(name)}`,
-      data,
-    );
-  }
-
-  /**
-   * Deletes a block list
-   *
-   * @param {string} name - The name of the block list to delete
-   * @param {Object} [data] - Query parameters
-   * @param {string} [data.team] - Team ID that blocklist belongs to
-   *
-   * @returns {Promise<APIResponse>} The server response
-   */
-  deleteBlockList(name: string, data?: { team?: string }) {
-    return this.delete<APIResponse>(
-      `${this.baseURL}/blocklists/${encodeURIComponent(name)}`,
-      data,
-    );
-  }
-
-  exportChannels(
-    request: Array<ExportChannelRequest>,
-    options: ExportChannelOptions = {},
+  override async uploadFile(
+    request?: Omit<FileUploadRequest, 'file'> & { file?: FileUploadInput },
+    requestOptions?: StreamRequestOptions,
   ) {
-    const payload = { channels: request, ...options };
-    return this.post<APIResponse & ExportChannelResponse>(
-      `${this.baseURL}/export_channels`,
-      payload,
-    );
-  }
-
-  exportUsers(request: ExportUsersRequest) {
-    return this.post<APIResponse & ExportUsersResponse>(
-      `${this.baseURL}/export/users`,
-      request,
-    );
-  }
-
-  exportChannel(request: ExportChannelRequest, options?: ExportChannelOptions) {
-    return this.exportChannels([request], options);
-  }
-
-  getExportChannelStatus(id: string) {
-    return this.get<APIResponse & ExportChannelStatusResponse>(
-      `${this.baseURL}/export_channels/${encodeURIComponent(id)}`,
-    );
-  }
-
-  campaign(idOrData: string | CampaignData, data?: CampaignData) {
-    if (idOrData && typeof idOrData === 'object') {
-      return new Campaign(this, null, idOrData);
-    }
-
-    return new Campaign(this, idOrData, data);
-  }
-
-  /**
-   * channelBatchUpdater - Returns a ChannelBatchUpdater instance for batch channel operations
-   *
-   * @return {ChannelBatchUpdater} A ChannelBatchUpdater instance
-   */
-  channelBatchUpdater() {
-    return new ChannelBatchUpdater(this);
-  }
-
-  segment(type: SegmentType, idOrData: string | SegmentData, data?: SegmentData) {
-    if (typeof idOrData === 'string') {
-      return new Segment(this, type, idOrData, data);
-    }
-
-    return new Segment(this, type, null, idOrData);
-  }
-
-  validateServerSideAuth() {
-    if (!this.secret) {
-      throw new Error(
-        'This feature can be used server-side only. Please initialize the client with a secret to use this feature.',
-      );
-    }
-  }
-
-  /**
-   * createSegment - Creates a segment
-   *
-   * @private
-   * @param {SegmentType} type Segment type
-   * @param {string} id Segment ID
-   * @param {string} name Segment name
-   * @param {SegmentData} params Segment data
-   *
-   * @return {{segment: SegmentResponse} & APIResponse} The created Segment
-   */
-  createSegment(type: SegmentType, id: string | null, data?: SegmentData) {
-    this.validateServerSideAuth();
-    const body = {
-      id,
-      type,
-      ...data,
-    };
-    return this.post<{ segment: SegmentResponse }>(this.baseURL + `/segments`, body);
-  }
-
-  /**
-   * createUserSegment - Creates a user segment
-   *
-   * @param {string} id Segment ID
-   * @param {string} name Segment name
-   * @param {SegmentData} data Segment data
-   *
-   * @return {Segment} The created Segment
-   */
-  createUserSegment(id: string | null, data?: SegmentData) {
-    this.validateServerSideAuth();
-    return this.createSegment('user', id, data);
-  }
-
-  /**
-   * createChannelSegment - Creates a channel segment
-   *
-   * @param {string} id Segment ID
-   * @param {string} name Segment name
-   * @param {SegmentData} data Segment data
-   *
-   * @return {Segment} The created Segment
-   */
-  createChannelSegment(id: string | null, data?: SegmentData) {
-    this.validateServerSideAuth();
-    return this.createSegment('channel', id, data);
-  }
-
-  getSegment(id: string) {
-    this.validateServerSideAuth();
-    return this.get<{ segment: SegmentResponse } & APIResponse>(
-      this.baseURL + `/segments/${encodeURIComponent(id)}`,
+    return await super.uploadFile(
+      { ...request, file: normalizeUploadFile(request?.file) as unknown as string },
+      requestOptions,
     );
   }
 
   /**
-   * updateSegment - Update a segment
+   * Uploads an image to the Stream CDN.
    *
-   * @param {string} id Segment ID
-   * @param {Partial<UpdateSegmentData>} data Data to update
-   *
-   * @return {Segment} Updated Segment
+   * @param request - Upload payload. `request.file` is the image to upload.
+   * @param requestOptions - Per-request options, e.g. `onUploadProgress` or an abort `signal`
+   *   (optional).
+   * @returns The upload response, with the image URL.
    */
-  updateSegment(id: string, data: Partial<UpdateSegmentData>) {
-    this.validateServerSideAuth();
-    return this.put<{ segment: SegmentResponse }>(
-      this.baseURL + `/segments/${encodeURIComponent(id)}`,
-      data,
-    );
-  }
-
-  /**
-   * addSegmentTargets - Add targets to a segment
-   *
-   * @param {string} id Segment ID
-   * @param {string[]} targets Targets to add to the segment
-   *
-   * @return {APIResponse} API response
-   */
-  addSegmentTargets(id: string, targets: string[]) {
-    this.validateServerSideAuth();
-    const body = { target_ids: targets };
-    return this.post<APIResponse>(
-      this.baseURL + `/segments/${encodeURIComponent(id)}/addtargets`,
-      body,
-    );
-  }
-
-  querySegmentTargets(
-    id: string,
-    filter: QuerySegmentTargetsFilter | null = {},
-    sort: SortParam[] | null | [] = [],
-    options = {},
+  override async uploadImage(
+    request?: Omit<ImageUploadRequest, 'file'> & { file?: FileUploadInput },
+    requestOptions?: StreamRequestOptions,
   ) {
-    this.validateServerSideAuth();
-    return this.post<{ targets: SegmentTargetsResponse[]; next?: string } & APIResponse>(
-      this.baseURL + `/segments/${encodeURIComponent(id)}/targets/query`,
-      {
-        filter: filter || {},
-        sort: sort || [],
-        ...options,
-      },
-    );
-  }
-  /**
-   * removeSegmentTargets - Remove targets from a segment
-   *
-   * @param {string} id Segment ID
-   * @param {string[]} targets Targets to add to the segment
-   *
-   * @return {APIResponse} API response
-   */
-  removeSegmentTargets(id: string, targets: string[]) {
-    this.validateServerSideAuth();
-    const body = { target_ids: targets };
-    return this.post<APIResponse>(
-      this.baseURL + `/segments/${encodeURIComponent(id)}/deletetargets`,
-      body,
+    return await super.uploadImage(
+      { ...request, file: normalizeUploadFile(request?.file) as unknown as string },
+      requestOptions,
     );
   }
 
   /**
-   * querySegments - Query Segments
+   * Marks channels as delivered for the given messages.
    *
-   * @param {filter} filter MongoDB style filter conditions
-   * @param {QuerySegmentsOptions} options Options for sorting/paginating the results
-   *
-   * @return {Segment[]} Segments
+   * @param request - Mark delivered options.
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
+   * @returns The server response, or `undefined` if there are no messages to mark.
    */
-  querySegments(filter: {}, sort?: SortParam[], options: QuerySegmentsOptions = {}) {
-    this.validateServerSideAuth();
-    return this.post<
-      {
-        segments: SegmentResponse[];
-        next?: string;
-        prev?: string;
-      } & APIResponse
-    >(this.baseURL + `/segments/query`, {
-      filter,
-      sort,
-      ...options,
-    });
-  }
-
-  /**
-   * deleteSegment - Delete a Campaign Segment
-   *
-   * @param {string} id Segment ID
-   *
-   * @return {Promise<APIResponse>} The Server Response
-   */
-  deleteSegment(id: string) {
-    this.validateServerSideAuth();
-    return this.delete<APIResponse>(this.baseURL + `/segments/${encodeURIComponent(id)}`);
-  }
-
-  /**
-   * segmentTargetExists - Check if a target exists in a segment
-   *
-   * @param {string} segmentId Segment ID
-   * @param {string} targetId Target ID
-   *
-   * @return {Promise<APIResponse>} The Server Response
-   */
-  segmentTargetExists(segmentId: string, targetId: string) {
-    this.validateServerSideAuth();
-    return this.get<APIResponse>(
-      this.baseURL +
-        `/segments/${encodeURIComponent(segmentId)}/target/${encodeURIComponent(targetId)}`,
-    );
-  }
-
-  /**
-   * createCampaign - Creates a Campaign
-   *
-   * @param {CampaignData} params Campaign data
-   *
-   * @return {Campaign} The Created Campaign
-   */
-  createCampaign(params: CampaignData) {
-    this.validateServerSideAuth();
-    return this.post<
-      {
-        campaign: CampaignResponse;
-        users: {
-          next?: string;
-          prev?: string;
-        };
-      } & APIResponse
-    >(this.baseURL + `/campaigns`, { ...params });
-  }
-
-  getCampaign(id: string, options?: GetCampaignOptions) {
-    this.validateServerSideAuth();
-    return this.get<
-      {
-        campaign: CampaignResponse;
-        users: {
-          next?: string;
-          prev?: string;
-        };
-      } & APIResponse
-    >(this.baseURL + `/campaigns/${encodeURIComponent(id)}`, { ...options?.users });
-  }
-
-  startCampaign(id: string, options?: { scheduledFor?: string; stopAt?: string }) {
-    this.validateServerSideAuth();
-    return this.post<
-      {
-        campaign: CampaignResponse;
-        users: {
-          next?: string;
-          prev?: string;
-        };
-      } & APIResponse
-    >(this.baseURL + `/campaigns/${encodeURIComponent(id)}/start`, {
-      scheduled_for: options?.scheduledFor,
-      stop_at: options?.stopAt,
-    });
-  }
-
-  /**
-   * queryCampaigns - Query Campaigns
-   *
-   *
-   * @return {Campaign[]} Campaigns
-   */
-  async queryCampaigns(
-    filter: CampaignFilters,
-    sort?: CampaignSort,
-    options?: CampaignQueryOptions,
+  async markChannelsDelivered(
+    request?: Gen_MarkDeliveredRequest,
+    requestOptions?: StreamRequestOptions,
   ) {
-    this.validateServerSideAuth();
-    return await this.post<
-      {
-        campaigns: CampaignResponse[];
-        next?: string;
-        prev?: string;
-      } & APIResponse
-    >(this.baseURL + `/campaigns/query`, {
-      filter,
-      sort,
-      ...(options || {}),
-    });
-  }
-
-  /**
-   * updateCampaign - Update a Campaign
-   *
-   * @param {string} id Campaign ID
-   * @param {Partial<CampaignData>} params Campaign data
-   *
-   * @return {Campaign} Updated Campaign
-   */
-  updateCampaign(id: string, params: Partial<CampaignData>) {
-    this.validateServerSideAuth();
-    return this.put<{
-      campaign: CampaignResponse;
-      users: {
-        next?: string;
-        prev?: string;
-      };
-    }>(this.baseURL + `/campaigns/${encodeURIComponent(id)}`, params);
-  }
-
-  /**
-   * deleteCampaign - Delete a Campaign
-   *
-   * @param {string} id Campaign ID
-   *
-   * @return {Promise<APIResponse>} The Server Response
-   */
-  deleteCampaign(id: string) {
-    this.validateServerSideAuth();
-    return this.delete<APIResponse>(
-      this.baseURL + `/campaigns/${encodeURIComponent(id)}`,
-    );
-  }
-
-  /**
-   * stopCampaign - Stop a Campaign
-   *
-   * @param {string} id Campaign ID
-   *
-   * @return {Campaign} Stopped Campaign
-   */
-  stopCampaign(id: string) {
-    this.validateServerSideAuth();
-    return this.post<{ campaign: CampaignResponse }>(
-      this.baseURL + `/campaigns/${encodeURIComponent(id)}/stop`,
-    );
-  }
-
-  /**
-   * enrichURL - Get OpenGraph data of the given link
-   *
-   * @param {string} url link
-   * @return {OGAttachment} OG Attachment
-   */
-  enrichURL(url: string) {
-    return this.get<APIResponse & OGAttachment>(this.baseURL + `/og`, { url });
-  }
-
-  /**
-   * getTask - Gets status of a long running task
-   *
-   * @param {string} id Task ID
-   *
-   * @return {TaskStatus} The task status
-   */
-  getTask(id: string) {
-    return this.get<APIResponse & TaskStatus>(
-      `${this.baseURL}/tasks/${encodeURIComponent(id)}`,
-    );
-  }
-
-  /**
-   * deleteChannels - Deletes a list of channel
-   *
-   * @param {string[]} cids Channel CIDs
-   * @param {boolean} [options.hard_delete] Defines if the channel is hard deleted or not
-   *
-   * @return {DeleteChannelsResponse} Result of the soft deletion, if server-side, it holds the task ID as well
-   */
-  async deleteChannels(cids: string[], options: { hard_delete?: boolean } = {}) {
-    return await this.post<APIResponse & DeleteChannelsResponse>(
-      this.baseURL + `/channels/delete`,
-      {
-        cids,
-        ...options,
-      },
-    );
-  }
-
-  /**
-   * deleteUsers - Batch Delete Users
-   *
-   * @param {string[]} user_ids which users to delete
-   * @param {DeleteUserOptions} options Configuration how to delete users
-   *
-   * @return {TaskResponse} A task ID
-   */
-  async deleteUsers(user_ids: string[], options: DeleteUserOptions = {}) {
-    if (
-      typeof options.user !== 'undefined' &&
-      !['soft', 'hard', 'pruning'].includes(options.user)
-    ) {
-      throw new Error(
-        'Invalid delete user options. user must be one of [soft hard pruning]',
-      );
-    }
-    if (
-      typeof options.conversations !== 'undefined' &&
-      !['soft', 'hard', 'keep'].includes(options.conversations)
-    ) {
-      throw new Error(
-        'Invalid delete user options. conversations must be one of [soft hard keep]',
-      );
-    }
-    if (
-      typeof options.messages !== 'undefined' &&
-      !['soft', 'hard', 'pruning'].includes(options.messages)
-    ) {
-      throw new Error(
-        'Invalid delete user options. messages must be one of [soft hard pruning]',
-      );
-    }
-    return await this.post<APIResponse & TaskResponse>(this.baseURL + `/users/delete`, {
-      user_ids,
-      ...options,
-    });
-  }
-
-  /**
-   * _createImportURL - Create an Import upload url.
-   *
-   * Note: Do not use this.
-   * It is present for internal usage only.
-   * This function can, and will, break and/or be removed at any point in time.
-   *
-   * @private
-   * @param {string} filename filename of uploaded data
-   * @return {APIResponse & CreateImportResponse} An ImportTask
-   */
-  async _createImportURL(filename: string) {
-    return await this.post<APIResponse & CreateImportURLResponse>(
-      this.baseURL + `/import_urls`,
-      {
-        filename,
-      },
-    );
-  }
-
-  /**
-   * _createImport - Create an Import Task.
-   *
-   * Note: Do not use this.
-   * It is present for internal usage only.
-   * This function can, and will, break and/or be removed at any point in time.
-   *
-   * @private
-   * @param {string} path path of uploaded data
-   * @param {CreateImportOptions} options import options
-   * @return {APIResponse & CreateImportResponse} An ImportTask
-   */
-  async _createImport(path: string, options: CreateImportOptions = { mode: 'upsert' }) {
-    return await this.post<APIResponse & CreateImportResponse>(
-      this.baseURL + `/imports`,
-      {
-        path,
-        ...options,
-      },
-    );
-  }
-
-  /**
-   * _getImport - Get an Import Task.
-   *
-   * Note: Do not use this.
-   * It is present for internal usage only.
-   * This function can, and will, break and/or be removed at any point in time.
-   *
-   * @private
-   * @param {string} id id of Import Task
-   *
-   * @return {APIResponse & GetImportResponse} An ImportTask
-   */
-  async _getImport(id: string) {
-    return await this.get<APIResponse & GetImportResponse>(
-      this.baseURL + `/imports/${encodeURIComponent(id)}`,
-    );
-  }
-
-  /**
-   * _listImports - Lists Import Tasks.
-   *
-   * Note: Do not use this.
-   * It is present for internal usage only.
-   * This function can, and will, break and/or be removed at any point in time.
-   *
-   * @private
-   * @param {ListImportsPaginationOptions} options pagination options
-   *
-   * @return {APIResponse & ListImportsResponse} An ImportTask
-   */
-  async _listImports(options: ListImportsPaginationOptions) {
-    return await this.get<APIResponse & ListImportsResponse>(
-      this.baseURL + `/imports`,
-      options,
-    );
-  }
-
-  /**
-   * upsertPushProvider - Create or Update a push provider
-   *
-   * Note: Works only for v2 push version is enabled on app settings.
-   *
-   * @param {PushProviderConfig} configuration of the provider you want to create or update
-   *
-   * @return {APIResponse & PushProviderUpsertResponse} A push provider
-   */
-  async upsertPushProvider(pushProvider: PushProviderConfig) {
-    return await this.post<APIResponse & PushProviderUpsertResponse>(
-      this.baseURL + `/push_providers`,
-      {
-        push_provider: pushProvider,
-      },
-    );
-  }
-
-  /**
-   * deletePushProvider - Delete a push provider
-   *
-   * Note: Works only for v2 push version is enabled on app settings.
-   *
-   * @param {PushProviderID} type and foreign id of the push provider to be deleted
-   *
-   * @return {APIResponse} An API response
-   */
-  async deletePushProvider({ type, name }: PushProviderID) {
-    return await this.delete<APIResponse>(
-      this.baseURL +
-        `/push_providers/${encodeURIComponent(type)}/${encodeURIComponent(name)}`,
-    );
-  }
-
-  /**
-   * listPushProviders - Get all push providers in the app
-   *
-   * Note: Works only for v2 push version is enabled on app settings.
-   *
-   * @return {APIResponse & PushProviderListResponse} A push provider
-   */
-  async listPushProviders() {
-    return await this.get<APIResponse & PushProviderListResponse>(
-      this.baseURL + `/push_providers`,
-    );
-  }
-
-  /**
-   * creates an abort controller that will be used by the next HTTP Request.
-   */
-  createAbortControllerForNextRequest() {
-    return (this.nextRequestAbortController = new AbortController());
-  }
-
-  /**
-   * commits a pending message, making it visible in the channel and for other users
-   * @param id the message id
-   *
-   * @return {APIResponse & MessageResponse} The message
-   */
-  async commitMessage(id: string) {
-    return await this.post<APIResponse & MessageResponse>(
-      this.baseURL + `/messages/${encodeURIComponent(id)}/commit`,
-    );
-  }
-
-  /**
-   * Creates a poll
-   * @param poll PollData The poll that will be created
-   * @param userId string The user id (only serverside)
-   * @returns {APIResponse & CreatePollAPIResponse} The poll
-   */
-  async createPoll(poll: CreatePollData, userId?: string) {
-    return await this.post<APIResponse & CreatePollAPIResponse>(this.baseURL + `/polls`, {
-      ...poll,
-      ...(userId ? { user_id: userId } : {}),
-    });
-  }
-
-  /**
-   * Retrieves a poll
-   * @param id string The poll id
-   *  @param userId string The user id (only serverside)
-   * @returns {APIResponse & GetPollAPIResponse} The poll
-   */
-  async getPoll(id: string, userId?: string): Promise<APIResponse & GetPollAPIResponse> {
-    return await this.get<APIResponse & GetPollAPIResponse>(
-      this.baseURL + `/polls/${encodeURIComponent(id)}`,
-      userId ? { user_id: userId } : {},
-    );
-  }
-
-  /**
-   * Updates a poll
-   * @param poll PollData The poll that will be updated
-   * @param userId string The user id (only serverside)
-   * @returns {APIResponse & PollResponse} The poll
-   */
-  async updatePoll(poll: PollData, userId?: string) {
-    return await this.put<APIResponse & UpdatePollAPIResponse>(this.baseURL + `/polls`, {
-      ...poll,
-      ...(userId ? { user_id: userId } : {}),
-    });
-  }
-
-  /**
-   * Partially updates a poll
-   * @param id string The poll id
-   * @param {PartialPollUpdate} partialPollObject which should contain id and any of "set" or "unset" params;
-   * @param userId string The user id (only serverside)
-   * example: {id: "44f26af5-f2be-4fa7-9dac-71cf893781de", set:{field: value}, unset:["field2"]}
-   * @returns {APIResponse & UpdatePollAPIResponse} The poll
-   */
-  async partialUpdatePoll(
-    id: string,
-    partialPollObject: PartialPollUpdate,
-    userId?: string,
-  ): Promise<APIResponse & UpdatePollAPIResponse> {
-    return await this.patch<APIResponse & UpdatePollAPIResponse>(
-      this.baseURL + `/polls/${encodeURIComponent(id)}`,
-      {
-        ...partialPollObject,
-        ...(userId ? { user_id: userId } : {}),
-      },
-    );
-  }
-
-  /**
-   * Delete a poll
-   * @param id string The poll id
-   * @param userId string The user id (only serverside)
-   * @returns
-   */
-  async deletePoll(id: string, userId?: string): Promise<APIResponse> {
-    return await this.delete<APIResponse>(
-      this.baseURL + `/polls/${encodeURIComponent(id)}`,
-      {
-        ...(userId ? { user_id: userId } : {}),
-      },
-    );
-  }
-
-  /**
-   * Close a poll
-   * @param id string The poll id
-   * @param userId string The user id (only serverside)
-   * @returns {APIResponse & UpdatePollAPIResponse} The poll
-   */
-  closePoll(id: string, userId?: string): Promise<APIResponse & UpdatePollAPIResponse> {
-    return this.partialUpdatePoll(
-      id,
-      {
-        set: {
-          is_closed: true,
-        } as PartialPollUpdate['set'],
-      },
-      userId,
-    );
-  }
-
-  /**
-   * Creates a poll option
-   * @param pollId string The poll id
-   * @param option PollOptionData The poll option that will be created
-   * @param userId string The user id (only serverside)
-   * @returns {APIResponse & PollOptionResponse} The poll option
-   */
-  async createPollOption(pollId: string, option: PollOptionData, userId?: string) {
-    return await this.post<APIResponse & CreatePollOptionAPIResponse>(
-      this.baseURL + `/polls/${encodeURIComponent(pollId)}/options`,
-      {
-        ...option,
-        ...(userId ? { user_id: userId } : {}),
-      },
-    );
-  }
-
-  /**
-   * Retrieves a poll option
-   * @param pollId string The poll id
-   * @param optionId string The poll option id
-   * @param userId string The user id (only serverside)
-   * @returns {APIResponse & PollOptionResponse} The poll option
-   */
-  async getPollOption(pollId: string, optionId: string, userId?: string) {
-    return await this.get<APIResponse & GetPollOptionAPIResponse>(
-      this.baseURL +
-        `/polls/${encodeURIComponent(pollId)}/options/${encodeURIComponent(optionId)}`,
-      userId ? { user_id: userId } : {},
-    );
-  }
-
-  /**
-   * Updates a poll option
-   * @param pollId string The poll id
-   * @param option PollOptionData The poll option that will be updated
-   * @param userId string The user id (only serverside)
-   * @returns
-   */
-  async updatePollOption(pollId: string, option: PollOptionData, userId?: string) {
-    return await this.put<APIResponse & UpdatePollOptionAPIResponse>(
-      this.baseURL + `/polls/${encodeURIComponent(pollId)}/options`,
-      {
-        ...option,
-        ...(userId ? { user_id: userId } : {}),
-      },
-    );
-  }
-
-  /**
-   * Delete a poll option
-   * @param pollId string The poll id
-   * @param optionId string The poll option id
-   * @param userId string The user id (only serverside)
-   * @returns {APIResponse} The poll option
-   */
-  async deletePollOption(pollId: string, optionId: string, userId?: string) {
-    return await this.delete<APIResponse>(
-      this.baseURL +
-        `/polls/${encodeURIComponent(pollId)}/options/${encodeURIComponent(optionId)}`,
-      userId ? { user_id: userId } : {},
-    );
-  }
-
-  /**
-   * Cast vote on a poll
-   * @param messageId string The message id
-   * @param pollId string The poll id
-   * @param vote PollVoteData The vote that will be casted
-   * @param userId string The user id (only serverside)
-   * @returns {APIResponse & CastVoteAPIResponse} The poll vote
-   */
-  async castPollVote(
-    messageId: string,
-    pollId: string,
-    vote: PollVoteData,
-    userId?: string,
-  ) {
-    return await this.post<APIResponse & CastVoteAPIResponse>(
-      this.baseURL +
-        `/messages/${encodeURIComponent(messageId)}/polls/${encodeURIComponent(pollId)}/vote`,
-      {
-        vote,
-        ...(userId ? { user_id: userId } : {}),
-      },
-    );
-  }
-
-  /**
-   * Add a poll answer
-   * @param messageId string The message id
-   * @param pollId string The poll id
-   * @param answerText string The answer text
-   * @param userId string The user id (only serverside)
-   */
-  addPollAnswer(messageId: string, pollId: string, answerText: string, userId?: string) {
-    return this.castPollVote(
-      messageId,
-      pollId,
-      {
-        answer_text: answerText,
-      },
-      userId,
-    );
-  }
-
-  async removePollVote(
-    messageId: string,
-    pollId: string,
-    voteId: string,
-    userId?: string,
-  ) {
-    return await this.delete<APIResponse & { vote: PollVote }>(
-      this.baseURL +
-        `/messages/${encodeURIComponent(messageId)}/polls/${encodeURIComponent(pollId)}/vote/${encodeURIComponent(
-          voteId,
-        )}`,
-      {
-        ...(userId ? { user_id: userId } : {}),
-      },
-    );
-  }
-
-  /**
-   * Queries polls
-   * @param filter
-   * @param sort
-   * @param options Option object, {limit: 10, offset:0}
-   * @param userId string The user id (only serverside)
-   * @returns {APIResponse & QueryPollsResponse} The polls
-   */
-  async queryPolls(
-    filter: QueryPollsFilters = {},
-    sort: PollSort = [],
-    options: QueryPollsOptions = {},
-    userId?: string,
-  ): Promise<APIResponse & QueryPollsResponse> {
-    const q = userId ? `?user_id=${userId}` : '';
-    return await this.post<APIResponse & QueryPollsResponse>(
-      this.baseURL + `/polls/query${q}`,
-      {
-        filter,
-        sort: normalizeQuerySort(sort),
-        ...options,
-      },
-    );
-  }
-
-  /**
-   * Queries poll votes
-   * @param pollId
-   * @param filter
-   * @param sort
-   * @param options Option object, {limit: 10, offset:0}
-   * @param userId string The user id (only serverside)
-   * @returns {APIResponse & PollVotesAPIResponse} The poll votes
-   */
-  async queryPollVotes(
-    pollId: string,
-    filter: QueryVotesFilters = {},
-    sort: VoteSort = [],
-    options: QueryVotesOptions = {},
-    userId?: string,
-  ): Promise<APIResponse & PollVotesAPIResponse> {
-    const q = userId ? `?user_id=${userId}` : '';
-    return await this.post<APIResponse & PollVotesAPIResponse>(
-      this.baseURL + `/polls/${encodeURIComponent(pollId)}/votes${q}`,
-      {
-        filter,
-        sort: normalizeQuerySort(sort),
-        ...options,
-      },
-    );
-  }
-
-  /**
-   * Queries poll answers
-   * @param pollId
-   * @param filter
-   * @param sort
-   * @param options Option object, {limit: 10, offset:0}
-   * @param userId string The user id (only serverside)
-   * @returns {APIResponse & PollAnswersAPIResponse} The poll votes
-   */
-  async queryPollAnswers(
-    pollId: string,
-    filter: QueryVotesFilters = {},
-    sort: VoteSort = [],
-    options: QueryVotesOptions = {},
-    userId?: string,
-  ): Promise<APIResponse & PollAnswersAPIResponse> {
-    const q = userId ? `?user_id=${userId}` : '';
-    return await this.post<APIResponse & PollAnswersAPIResponse>(
-      this.baseURL + `/polls/${encodeURIComponent(pollId)}/votes${q}`,
-      {
-        filter: { ...filter, is_answer: true },
-        sort: normalizeQuerySort(sort),
-        ...options,
-      },
-    );
-  }
-
-  /**
-   * Query message history
-   * @param filter
-   * @param sort
-   * @param options Option object, {limit: 10}
-   * @returns {APIResponse & QueryMessageHistoryResponse} The message histories
-   */
-  async queryMessageHistory(
-    filter: QueryMessageHistoryFilters = {},
-    sort: QueryMessageHistorySort = [],
-    options: QueryMessageHistoryOptions = {},
-  ): Promise<APIResponse & QueryMessageHistoryResponse> {
-    return await this.post<APIResponse & QueryMessageHistoryResponse>(
-      this.baseURL + '/messages/history',
-      {
-        filter,
-        sort: normalizeQuerySort(sort),
-        ...options,
-      },
-    );
-  }
-
-  /**
-   * updateFlags - reviews/unflags flagged message
-   *
-   * @param {string[]} message_ids list of message IDs
-   * @param {string} options Option object in case user ID is set to review all the flagged messages by the user
-   * @param {string} reviewed_by user ID who reviewed the flagged message
-   * @returns {APIResponse}
-   */
-  async updateFlags(
-    message_ids: string[],
-    reviewed_by: string,
-    options: { user_id?: string } = {},
-  ) {
-    return await this.post<APIResponse>(
-      this.baseURL + '/automod/v1/moderation/update_flags',
-      {
-        message_ids,
-        reviewed_by,
-        ...options,
-      },
-    );
-  }
-
-  /**
-   * queryDrafts - Queries drafts for the current user
-   *
-   * @param {object} [options] Query options
-   * @param {object} [options.filter] Filters for the query
-   * @param {number} [options.sort] Sort parameters
-   * @param {number} [options.limit] Limit the number of results
-   * @param {string} [options.next] Pagination parameter
-   * @param {string} [options.prev] Pagination parameter
-   * @param {string} [options.user_id] Has to be provided when called server-side
-   *
-   * @return {Promise<APIResponse & { drafts: DraftResponse[]; next?: string }>} Response containing the drafts
-   */
-  async queryDrafts(
-    options: Pager & {
-      filter?: DraftFilters;
-      sort?: DraftSort;
-      user_id?: string;
-    } = {},
-  ) {
-    const payload = {
-      ...options,
-      sort: options.sort ? normalizeQuerySort(options.sort) : undefined,
-    };
-
-    return await this.post<QueryDraftsResponse>(this.baseURL + '/drafts/query', payload);
-  }
-
-  /**
-   * createReminder - Creates a reminder for a message
-   *
-   * @param {CreateReminderOptions} options The options for creating the reminder
-   * @returns {Promise<ReminderAPIResponse>}
-   */
-  async createReminder({ messageId, ...options }: CreateReminderOptions) {
-    return await this.post<ReminderAPIResponse>(
-      `${this.baseURL}/messages/${messageId}/reminders`,
-      options,
-    );
-  }
-
-  /**
-   * updateReminder - Updates an existing reminder for a message
-   *
-   * @param {UpdateReminderOptions} options The options for updating the reminder
-   * @returns {Promise<ReminderAPIResponse>}
-   */
-  async updateReminder({ messageId, ...options }: UpdateReminderOptions) {
-    return await this.patch<ReminderAPIResponse>(
-      `${this.baseURL}/messages/${messageId}/reminders`,
-      options,
-    );
-  }
-
-  /**
-   * deleteReminder - Deletes a reminder for a message
-   *
-   * @param {string} messageId The ID of the message whose reminder to delete
-   * @param {string} [userId] Optional user ID, required for server-side operations
-   * @returns {Promise<APIResponse>}
-   */
-  async deleteReminder(messageId: string, userId?: string): Promise<APIResponse> {
-    return await this.delete<APIResponse>(
-      `${this.baseURL}/messages/${messageId}/reminders`,
-      userId ? { user_id: userId } : {},
-    );
-  }
-
-  /**
-   * queryReminders - Queries reminders based on given filters
-   *
-   * @param {QueryRemindersOptions} options The options for querying reminders
-   * @returns {Promise<QueryRemindersResponse>}
-   */
-  async queryReminders({ filter, sort, ...rest }: QueryRemindersOptions = {}) {
-    return await this.post<QueryRemindersResponse>(`${this.baseURL}/reminders/query`, {
-      filter,
-      sort: sort && normalizeQuerySort(sort),
-      ...rest,
-    });
-  }
-
-  /**
-   * queryTeamUsageStats - Queries team-level usage statistics from the warehouse database
-   *
-   * Returns all 16 metrics grouped by team with cursor-based pagination.
-   *
-   * Date Range Options (mutually exclusive):
-   * - Use 'month' parameter (YYYY-MM format) for monthly aggregated values
-   * - Use 'start_date'/'end_date' parameters (YYYY-MM-DD format) for daily breakdown
-   * - If neither provided, defaults to current month (monthly mode)
-   *
-   * This endpoint is server-side only.
-   *
-   * @param {QueryTeamUsageStatsOptions} options The options for querying team usage stats
-   * @returns {Promise<QueryTeamUsageStatsResponse>}
-   */
-  async queryTeamUsageStats(options: QueryTeamUsageStatsOptions = {}) {
-    return await this.post<QueryTeamUsageStatsResponse>(
-      `${this.baseURL}/stats/team_usage`,
-      options,
-    );
-  }
-
-  /**
-   * updateLocation - Updates a location
-   *
-   * @param location SharedLocationRequest the location data to update
-   *
-   * @returns {Promise<SharedLocationResponse>} The server response
-   */
-  async updateLocation(location: UpdateLocationPayload) {
-    return await this.put<SharedLocationResponse>(
-      this.baseURL + `/users/live_locations`,
-      location,
-    );
-  }
-
-  /**
-   * uploadFile - Uploads a file to the configured storage (defaults to Stream CDN)
-   *
-   * @param {string|NodeJS.ReadableStream|Buffer|File} uri The file to upload
-   * @param {string} [name] The name of the file
-   * @param {string} [contentType] The content type of the file
-   * @param {UserResponse} [user] Optional user information
-   * @param {AxiosRequestConfig} [axiosRequestConfig] Optional axios config (e.g. onUploadProgress for progress tracking)
-   *
-   * @return {Promise<SendFileAPIResponse>} Response containing the file URL
-   */
-  uploadFile(
-    uri: string | NodeJS.ReadableStream | Buffer | File,
-    name?: string,
-    contentType?: string,
-    user?: UserResponse,
-    axiosRequestConfig?: AxiosRequestConfig,
-  ) {
-    return this.sendFile(
-      `${this.baseURL}/uploads/file`,
-      uri,
-      name,
-      contentType,
-      user,
-      axiosRequestConfig,
-    );
-  }
-
-  /**
-   * uploadImage - Uploads an image to the configured storage (defaults to Stream CDN)
-   *
-   * @param {string|NodeJS.ReadableStream|File} uri The image to upload
-   * @param {string} [name] The name of the image
-   * @param {string} [contentType] The content type of the image
-   * @param {UserResponse} [user] Optional user information
-   * @param {AxiosRequestConfig} [axiosRequestConfig] Optional axios config (e.g. onUploadProgress for progress tracking)
-   *
-   * @return {Promise<SendFileAPIResponse>} Response containing the image URL
-   */
-  uploadImage(
-    uri: string | NodeJS.ReadableStream | File,
-    name?: string,
-    contentType?: string,
-    user?: UserResponse,
-    axiosRequestConfig?: AxiosRequestConfig,
-  ) {
-    return this.sendFile(
-      `${this.baseURL}/uploads/image`,
-      uri,
-      name,
-      contentType,
-      user,
-      axiosRequestConfig,
-    );
-  }
-
-  /**
-   * deleteFile - Deletes a file from the configured storage
-   *
-   * @param {string} url The URL of the file to delete
-   *
-   * @return {Promise<APIResponse>} The server response
-   */
-  deleteFile(url: string) {
-    return this.delete<APIResponse>(`${this.baseURL}/uploads/file`, { url });
-  }
-
-  /**
-   * deleteImage - Deletes an image from the configured storage
-   *
-   * @param {string} url The URL of the image to delete
-   *
-   * @return {Promise<APIResponse>} The server response
-   */
-  deleteImage(url: string) {
-    return this.delete<APIResponse>(`${this.baseURL}/uploads/image`, { url });
-  }
-
-  /**
-   * Mark the channels delivered for the given messages and the user
-   *
-   * @param {MarkDeliveredOptions} data
-   * @return {Promise<EventAPIResponse | void>} Description
-   */
-  async markChannelsDelivered(data: MarkDeliveredOptions) {
-    if (!data?.latest_delivered_messages?.length) return;
-    return await this.post<EventAPIResponse>(this.baseURL + '/channels/delivered', data);
+    if (!request?.latest_delivered_messages?.length) return;
+    return await this.markDelivered(request, requestOptions);
   }
 
   syncDeliveredCandidates(collections: Channel[]) {
     this.messageDeliveryReporter.syncDeliveredCandidates(collections);
-  }
-
-  /**
-   *  Update Channels Batch
-   *
-   *  For the `updateData` operation, `data.custom` replaces the channel's whole
-   *  custom object, while the root-level `custom_set` / `custom_unset` patch
-   *  individual keys and leave the rest untouched.
-   *
-   *  @param {UpdateChannelsBatchOptions} payload for updating channels in batch
-   *  @return {Promise<APIResponse & UpdateChannelsBatchResponse>} The server response
-   */
-  async updateChannelsBatch(payload: UpdateChannelsBatchOptions) {
-    return await this.put<APIResponse & UpdateChannelsBatchResponse>(
-      this.baseURL + `/channels/batch`,
-      payload,
-    );
-  }
-
-  /**
-   * createPredefinedFilter - Creates a new predefined filter (server-side only)
-   *
-   * @param {CreatePredefinedFilterOptions} options Predefined filter options
-   *
-   * @return {Promise<PredefinedFilterResponse>} The created predefined filter
-   */
-  async createPredefinedFilter<
-    F extends Record<string, unknown> = Record<string, unknown>,
-  >(options: CreatePredefinedFilterOptions<F>) {
-    this.validateServerSideAuth();
-    return await this.post<PredefinedFilterResponse<F>>(
-      `${this.baseURL}/predefined_filters`,
-      options,
-    );
-  }
-
-  /**
-   * getPredefinedFilter - Gets a predefined filter by name (server-side only)
-   *
-   * @param {string} name Predefined filter name
-   *
-   * @return {Promise<PredefinedFilterResponse>} The predefined filter
-   */
-  async getPredefinedFilter<F extends Record<string, unknown> = Record<string, unknown>>(
-    name: string,
-  ) {
-    this.validateServerSideAuth();
-    return await this.get<PredefinedFilterResponse<F>>(
-      `${this.baseURL}/predefined_filters/${encodeURIComponent(name)}`,
-    );
-  }
-
-  /**
-   * updatePredefinedFilter - Updates a predefined filter (server-side only)
-   *
-   * @param {string} name Predefined filter name
-   * @param {UpdatePredefinedFilterOptions} options Predefined filter options
-   *
-   * @return {Promise<PredefinedFilterResponse>} The updated predefined filter
-   */
-  async updatePredefinedFilter<
-    F extends Record<string, unknown> = Record<string, unknown>,
-  >(name: string, options: UpdatePredefinedFilterOptions<F>) {
-    this.validateServerSideAuth();
-    return await this.put<PredefinedFilterResponse<F>>(
-      `${this.baseURL}/predefined_filters/${encodeURIComponent(name)}`,
-      options,
-    );
-  }
-
-  /**
-   * deletePredefinedFilter - Deletes a predefined filter (server-side only)
-   *
-   * @param {string} name Predefined filter name
-   *
-   * @return {Promise<APIResponse>} The server response
-   */
-  async deletePredefinedFilter(name: string) {
-    this.validateServerSideAuth();
-    return await this.delete<APIResponse>(
-      `${this.baseURL}/predefined_filters/${encodeURIComponent(name)}`,
-    );
-  }
-
-  /**
-   * listPredefinedFilters - Lists all predefined filters (server-side only)
-   *
-   * @param {ListPredefinedFiltersOptions} options Query options
-   *
-   * @return {Promise<ListPredefinedFiltersResponse>} The list of predefined filters
-   */
-  async listPredefinedFilters<
-    F extends Record<string, unknown> = Record<string, unknown>,
-  >(options: ListPredefinedFiltersOptions = {}) {
-    this.validateServerSideAuth();
-    const { sort, ...paginationOptions } = options;
-    return await this.get<ListPredefinedFiltersResponse<F>>(
-      `${this.baseURL}/predefined_filters`,
-      {
-        ...paginationOptions,
-        ...(sort ? { sort: JSON.stringify(sort) } : {}),
-      },
-    );
-  }
-
-  /**
-   * setRetentionPolicy - Creates or updates a retention policy for the app.
-   * Server-side only.
-   *
-   * @param {string} policy The policy type ('old-messages' or 'inactive-channels')
-   * @param {number} maxAgeHours Max age in hours (24-43800)
-   * @returns {Promise<SetRetentionPolicyResponse>}
-   */
-  async setRetentionPolicy(policy: string, maxAgeHours: number) {
-    this.validateServerSideAuth();
-    return await this.post<SetRetentionPolicyResponse>(
-      this.baseURL + '/retention_policy',
-      { policy, max_age_hours: maxAgeHours },
-    );
-  }
-
-  /**
-   * deleteRetentionPolicy - Deletes a retention policy for the app.
-   * Server-side only.
-   *
-   * @param {string} policy The policy type ('old-messages' or 'inactive-channels')
-   * @returns {Promise<DeleteRetentionPolicyResponse>}
-   */
-  async deleteRetentionPolicy(policy: string) {
-    this.validateServerSideAuth();
-    return await this.post<DeleteRetentionPolicyResponse>(
-      this.baseURL + '/retention_policy/delete',
-      { policy },
-    );
-  }
-
-  /**
-   * getRetentionPolicy - Returns all retention policies configured for the app.
-   * Server-side only.
-   *
-   * @returns {Promise<GetRetentionPolicyResponse>}
-   */
-  async getRetentionPolicy() {
-    this.validateServerSideAuth();
-    return await this.get<GetRetentionPolicyResponse>(this.baseURL + '/retention_policy');
-  }
-
-  /**
-   * getRetentionPolicyRuns - Returns filtered and sorted retention cleanup run history.
-   * Supports filter_conditions on 'policy' and 'date' fields.
-   * Server-side only.
-   *
-   * @param {GetRetentionPolicyRunsOptions} options Filter, sort, and pagination options
-   * @returns {Promise<GetRetentionPolicyRunsResponse>}
-   */
-  async getRetentionPolicyRuns(options: GetRetentionPolicyRunsOptions = {}) {
-    this.validateServerSideAuth();
-    return await this.post<GetRetentionPolicyRunsResponse>(
-      this.baseURL + '/retention_policy/runs',
-      options,
-    );
   }
 }

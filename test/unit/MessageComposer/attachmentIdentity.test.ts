@@ -1,18 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import {
-  isScrapedContent,
-  isLocalAttachment,
-  isLocalUploadAttachment,
-  isFileAttachment,
-  isLocalFileAttachment,
-  isImageAttachment,
-  isLocalImageAttachment,
   isAudioAttachment,
+  isFailedUpload,
+  isFileAttachment,
+  isImageAttachment,
+  isLocalAttachment,
   isLocalAudioAttachment,
-  isVoiceRecordingAttachment,
-  isLocalVoiceRecordingAttachment,
-  isVideoAttachment,
+  isLocalFileAttachment,
+  isLocalImageAttachment,
+  isLocalUploadAttachment,
   isLocalVideoAttachment,
+  isLocalVoiceRecordingAttachment,
+  isScrapedContent,
+  isVideoAttachment,
+  isVoiceRecordingAttachment,
 } from '../../../src/messageComposer/attachmentIdentity';
 
 describe('attachmentIdentity', () => {
@@ -81,34 +82,40 @@ describe('attachmentIdentity', () => {
     });
 
     it('should return true for attachments with mime_type not in supportedVideoFormat', () => {
-      const attachment = { mime_type: 'application/pdf', type: 'audio' };
+      const attachment = {
+        custom: { mime_type: 'application/pdf' },
+        type: 'audio',
+      };
       expect(isFileAttachment(attachment, ['video/mp4'])).toBe(true);
     });
 
     it('should return false for attachments with mime_type not in supportedVideoFormat but declared as video type', () => {
-      const attachment = { mime_type: 'application/pdf', type: 'video' };
+      const attachment = {
+        custom: { mime_type: 'application/pdf' },
+        type: 'video',
+      };
       expect(isFileAttachment(attachment, ['video/mp4'])).toBe(false);
     });
 
     it('should return false for attachments with mime_type in supportedVideoFormat', () => {
-      const attachment = { mime_type: 'video/mp4', type: 'video' };
+      const attachment = { custom: { mime_type: 'video/mp4' }, type: 'video' };
       expect(isFileAttachment(attachment, ['video/mp4'])).toBe(false);
     });
   });
 
   describe('isLocalFileAttachment', () => {
     it('should return true for local file attachments', () => {
-      const attachment = { type: 'file', localMetadata: { id: 'test-id' } };
+      const attachment = { custom: {}, type: 'file', localMetadata: { id: 'test-id' } };
       expect(isLocalFileAttachment(attachment)).toBe(true);
     });
 
     it('should return false for non-local file attachments', () => {
-      const attachment = { type: 'file' };
+      const attachment = { custom: {}, type: 'file' };
       expect(isLocalFileAttachment(attachment)).toBe(false);
     });
 
     it('should return false for local non-file attachments', () => {
-      const attachment = { type: 'image', localMetadata: { id: 'test-id' } };
+      const attachment = { custom: {}, type: 'image', localMetadata: { id: 'test-id' } };
       expect(isLocalFileAttachment(attachment)).toBe(false);
     });
   });
@@ -212,30 +219,60 @@ describe('attachmentIdentity', () => {
     });
 
     it('should return true for attachments with mime_type in supportedVideoFormat', () => {
-      const attachment = { mime_type: 'video/mp4' };
+      const attachment = { custom: { mime_type: 'video/mp4' } };
       expect(isVideoAttachment(attachment, ['video/mp4'])).toBe(true);
     });
 
     it('should return false for attachments with mime_type not in supportedVideoFormat', () => {
-      const attachment = { mime_type: 'application/pdf' };
+      const attachment = { custom: { mime_type: 'application/pdf' } };
       expect(isVideoAttachment(attachment, ['video/mp4'])).toBe(false);
     });
   });
 
   describe('isLocalVideoAttachment', () => {
     it('should return true for local video attachments', () => {
-      const attachment = { type: 'video', localMetadata: { id: 'test-id' } };
+      const attachment = { custom: {}, type: 'video', localMetadata: { id: 'test-id' } };
       expect(isLocalVideoAttachment(attachment)).toBe(true);
     });
 
     it('should return false for non-local video attachments', () => {
-      const attachment = { type: 'video' };
+      const attachment = { custom: {}, type: 'video' };
       expect(isLocalVideoAttachment(attachment)).toBe(false);
     });
 
     it('should return false for local non-video attachments', () => {
-      const attachment = { type: 'file', localMetadata: { id: 'test-id' } };
+      const attachment = { custom: {}, type: 'file', localMetadata: { id: 'test-id' } };
       expect(isLocalVideoAttachment(attachment)).toBe(false);
+    });
+  });
+  describe('isFailedUpload', () => {
+    it('should return true for an attachment whose upload failed', () => {
+      const attachment = {
+        type: 'image',
+        localMetadata: { id: 'test-id', uploadState: 'failed' },
+      };
+      expect(isFailedUpload(attachment)).toBe(true);
+    });
+
+    it.each(['pending', 'uploading', 'finished', 'blocked'])(
+      'should return false for upload state %s',
+      (uploadState) => {
+        const attachment = {
+          type: 'image',
+          localMetadata: { id: 'test-id', uploadState },
+        };
+        expect(isFailedUpload(attachment)).toBe(false);
+      },
+    );
+
+    it('should return false for a local attachment carrying no upload state', () => {
+      const attachment = { type: 'image', localMetadata: { id: 'test-id' } };
+      expect(isFailedUpload(attachment)).toBe(false);
+    });
+
+    it('should return false for a plain attachment', () => {
+      expect(isFailedUpload({ type: 'image' })).toBe(false);
+      expect(isFailedUpload(undefined)).toBe(false);
     });
   });
 });

@@ -1,8 +1,9 @@
 import type { StreamChat } from './client';
 import type { Poll, PollState } from './poll';
-import type { PollResponse, PollVote } from './types';
+import type { PollResponseData, PollVoteResponseData, UserResponse } from './types';
 import { generateUUIDv4 } from './utils';
 import { hasPending, withoutConcurrency } from './utils/concurrency';
+import { nowNs } from './utils/time';
 
 type OptionId = string;
 
@@ -13,18 +14,17 @@ type VoteState = Pick<
 >;
 
 // An own vote change is the server vote of a cast, or the option of a removal
-type OwnVoteChange = { optionId: OptionId; vote?: PollVote };
+type OwnVoteChange = { optionId: OptionId; vote?: PollVoteResponseData };
 
 // How long to wait for missing WS events of own vote changes after the last request finished
 const CATCH_UP_TIMEOUT_MS = 3000;
 
 /**
- * Optimistic updates for the current user's votes on a poll. Vote changes are shown right away.
- * While any of them is not confirmed by its WS event, vote events are only stored, as the server
- * state they carry does not contain the pending changes yet. Once all are confirmed (a failed
- * request counts as confirmed), the server's vote state is shown, which also reverts failed changes.
- * Vote requests are sent one after another, so the server applies them in the order they were made.
- * A lost WS event is recovered from after CATCH_UP_TIMEOUT_MS (see applySucceededChanges).
+ * Optimistic updates for the current user's votes on a poll. While any change awaits its WS event,
+ * vote events are only stored (the state they carry lacks the pending changes). Once all are
+ * confirmed (a failed request counts as confirmed), the server's vote state is shown, which reverts
+ * failed changes. A lost WS event is recovered from after CATCH_UP_TIMEOUT_MS (see
+ * applySucceededChanges).
  */
 export class OptimisticPollVotes {
   // The server's vote state. WS events only carry the vote that changed, so own votes are kept here.
@@ -61,9 +61,12 @@ export class OptimisticPollVotes {
    */
   castVote = (optionId: OptionId, messageId: string) => {
     const sendRequest = () =>
-      this.client.castPollVote(messageId, this.poll.id, { option_id: optionId });
+      this.client.castPollVote(
+        { message_id: messageId, poll_id: this.poll.id },
+        { vote: { option_id: optionId } },
+      );
     const state = this.poll.data;
-    // already voted for this option, there is nothing to show
+    // Already voted for this option: nothing to show.
     if (state.ownVotesByOptionId[optionId]) return this.send(sendRequest);
 
     const replacedVotes = state.enforce_unique_vote
@@ -77,26 +80,29 @@ export class OptimisticPollVotes {
     );
     return this.track(sendRequest, (response) => ({
       optionId,
-      vote: response.vote as PollVote,
+      vote: response.vote,
     }));
   };
 
-  // Removes a vote, right away.
   removeVote = (voteId: string, messageId: string) => {
     const sendRequest = (id: string) =>
-      this.client.removePollVote(messageId, this.poll.id, id);
+      this.client.deletePollVote({
+        message_id: messageId,
+        poll_id: this.poll.id,
+        vote_id: id,
+      });
     const state = this.poll.data;
     const vote = Object.values(state.ownVotesByOptionId).find(({ id }) => id === voteId);
-    // not a shown own vote, there is nothing to show
+    // Not a shown own vote: nothing to show.
     if (!vote?.option_id) return this.send(() => sendRequest(voteId));
 
     const optionId = vote.option_id;
     this.poll.state.partialNext(applyOwnVoteDelta(state, { remove: [vote] }));
     return this.track(
-      // runs when the removal's turn comes, so a preceding cast of the vote has finished
+      // Runs on the removal's turn, after a preceding cast of the vote has finished.
       () => {
         const serverVoteId = this.getServerVoteId(vote);
-        // the vote's cast failed, so there is nothing to remove
+        // The cast failed: nothing to remove.
         return serverVoteId ? sendRequest(serverVoteId) : Promise.resolve(undefined);
       },
       () => ({ optionId }),
@@ -108,18 +114,21 @@ export class OptimisticPollVotes {
     try {
       return (await withoutConcurrency(this.requestTag, sendRequest)) as T;
     } finally {
-      // once nothing is left to send, wait for the WS events of the pending changes
+      // Nothing left to send: wait for the WS events of the pending changes.
       if (!hasPending(this.requestTag)) this.scheduleCatchUp();
     }
   };
 
   // Stores the vote state of a WS vote event and returns the vote fields to show, if any.
   handleVoteEvent = (
-    poll: PollResponse,
+    poll: PollResponseData,
     {
       confirmsOwnVote,
       ownVotesByOptionId,
-    }: { confirmsOwnVote: boolean; ownVotesByOptionId: Record<OptionId, PollVote> },
+    }: {
+      confirmsOwnVote: boolean;
+      ownVotesByOptionId: Record<OptionId, PollVoteResponseData>;
+    },
   ): Partial<PollState> => {
     this.serverVoteState = {
       latest_votes_by_option: poll.latest_votes_by_option,
@@ -152,7 +161,7 @@ export class OptimisticPollVotes {
     try {
       response = await this.send(async () => {
         const result = await sendRequest();
-        // recorded before the next request is sent, as a removal looks up the vote id in here
+        // Recorded before the next request is sent: a removal looks up the vote ID in here.
         if (result !== undefined) this.succeededChanges.push(toChange(result));
         return result;
       });
@@ -171,26 +180,25 @@ export class OptimisticPollVotes {
   };
 
   // The vote shown for a cast until the server's vote arrives
-  private createPlaceholderVote = (optionId: OptionId): PollVote => {
-    const now = new Date().toISOString();
+  private createPlaceholderVote = (optionId: OptionId): PollVoteResponseData => {
+    const now = nowNs();
     return {
       created_at: now,
       id: `local-${generateUUIDv4()}`,
       option_id: optionId,
       poll_id: this.poll.id,
       updated_at: now,
-      user: this.client.user,
-      user_id: this.client.userID,
+      user: this.client.user as UserResponse,
+      user_id: this.client.userId,
     };
   };
 
   /**
-   * The server id of a vote to remove, once everything sent before the removal has finished. Casts
-   * and removals of an option alternate, so the option's last succeeded change tells: a cast is the
-   * vote being removed (e.g. a placeholder), a removal means the cast in between failed. Without
-   * one, the server's own vote of the option is the vote being removed.
+   * The server ID of the vote to remove. Casts and removals of an option alternate, so the option's
+   * last succeeded change tells: a cast is the vote being removed (e.g. a placeholder), a removal
+   * means the cast in between failed. Without one, the server's own vote of the option is used.
    */
-  private getServerVoteId = (vote: PollVote) => {
+  private getServerVoteId = (vote: PollVoteResponseData) => {
     for (let i = this.succeededChanges.length - 1; i >= 0; i--) {
       const change = this.succeededChanges[i];
       if (change.optionId === vote.option_id) return change.vote?.id;
@@ -215,10 +223,8 @@ export class OptimisticPollVotes {
 
   /**
    * A WS event of an own vote change got lost, so the server's own votes are stale. All requests
-   * have finished (the timeout starts once nothing is left to send and a new request cancels it),
-   * so applying the succeeded changes in order gives the server's own votes (changes whose events
-   * did arrive end up the same). They are shown with the vote counts of the last WS event, which
-   * contain the other users' votes too.
+   * have finished, so replaying the succeeded changes in order gives the server's own votes. They
+   * are shown with the vote counts of the last WS event, which include other users' votes.
    */
   private applySucceededChanges = () => {
     const { enforce_unique_vote } = this.poll.data;
@@ -255,7 +261,10 @@ function pickVoteState(state: PollState): VoteState {
  */
 function applyOwnVoteDelta(
   state: PollState,
-  { add = [], remove = [] }: { add?: PollVote[]; remove?: PollVote[] },
+  {
+    add = [],
+    remove = [],
+  }: { add?: PollVoteResponseData[]; remove?: PollVoteResponseData[] },
 ): VoteState & Pick<PollState, 'maxVotedOptionIds'> {
   const ownVotesByOptionId = { ...state.ownVotesByOptionId };
   const voteCountsByOption = { ...state.vote_counts_by_option };
@@ -269,7 +278,7 @@ function applyOwnVoteDelta(
     const optionId = vote.option_id;
     if (!optionId) continue;
     delete ownVotesByOptionId[optionId];
-    // the server omits options without votes, so a count that drops to 0 is removed
+    // The server omits options without votes, so a count that drops to 0 is removed.
     const optionVoteCount = (voteCountsByOption[optionId] ?? 0) - 1;
     if (optionVoteCount > 0) {
       voteCountsByOption[optionId] = optionVoteCount;
@@ -310,7 +319,7 @@ function applyOwnVoteDelta(
 }
 
 export function getMaxVotedOptionIds(
-  voteCountsByOption: PollResponse['vote_counts_by_option'],
+  voteCountsByOption: PollResponseData['vote_counts_by_option'],
 ) {
   let maxVotes = 0;
   let winningOptions: string[] = [];

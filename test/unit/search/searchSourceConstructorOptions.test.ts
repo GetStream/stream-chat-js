@@ -21,11 +21,11 @@ describe('search source query parameters as constructor options', () => {
     const source = new ChannelSearchSource(client, {
       filters: { type: 'messaging' },
       searchOptions: { presence: true },
-      sort: { last_message_at: -1 },
+      sort: [{ field: 'last_message_at', direction: -1 }],
     });
 
     expect(source.filters).toEqual({ type: 'messaging' });
-    expect(source.sort).toEqual({ last_message_at: -1 });
+    expect(source.sort).toEqual([{ field: 'last_message_at', direction: -1 }]);
     expect(source.searchOptions).toEqual({ presence: true });
   });
 
@@ -33,22 +33,22 @@ describe('search source query parameters as constructor options', () => {
     const client = getClientWithUser({ id: 'u1' });
     const source = new UserSearchSource(client, {
       filters: { role: { $eq: 'admin' } },
-      sort: [{ name: 1 }],
+      sort: [{ field: 'name', direction: 1 }],
     });
 
     expect(source.filters).toEqual({ role: { $eq: 'admin' } });
-    expect(source.sort).toEqual([{ name: 1 }]);
+    expect(source.sort).toEqual([{ field: 'name', direction: 1 }]);
   });
 
   it('seeds ChannelMemberSearchSource', () => {
     const client = getClientWithUser({ id: 'u1' });
     const source = new ChannelMemberSearchSource(channelStub(client), {
       filters: { user_id: 'user-2' },
-      sort: [{ user_id: 1 }],
+      sort: [{ field: 'user_id', direction: 1 }],
     });
 
     expect(source.filters).toEqual({ user_id: 'user-2' });
-    expect(source.sort).toEqual([{ user_id: 1 }]);
+    expect(source.sort).toEqual([{ field: 'user_id', direction: 1 }]);
   });
 
   it('seeds all six MessageSearchSource parameters', () => {
@@ -56,17 +56,19 @@ describe('search source query parameters as constructor options', () => {
     const source = new MessageSearchSource(client, {
       channelQueryFilters: { type: 'team' },
       channelQueryOptions: { presence: false },
-      channelQuerySort: { last_message_at: -1 },
+      channelQuerySort: [{ field: 'last_message_at', direction: -1 }],
       messageSearchChannelFilters: { type: 'messaging' },
       messageSearchFilters: { type: 'regular' },
-      messageSearchSort: { created_at: 1 },
+      messageSearchSort: [{ field: 'created_at', direction: 1 }],
     });
 
     expect(source.messageSearchChannelFilters).toEqual({ type: 'messaging' });
     expect(source.messageSearchFilters).toEqual({ type: 'regular' });
-    expect(source.messageSearchSort).toEqual({ created_at: 1 });
+    expect(source.messageSearchSort).toEqual([{ field: 'created_at', direction: 1 }]);
     expect(source.channelQueryFilters).toEqual({ type: 'team' });
-    expect(source.channelQuerySort).toEqual({ last_message_at: -1 });
+    expect(source.channelQuerySort).toEqual([
+      { field: 'last_message_at', direction: -1 },
+    ]);
     expect(source.channelQueryOptions).toEqual({ presence: false });
   });
 
@@ -74,15 +76,15 @@ describe('search source query parameters as constructor options', () => {
     const client = getClientWithUser({ id: 'u1' });
     const source = new MentionsSearchSource(channelStub(client), {
       memberFilters: { user_id: 'user-2' },
-      memberSort: [{ user_id: 1 }],
+      memberSort: [{ field: 'user_id', direction: 1 }],
       userFilters: { role: { $eq: 'admin' } },
-      userSort: [{ name: 1 }],
+      userSort: [{ field: 'name', direction: 1 }],
     });
 
     expect(source.userFilters).toEqual({ role: { $eq: 'admin' } });
-    expect(source.userSort).toEqual([{ name: 1 }]);
+    expect(source.userSort).toEqual([{ field: 'name', direction: 1 }]);
     expect(source.memberFilters).toEqual({ user_id: 'user-2' });
-    expect(source.memberSort).toEqual([{ user_id: 1 }]);
+    expect(source.memberSort).toEqual([{ field: 'user_id', direction: 1 }]);
   });
 
   it('leaves query parameters undefined when no options are given', () => {

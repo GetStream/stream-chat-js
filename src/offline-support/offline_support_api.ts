@@ -1,37 +1,49 @@
 import type {
-  APIErrorResponse,
+  APIError,
   ChannelResponse,
   Event,
+  EventPayload,
+  EventType,
   LocalMessage,
-  Message,
   MessageResponse,
+  UserResponse,
 } from '../types';
 
 import type {
+  ExecuteBatchDBQueriesType,
   OfflineDBApi,
   OfflineDBState,
   PendingTask,
+  PendingTaskOf,
   PrepareBatchDBQueries,
+  QueueableType,
 } from './types';
 import { OfflineError } from './types';
+import { isEphemeral } from '../errors';
 import type { StreamChat } from '../client';
 import type { AxiosError } from 'axios';
 import { OfflineDBSyncManager } from './offline_sync_manager';
-import { StateStore } from '../store';
+import { chatLoggerSystem } from '../logger';
+import { StateStore } from '@stream-io/state-store';
 import {
-  channelHasReadEvents,
   channelTracksReadLocally,
-  localMessageToNewMessagePayload,
+  formatMessage,
+  isThreadOnlyReply,
   runDetached,
 } from '../utils';
+import { nowNs } from '../utils/time';
 import { isMessageUpdateReplayable } from './util';
+import { QUEUEABLE_OPERATIONS, runQueueableOperation } from './queueableOperations';
+import type { QueueableOperation } from './queueableOperations';
+
+const logger = chatLoggerSystem.getLogger('offline-db');
+import type { WSEvent } from '../gen/models';
 
 /**
- * Abstract base class for an offline database implementation used with StreamChat.
- *
- * Manages state and synchronization logic between the client and the offline database,
- * as well as contains the API providing core functionality for tracking and persisting
- * offline data.
+ * Base class for an offline DB. A subclass provides the storage by implementing the abstract
+ * {@link OfflineDBApi} members; the event handlers, channel guards and pending-task queue are built
+ * on them. A handler takes `execute`, which defaults to `true`: with `false` it returns its
+ * queries unexecuted, for one `executeSqlBatch`.
  *
  * @abstract
  */
@@ -45,11 +57,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     syncMaxEventCount,
   }: {
     client: StreamChat;
-    /**
-     * Optional positive cap forwarded to the {@link OfflineDBSyncManager}, which
-     * owns sync. `undefined` or any non-positive value means "no limit". See
-     * {@link OfflineDBSyncManager.syncMaxEventCount}.
-     */
+    /** Forwarded to {@link OfflineDBSyncManager.syncMaxEventCount}. */
     syncMaxEventCount?: number;
   }) {
     this.client = client;
@@ -60,420 +68,134 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     });
     this.state = new StateStore<OfflineDBState>({
       initialized: false,
-      userId: this.client.userID,
+      userId: this.client.userId,
     });
   }
 
-  /**
-   * @abstract
-   * Inserts a reaction into the DB.
-   * Will write to:
-   * - The reactions table with the new reaction
-   * - The message table with the message containing the new reaction
-   * - The users table with any users associated
-   * Will return the prepared queries for delayed execution (even if they are
-   * already executed).
-   * @param {DBInsertReactionType} options
-   * @returns {Promise<ExecuteBatchDBQueriesType>}
-   */
+  /** Writes the reaction, the message carrying it and the associated users. */
   abstract insertReaction: OfflineDBApi['insertReaction'];
 
-  /**
-   * @abstract
-   * Upserts the list of CIDs for a filter + sort query hash.
-   * Will write to only the table containing the cids.
-   * Will return the prepared queries for delayed execution (even if they are
-   * already executed).
-   * @param {DBUpsertCidsForQueryType} options
-   * @returns {Promise<ExecuteBatchDBQueriesType>}
-   */
+  /** Upserts the CIDs for a filter + sort query hash (cids table only). */
   abstract upsertCidsForQuery: OfflineDBApi['upsertCidsForQuery'];
 
   /**
-   * @abstract
-   * Upserts the channels passed as an argument within the DB. Relies on
-   * writing the properties we need from a ChannelResponse into the adequate
-   * tables.
-   * Will write to:
-   * - The channels table with the channel data
-   * - The messages table with each message associated
-   * - The reactions table if the messages contain reactions
-   * - The users table with all users associated
-   * - The members table for membership and members
-   * - The polls table for any messages that are polls
-   * - The reads table for each user
-   * Will return the prepared queries for delayed execution (even if they are
-   * already executed).
-   * @param {DBUpsertChannelsType} options
-   * @returns {Promise<ExecuteBatchDBQueriesType>}
+   * Upserts the channels and their messages, reactions, users, members, polls (for poll messages)
+   * and reads, each kind into its own table.
    */
   abstract upsertChannels: OfflineDBApi['upsertChannels'];
 
-  /**
-   * @abstract
-   * Upserts the current active user's sync status.
-   * Will only write to the sync status table.
-   * Will return the prepared queries for delayed execution (even if they are
-   * already executed).
-   * @param {DBUpsertUserSyncStatusType} options
-   * @returns {Promise<ExecuteBatchDBQueriesType>}
-   */
+  /** Upserts the current user's sync status (sync status table only). */
   abstract upsertUserSyncStatus: OfflineDBApi['upsertUserSyncStatus'];
 
-  /**
-   * @abstract
-   * Upserts the app settings for the current Stream App into the DB. It
-   * is only intended to be run once per lifecycle of the app.
-   * Will only write to the respective app settings table.
-   * Will return the prepared queries for delayed execution (even if they are
-   * already executed).
-   * @param {DBUpsertAppSettingsType} options
-   * @returns {Promise<ExecuteBatchDBQueriesType>}
-   */
+  /** Upserts the app settings (app settings table only). Meant to run once per app lifecycle. */
   abstract upsertAppSettings: OfflineDBApi['upsertAppSettings'];
 
-  /**
-   * @abstract
-   * Upserts a poll fully in the DB.
-   * Will write to the polls table. It should not update the message
-   * associated due to how the poll state works.
-   * Will return the prepared queries for delayed execution (even if they are
-   * already executed).
-   * @param {DBUpsertPollType} options
-   * @returns {Promise<ExecuteBatchDBQueriesType>}
-   */
+  /** Upserts a poll (polls table only). It does not update the poll's message. */
   abstract upsertPoll: OfflineDBApi['upsertPoll'];
 
-  /**
-   * @abstract
-   * Upserts only the channel.data for the provided channels in the DB.
-   * Will only write to the channels table.
-   * Will return the prepared queries for delayed execution (even if they are
-   * already executed).
-   * @param {DBUpsertChannelDataType} options
-   * @returns {Promise<ExecuteBatchDBQueriesType>}
-   */
+  /** Upserts only `channel.data` (channels table only). */
   abstract upsertChannelData: OfflineDBApi['upsertChannelData'];
 
-  /**
-   * @abstract
-   * Upserts the provided reads in the DB.
-   * Will write to:
-   * - The reads table
-   * - The users table for each user associated with a read
-   * Will return the prepared queries for delayed execution (even if they are
-   * already executed).
-   * @param {DBUpsertReadsType} options
-   * @returns {Promise<ExecuteBatchDBQueriesType>}
-   */
+  /** Upserts the reads and the users they reference. */
   abstract upsertReads: OfflineDBApi['upsertReads'];
 
-  /**
-   * @abstract
-   * Upserts the messages in the DB.
-   * Will write to:
-   * - The messages table
-   * - The reads table
-   * - The polls table (if any messages contain polls)
-   * - The reactions table (if any messages contain reactions)
-   * - The users table
-   * Will return the prepared queries for delayed execution (even if they are
-   * already executed).
-   * @param {DBUpsertMessagesType} options
-   * @returns {Promise<ExecuteBatchDBQueriesType>}
-   */
+  /** Upserts the messages with their reads, polls, reactions and users. */
   abstract upsertMessages: OfflineDBApi['upsertMessages'];
 
-  /**
-   * @abstract
-   * Upserts the members in the DB.
-   * Will write to:
-   * - The users table (for each user associated with a member)
-   * - The members table
-   * Will return the prepared queries for delayed execution (even if they are
-   * already executed).
-   * @param {DBUpsertMembersType} options
-   * @returns {Promise<ExecuteBatchDBQueriesType>}
-   */
+  /** Upserts the members and their users. */
   abstract upsertMembers: OfflineDBApi['upsertMembers'];
 
   /**
-   * @abstract
-   * Updates a reaction in the DB. Will update the DB the same way
-   * a reaction.updated event would (it assumes enforce_unique is true
-   * and removes all other reactions associated with the user.
-   * Will write to the reactions table.
-   * Will return the prepared queries for delayed execution (even if they are
-   * already executed).
-   * @param {DBUpdateReactionType} options
-   * @returns {Promise<ExecuteBatchDBQueriesType>}
+   * Applies a reaction as a `reaction.updated` event would: it assumes `enforce_unique` and
+   * replaces the user's other reactions. Also writes the reacting user and the message's reaction
+   * groups.
    */
   abstract updateReaction: OfflineDBApi['updateReaction'];
 
-  /**
-   * @abstract
-   * Updates a single message in the DB. This is used as a faster
-   * alternative to upsertMessages with more optimized queries.
-   * Will write to the messages table.
-   * Will return the prepared queries for delayed execution (even if they are
-   * already executed).
-   * @param {DBUpdateMessageType} options
-   * @returns {Promise<ExecuteBatchDBQueriesType>}
-   */
+  /** Updates a single message (messages table only) with leaner queries than `upsertMessages`. */
   abstract updateMessage: OfflineDBApi['updateMessage'];
 
-  /**
-   * @abstract
-   * Fetches the provided draft from the DB. Should return as close to
-   * the server side DraftResponse as possible.
-   * @param {DBGetDraftType} options
-   * @returns {Promise<DraftResponse | null>}
-   */
+  /** Returns the draft as close to the server's `DraftResponse` as possible. */
   abstract getDraft: OfflineDBApi['getDraft'];
-  /**
-   * @abstract
-   * Upserts a draft in the DB.
-   * Will write to the draft table upserting the draft.
-   * Will return the prepared queries for delayed execution (even if they are
-   * already executed).
-   * @param {DBUpsertDraftType} options
-   * @returns {Promise<ExecuteBatchDBQueriesType>}
-   */
+
+  /** Upserts a draft (drafts table only). */
   abstract upsertDraft: OfflineDBApi['upsertDraft'];
-  /**
-   * @abstract
-   * Deletes a draft from the DB.
-   * Will write to the draft table removing the draft.
-   * Will return the prepared queries for delayed execution (even if they are
-   * already executed).
-   * @param {DBDeleteDraftType} options
-   * @returns {Promise<ExecuteBatchDBQueriesType>}
-   */
+
+  /** Deletes a draft (drafts table only). */
   abstract deleteDraft: OfflineDBApi['deleteDraft'];
 
   /**
-   * @abstract
-   * Fetches the provided channels from the DB and aggregates all data associated
-   * with them in a single ChannelAPIResponse. The implementation itself is responsible
-   * for aggregating and serialization of all of the data. Should return as close to
-   * the server side ChannelAPIResponse as possible.
-   * @param {DBGetChannelsType} options
-   * @returns {Promise<Omit<ChannelAPIResponse, 'duration'>[] | null>}
+   * Returns each channel with all its stored data aggregated, as close to the server's
+   * `ChannelStateResponseFields` as possible. The implementation does the aggregation.
    */
   abstract getChannels: OfflineDBApi['getChannels'];
 
   /**
-   * @abstract
-   * Fetches the channels from the DB that were the last known response to a filters & sort
-   * hash as a query and aggregates all data associated with them in a single ChannelAPIResponse.
-   * The implementation itself is responsible for aggregating and serialization of all of the data.
-   * Should return as close to the server side ChannelAPIResponse as possible.
-   * @param {DBGetChannelsForQueryType} options
-   * @returns {Promise<Omit<ChannelAPIResponse, 'duration'>[] | null>}
+   * The channels last cached for a filters + sort hash, in query order, with the predefined filter
+   * that produced them. Channels are aggregated as in `getChannels`.
    */
   abstract getChannelsForQuery: OfflineDBApi['getChannelsForQuery'];
 
-  /**
-   * @abstract
-   * Will return a list of all available CIDs in the DB. The same can be achieved
-   * by fetching all channels, however this is meant to be much faster as a query.
-   * @returns {Promise<string[]>}
-   */
+  /** All CIDs in the DB. Much cheaper than fetching all channels. */
   abstract getAllChannelCids: OfflineDBApi['getAllChannelCids'];
 
-  /**
-   * @abstract
-   * Fetches the timestamp of the last sync of the DB.
-   * @param {DBGetLastSyncedAtType} options
-   * @returns {Promise<string | undefined>}
-   */
   abstract getLastSyncedAt: OfflineDBApi['getLastSyncedAt'];
 
-  /**
-   * @abstract
-   * Fetches all pending tasks from the DB. It will return them in an
-   * ordered fashion by the time they were created.
-   * @param {DBGetPendingTasksType} [conditions]
-   * @returns {Promise<PendingTask[]>}
-   */
+  /** Pending tasks ordered by creation time, optionally only one message's. */
   abstract getPendingTasks: OfflineDBApi['getPendingTasks'];
 
-  /**
-   * @abstract
-   * Fetches the app settings stored in the DB. Is mainly meant to be used
-   * only while offline and opening the application, as we only update the
-   * app settings whenever they are fetched again so it has the potential to
-   * be stale.
-   * @param {DBGetAppSettingsType} options
-   * @returns {Promise<AppSettingsAPIResponse | null>}
-   */
+  /** The stored app settings. They only refresh when fetched again, so they can be stale. */
   abstract getAppSettings: OfflineDBApi['getAppSettings'];
 
-  /**
-   * @abstract
-   * Fetches reactions from the DB for a given filter & sort hash and
-   * for a given message ID.
-   * @param {DBGetReactionsType} options
-   * @returns {Promise<ReactionResponse[] | null>}
-   */
   abstract getReactions: OfflineDBApi['getReactions'];
 
-  /**
-   * @abstract
-   * Executes multiple queries in a batched fashion. It will also be done
-   * within a transaction.
-   * @param {ExecuteBatchDBQueriesType} queries
-   * @returns {Promise<unknown>}
-   */
+  /** Runs the queries in one transaction. */
   abstract executeSqlBatch: OfflineDBApi['executeSqlBatch'];
 
-  /**
-   * @abstract
-   * Adds a pending task to the pending tasks table. Can only be one of the
-   * supported types of pending tasks, otherwise its execution will throw.
-   * Will return the prepared queries for delayed execution (even if they are
-   * already executed).
-   * @param {PendingTask} task
-   * @returns {Promise<() => Promise<void>>}
-   */
+  /** Adds a pending task. Executing a task of an unsupported type throws. */
   abstract addPendingTask: OfflineDBApi['addPendingTask'];
 
-  /**
-   * @abstract
-   * Updates a pending task in the DB, given its ID.
-   * Will return the prepared queries for delayed execution (even if they are
-   * already executed).
-   * @param {DBUpdatePendingTaskType} options
-   * @returns {Promise<ExecuteBatchDBQueriesType>}
-   */
   abstract updatePendingTask: OfflineDBApi['updatePendingTask'];
 
-  /**
-   * @abstract
-   * Deletes a pending task from the DB, given its ID.
-   * Will return the prepared queries for delayed execution (even if they are
-   * already executed).
-   * @param {DBDeletePendingTaskType} options
-   * @returns {Promise<ExecuteBatchDBQueriesType>}
-   */
   abstract deletePendingTask: OfflineDBApi['deletePendingTask'];
 
-  /**
-   * @abstract
-   * Deletes a reaction from the DB.
-   * Will write to the reactions table removing the reaction.
-   * Will return the prepared queries for delayed execution (even if they are
-   * already executed).
-   * @param {DBDeleteReactionType} options
-   * @returns {Promise<ExecuteBatchDBQueriesType>}
-   */
   abstract deleteReaction: OfflineDBApi['deleteReaction'];
 
-  /**
-   * @abstract
-   * Deletes a member from the DB.
-   * Will only write to the members table.
-   * Will return the prepared queries for delayed execution (even if they are
-   * already executed).
-   * @param {DBDeleteMemberType} options
-   * @returns {Promise<ExecuteBatchDBQueriesType>}
-   */
   abstract deleteMember: OfflineDBApi['deleteMember'];
 
-  /**
-   * @abstract
-   * Deletes a channel from the DB.
-   * It will also delete all other entities associated with the channel in
-   * a cascading fashion (messages, reactions, members etc.).
-   * Will return the prepared queries for delayed execution (even if they are
-   * already executed).
-   * @param {DBDeleteChannelType} options
-   * @returns {Promise<ExecuteBatchDBQueriesType>}
-   */
+  /** Deletes the channel and everything associated with it (messages, reactions, members, ...). */
   abstract deleteChannel: OfflineDBApi['deleteChannel'];
 
-  /**
-   * @abstract
-   * Deletes multiple messages for a given channel. Works as `channel.truncated` would.
-   * Should remove entities primarily from the messages table and then from all associated
-   * tables in a cascading fashion (reactions, polls etc.).
-   * Will return the prepared queries for delayed execution (even if they are
-   * already executed).
-   * @param {DBDeleteMessagesForChannelType} options
-   * @returns {Promise<ExecuteBatchDBQueriesType>}
-   */
+  /** Deletes a channel's messages as `channel.truncated` would, cascading to their reactions. */
   abstract deleteMessagesForChannel: OfflineDBApi['deleteMessagesForChannel'];
 
-  /**
-   * @abstract
-   * Deletes all pending tasks from the DB.
-   * Will only update the pending tasks table.
-   * Will return the prepared queries for delayed execution (even if they are
-   * already executed).
-   * @param {DBDropPendingTasksType} options
-   * @returns {Promise<ExecuteBatchDBQueriesType>}
-   */
+  /** Deletes all pending tasks of a message (pending tasks table only). */
   abstract dropPendingTasks: OfflineDBApi['dropPendingTasks'];
 
-  /**
-   * @abstract
-   * Deletes a message from the DB.
-   * All other entities associated with the message will also be deleted
-   * in a cascading fashion (reactions, polls etc.).
-   * Will return the prepared queries for delayed execution (even if they are
-   * already executed).
-   * @param {DBDeleteMessageType} options
-   * @returns {Promise<ExecuteBatchDBQueriesType>}
-   */
+  /** Deletes the message and cascades to its reactions, polls, etc. */
   abstract hardDeleteMessage: OfflineDBApi['hardDeleteMessage'];
 
-  /**
-   * @abstract
-   * Updates a message with a deleted_at value in the DB.
-   * Will only update the messages table, as the message is simply marked
-   * as deleted and not removed from the DB.
-   * Will return the prepared queries for delayed execution (even if they are
-   * already executed).
-   * @param {DBDeleteMessageType} options
-   * @returns {Promise<ExecuteBatchDBQueriesType>}
-   */
+  /** Sets `deleted_at` on the message (messages table only) instead of removing it. */
   abstract softDeleteMessage: OfflineDBApi['softDeleteMessage'];
 
-  /**
-   * @abstract
-   * Drops all tables and reinitializes the connection to the DB.
-   * @returns {Promise<unknown>}
-   */
+  /** Drops all tables and reinitializes the DB connection. */
   abstract resetDB: OfflineDBApi['resetDB'];
 
-  /**
-   * @abstract
-   * A utility query that checks whether a specific channel exists in the DB.
-   * Technically the same as actually fetching that channel through other queries,
-   * but much faster.
-   * @param {DBChannelExistsType} options
-   * @returns {Promise<boolean>}
-   */
+  /** Whether the channel is in the DB. Much cheaper than fetching it. */
   abstract channelExists: OfflineDBApi['channelExists'];
 
-  /**
-   * @abstract
-   * Initializes the DB (typically creating a simple file handle as a connection pointer for
-   * SQLite and likely similar for other DBs).
-   * @returns {Promise<boolean>}
-   */
+  /** Opens the DB connection (for SQLite, typically a file handle). */
   abstract initializeDB: OfflineDBApi['initializeDB'];
 
   /**
-   * Initializes the DB as well as its syncManager for a given userId.
-   * It will update the DBs reactive state with initialization values.
-   * @param userId - the user ID for which we want to initialize
+   * Initializes the DB and its sync manager for a user, and updates `state`.
+   *
+   * @param userId - The user ID for which we want to initialize.
    */
   public init = async (userId: string) => {
     try {
       if (!this.shouldInitialize(userId)) {
-        // Note: We need this to return as changing the API is a breaking change.
-        // This will change in the next major release.
+        // `initializeDB` has to resolve to a boolean: changing it is a breaking change.
         const initialized = await this.initializeDB();
         if (initialized) {
           await this.syncManager.init();
@@ -484,13 +206,17 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
       }
     } catch (error) {
       this.state.partialNext({ initialized: false, userId: undefined });
-      console.log('Error Initializing DB:', error);
+      logger
+        .withExtraTags('init')
+        .error('Failed to initialize the offline database.', { error });
     }
   };
 
   /**
-   * Checks whether the DB should be initialized or if it has been initialized already.
-   * @param {string} userId - the user ID for which we want to check initialization
+   * Checks whether the DB is already initialized for a user.
+   *
+   * @param userId - The user ID for which we want to check initialization.
+   * @returns Whether the DB is initialized for `userId`.
    */
   public shouldInitialize(userId: string): boolean {
     const { userId: userIdFromState, initialized } = this.state.getLatestValue();
@@ -498,13 +224,11 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   }
 
   /**
-   * A utility method used to execute a query in a detached manner. The callback
-   * passed uses a reference to the DB itself and will handle errors gracefully
-   * and silently. Only really meant to be used for write queries that need to
-   * be run in synchronous functions.
-   * @param queryCallback - a callback wrapping all query logic that is to be executed
-   * @param method - a utility parameter used for proper logging (will make sure the method
-   * is logged on failure)
+   * Runs a write query detached, for synchronous callers. A failure is logged, not thrown. No-op
+   * until the DB is initialized.
+   *
+   * @param queryCallback - A callback wrapping all query logic that is to be executed.
+   * @param options.method - The method name logged on failure.
    */
   public executeQuerySafely = <T>(
     queryCallback: (db: AbstractOfflineDB) => Promise<T>,
@@ -518,124 +242,166 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   };
 
   /**
-   * A utility method used to guard a certain DB query with the possible non-existance
-   * of a channel inside of the DB. If the channel we want to guard against does not exist
-   * in the DB yet, it will try to:
+   * Runs `createQueries` so they cannot fail on the channel's foreign key. When the channel is
+   * not in the DB it is upserted first, from the event's channel or else the one in state. If
+   * neither exists the queries are dropped.
    *
-   * 1. Use the channel from the WS event
-   * 2. Use the channel from state
-   *
-   * and upsert the channels in the DB.
-   *
-   * If both fail, it will not execute the query as it would result in a foreign key constraint
-   * error.
-   *
-   * @param event - the WS event we are trying to process
-   * @param execute - whether to immediately execute the operation.
-   * @param forceUpdate - whether to upsert the channel data anyway
-   * @param createQueries - a callback function to creation of the queries that we want to execute
+   * @param options.event - The WS event we are trying to process.
+   * @param options.execute - Whether to immediately execute the queries. Defaults to `true`.
+   * @param options.forceUpdate - Whether to upsert the channel data even when it is stored.
+   *   Defaults to `false`.
+   * @param createQueries - Builds the queries. It receives the effective `execute` flag and must run
+   *   its queries when that is `true`, because the fast path relies on that write throwing.
+   * @returns The prepared queries.
    */
   public queriesWithChannelGuard = async (
     {
       event,
       execute = true,
       forceUpdate = false,
-    }: { event: Event; execute?: boolean; forceUpdate?: boolean },
+    }: {
+      event: Extract<
+        Event,
+        { channel?: any; cid?: any; channel_type?: any; channel_id?: any }
+      >;
+      execute?: boolean;
+      forceUpdate?: boolean;
+    },
     createQueries: (executeOverride?: boolean) => Promise<PrepareBatchDBQueries[]>,
   ) => {
-    const channelFromEvent = event.channel;
-    const cid = event.cid || channelFromEvent?.cid;
-    const type = event.type;
+    const channelFromEvent = (event as Extract<WSEvent, { channel?: any }>).channel;
+    const cid = (event as Extract<WSEvent, { cid?: any }>).cid || channelFromEvent?.cid;
 
     if (!cid) {
       return await createQueries(execute);
     }
-    // We want to upsert the channel data if we either:
-    // - Have forceUpdate set to true
-    // - The channel does not yet exist in the DB
-    // If a channel is not present in the db, we first fetch the channel data from the channel object.
-    // This can happen for example when a message.new event is received for a channel that is not in the db due to a channel being hidden.
-    const shouldUpsertChannelData = forceUpdate || !(await this.channelExists({ cid }));
-    if (shouldUpsertChannelData) {
-      let channelData = channelFromEvent;
-      if (!channelData && event.channel_type && event.channel_id) {
-        const channelFromState = this.client.channel(
-          event.channel_type,
-          event.channel_id,
-        );
-        if (channelFromState.initialized && !channelFromState.disconnected) {
-          channelData = channelFromState.data as unknown as ChannelResponse;
-        }
+
+    // Fast path: write first and probe for the channel only when the write fails (this runs on
+    // every live event and the probe is a native round-trip). Safe because the queries are upserts.
+    // Not available to `execute: false` (nothing to catch) or `forceUpdate` (always writes it).
+    if (execute && !forceUpdate) {
+      try {
+        return await createQueries(true);
+      } catch (error) {
+        // A missing channel row is the only failure this guard repairs.
+        if (await this.channelExists({ cid })) throw error;
       }
-      if (channelData) {
-        const channelQuery = await this.upsertChannelData({
-          channel: channelData,
-          execute: false,
-        });
-        if (channelQuery) {
-          const createdQueries = await createQueries(false);
-          const newQueries = [...channelQuery, ...createdQueries];
-          if (execute) {
-            await this.executeSqlBatch(newQueries);
-          }
-          return newQueries;
-        } else {
-          console.warn(
-            `Couldn't create channel queries on ${type} event for an initialized channel that is not in DB, skipping event`,
-            { event },
-          );
-          return [];
-        }
-      } else {
-        console.warn(
-          `Received ${type} event for a non initialized channel that is not in DB, skipping event`,
-          { event },
-        );
-        return [];
-      }
+      return await this.queriesBehindChannelGuard({
+        createQueries,
+        event,
+        execute: true,
+      });
     }
-    return await createQueries(execute);
+
+    if (!forceUpdate && (await this.channelExists({ cid }))) {
+      return await createQueries(execute);
+    }
+
+    return await this.queriesBehindChannelGuard({ createQueries, event, execute });
   };
 
   /**
-   * Handles a message.new event. Will always use a channel guard for the inner queries
-   * and it is going to make sure that both messages and reads are upserted. It will not
-   * try to fetch the reads from the DB first and it will rely on channel.state to handle
-   * the number of unreads.
-   * @param event - the WS event we are trying to process
-   * @param execute - whether to immediately execute the operation.
+   * Prepends the channel row to `createQueries`' output, sourced from the event or else the
+   * in-memory channel. Returns no queries when neither can supply it.
+   */
+  private queriesBehindChannelGuard = async ({
+    createQueries,
+    event,
+    execute,
+  }: {
+    createQueries: (executeOverride?: boolean) => Promise<PrepareBatchDBQueries[]>;
+    event: Extract<
+      Event,
+      { channel?: any; cid?: any; channel_type?: any; channel_id?: any }
+    >;
+    execute: boolean;
+  }) => {
+    const type = event.type;
+    const channelFromEvent = (event as Extract<WSEvent, { channel?: any }>).channel;
+    const event_ = event as Extract<WSEvent, { channel_type?: any }>;
+
+    let channelData = channelFromEvent;
+    if (!channelData && event_.channel_type && event_.channel_id) {
+      // `get`, not `ensure`: `ensure` would store an empty channel when none is loaded.
+      const channelFromState = this.client.channelManager.get(
+        `${event_.channel_type}:${event_.channel_id}`,
+      );
+      if (channelFromState?.initialized && !channelFromState.pendingDisposal) {
+        channelData = channelFromState.data as unknown as ChannelResponse;
+      }
+    }
+
+    if (!channelData) {
+      logger
+        .withExtraTags('queriesWithChannelGuard')
+        .warn(
+          `Received a "${type}" event for a non-initialized channel that is not in the database. Skipping the event.`,
+          { event },
+        );
+      return [];
+    }
+
+    const channelQuery = await this.upsertChannelData({
+      channel: channelData,
+      execute: false,
+    });
+
+    if (!channelQuery) {
+      logger
+        .withExtraTags('queriesWithChannelGuard')
+        .warn(
+          `Could not create channel queries on a "${type}" event for an initialized channel that is not in the database. Skipping the event.`,
+          { event },
+        );
+      return [];
+    }
+
+    const createdQueries = await createQueries(false);
+    const newQueries = [...channelQuery, ...createdQueries];
+    if (execute) {
+      await this.executeSqlBatch(newQueries);
+    }
+    return newQueries;
+  };
+
+  /**
+   * Upserts the message and, when another user sent it, the current user's read (from
+   * `channel.state`). The channel guard upserts a missing channel row only with `execute: false`;
+   * with `execute: true` (the default) the row is not guarded.
+   *
+   * @param payload.event - The WS event we are trying to process.
+   * @param payload.execute - Whether to immediately execute the queries. Defaults to `true`.
+   * @returns The prepared queries.
    */
   public handleNewMessage = async ({
     event,
     execute = true,
   }: {
-    event: Event;
+    event: EventPayload<'message.new'>;
     execute?: boolean;
   }) => {
     const client = this.client;
     const { cid, message, user } = event;
 
-    if (!message || (message.parent_id && !message.show_in_channel)) {
+    if (!message || isThreadOnlyReply(message)) {
       return [];
     }
 
-    const finalQueries = await this.queriesWithChannelGuard(
+    return await this.queriesWithChannelGuard(
       { event, execute },
-      async () => {
+      async (executeOverride) => {
         let queries = await this.upsertMessages({
           execute: false,
           messages: [message],
         });
         if (cid && client.user && client.user.id !== user?.id) {
           const userId = client.user.id;
-          const channel = client.activeChannels[cid];
-          // Persist the current user's read state for channels that track reads server-side. When the
-          // client opted into a local unread count, also persist it for read-events-disabled channels
-          // (e.g. livestreams) so the client-local count survives a cold start. The server never sends
-          // a read for those, so state.read[userId] may be absent here; fall back accordingly and rely
-          // on countUnread() (the aggregate the local count maintains) for the value.
+          const channel = client.channelManager.get(cid);
+          // Persists the read state for channels that track reads server-side, and for
+          // read-events-disabled channels with a local unread count (their `state.read[userId]`
+          // can be absent).
           const tracksReadLocally = channelTracksReadLocally(channel);
-          if (channel && (channelHasReadEvents(channel) || tracksReadLocally)) {
+          if (channel && (channel.readEventsEnabled || tracksReadLocally)) {
             const ownReads = channel.state.read[userId];
             const unreadCount = channel.countUnread();
             const upsertReadsQueries = await this.upsertReads({
@@ -643,38 +409,43 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
               execute: false,
               reads: [
                 {
-                  last_read: (ownReads?.last_read ?? new Date(0)).toISOString() as string,
+                  last_read: ownReads?.last_read ?? 0,
                   last_read_message_id: ownReads?.last_read_message_id,
                   unread_messages: unreadCount,
-                  user: client.user,
+                  // `client.user` is `ClientUser` (all optional but `id`), so the cast holds only
+                  // after connect. `blocked_user_ids` is supplied because the connect payload
+                  // omits it when nothing is blocked.
+                  user: {
+                    ...client.user,
+                    blocked_user_ids: client.user.blocked_user_ids ?? [],
+                  } as UserResponse,
                 },
               ],
             });
             queries = [...queries, ...upsertReadsQueries];
           }
         }
+        // Executed here so the guard's write-first path can catch a missing channel row.
+        if (executeOverride) {
+          await this.executeSqlBatch(queries);
+        }
         return queries;
       },
     );
-
-    if (execute) {
-      await this.executeSqlBatch(finalQueries);
-    }
-
-    return finalQueries;
   };
 
   /**
-   * A handler for message deletion. It provides a channel guard and determines whether
-   * it should hard delete or soft delete the message.
-   * @param event - the WS event we are trying to process
-   * @param execute - whether to immediately execute the operation.
+   * Hard or soft deletes the message, depending on `event.hard_delete`.
+   *
+   * @param payload.event - The WS event we are trying to process.
+   * @param payload.execute - Whether to immediately execute the queries. Defaults to `true`.
+   * @returns The prepared queries.
    */
   public handleDeleteMessage = async ({
     event,
     execute = true,
   }: {
-    event: Event;
+    event: EventPayload<'message.deleted'>;
     execute?: boolean;
   }) => {
     const { message, deleted_for_me, hard_delete = false } = event;
@@ -696,11 +467,11 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   };
 
   /**
-   * A utility method used for removing a message that has already failed from the
-   * state as well as the DB. We want to drop all pending tasks and finally hard
-   * delete the message from the DB.
-   * @param messageId - the message id of the message we want to remove
-   * @param execute - whether to immediately execute the operation.
+   * Drops the message's pending tasks and hard deletes it.
+   *
+   * @param payload.messageId - The ID of the message we want to remove.
+   * @param payload.execute - Whether to immediately execute the queries. Defaults to `true`.
+   * @returns The prepared queries.
    */
   public handleRemoveMessage = async ({
     messageId,
@@ -727,31 +498,164 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   };
 
   /**
-   * A utility method to handle read events. It will calculate the state of the reads if
-   * present in the event, or optionally rely on the hard override in unreadMessages.
-   * The unreadMessages argument is useful for cases where we know the exact number of unreads
-   * (for example reading an entire channel), but `unread_messages` might not necessarily exist
-   * in the event (or it exists with a stale value if we know what we want to ultimately update to).
-   * @param event - the WS event we are trying to process
-   * @param unreadMessages - an override of unread_messages that will be preferred when upserting reads
-   * @param execute - whether to immediately execute the operation.
+   * Hard deletes the messages in one transaction.
+   *
+   * @param payload.ids - The IDs of the messages to hard delete.
+   * @param payload.execute - Whether to immediately execute the queries. Defaults to `true`.
+   * @returns The prepared queries.
+   */
+  public hardDeleteMessages = async ({
+    ids,
+    execute = true,
+  }: {
+    ids: string[];
+    execute?: boolean;
+  }) => {
+    if (!ids.length) return [];
+    const queries = (
+      await Promise.all(ids.map((id) => this.hardDeleteMessage({ id, execute: false })))
+    ).flat();
+
+    if (execute) {
+      await this.executeSqlBatch(queries);
+    }
+
+    return queries;
+  };
+
+  /**
+   * Upserts a message and writes its channel row when that row is missing (the first optimistic
+   * write in a new channel can precede the channel's persistence). Upserts because an UPDATE no-ops
+   * on a missing row. When the row is missing and the channel is not loaded in memory, or the
+   * message has no `cid`, nothing is written.
+   *
+   * @param payload.message - The message to persist. Its `cid` decides the guarded channel row.
+   * @param payload.execute - Whether to immediately execute the queries. Defaults to `true`.
+   * @returns The prepared queries.
+   */
+  public upsertMessageWithChannelGuard = async ({
+    message,
+    execute = true,
+  }: {
+    message: LocalMessage;
+    execute?: boolean;
+  }): Promise<ExecuteBatchDBQueriesType> => {
+    const { cid } = message;
+    if (!cid) return [];
+
+    const messages = [message] as unknown as MessageResponse[];
+
+    // Write first and probe for the channel only on failure, as in `queriesWithChannelGuard`.
+    if (execute) {
+      try {
+        return await this.upsertMessages({ messages, execute: true });
+      } catch (error) {
+        if (await this.channelExists({ cid })) throw error;
+      }
+      return await this.upsertMessageBehindChannelGuard({ cid, messages, execute: true });
+    }
+
+    if (await this.channelExists({ cid })) {
+      return await this.upsertMessages({ messages, execute: false });
+    }
+
+    return await this.upsertMessageBehindChannelGuard({ cid, messages, execute });
+  };
+
+  /** Writes the channel row ahead of the messages. Skips the write when no row can be built. */
+  private upsertMessageBehindChannelGuard = async ({
+    cid,
+    execute,
+    messages,
+  }: {
+    cid: string;
+    execute: boolean;
+    messages: MessageResponse[];
+  }): Promise<ExecuteBatchDBQueriesType> => {
+    const channel = this.client.channelManager.get(cid);
+    if (!channel?.initialized || channel.pendingDisposal) {
+      logger
+        .withExtraTags('upsertMessageWithChannelGuard', cid)
+        .warn('Skipping message persistence: the channel is not in the database.');
+      return [];
+    }
+
+    const queries: ExecuteBatchDBQueriesType = [
+      ...(await this.upsertChannelData({
+        channel: channel.data as ChannelResponse,
+        execute: false,
+      })),
+      ...(await this.upsertMessages({ messages, execute: false })),
+    ];
+
+    if (execute) {
+      await this.executeSqlBatch(queries);
+    }
+
+    return queries;
+  };
+
+  /**
+   * The channel's persisted messages with a local `failed` status, which `Channel.reload` and
+   * `Thread.reload` re-ingest. Built on {@link getChannels}, so a custom offline DB implements
+   * nothing extra.
+   *
+   * @param payload.cid - The channel whose failed messages to read.
+   * @returns The failed messages, formatted.
+   */
+  public getFailedMessages = async ({
+    cid,
+  }: {
+    cid: string;
+  }): Promise<LocalMessage[]> => {
+    const { initialized, userId } = this.state.getLatestValue();
+    if (!initialized || !userId) return [];
+
+    const channels = await this.getChannels({ cids: [cid], userId });
+    const messages = channels?.[0]?.messages ?? [];
+
+    return messages
+      .map((message) => formatMessage(message))
+      .filter((message) => message.status === 'failed');
+  };
+
+  /**
+   * Upserts the reads of a read event.
+   *
+   * @param payload.event - The WS event we are trying to process.
+   * @param payload.unreadMessages - An override of `event.unread_messages`.
+   * @param payload.execute - Whether to immediately execute the queries. Defaults to `true`.
+   * @returns The prepared queries.
    */
   public handleRead = async ({
     event,
     unreadMessages,
     execute = true,
   }: {
-    event: Event;
+    event: EventPayload<
+      | 'message.read'
+      | 'message.read_locally'
+      | 'notification.mark_read'
+      | 'notification.mark_unread'
+    >;
     unreadMessages?: number;
     execute?: boolean;
   }) => {
     const {
-      received_at: last_read,
       last_read_message_id,
+      // @ts-expect-error property missing
       unread_messages = 0,
       user,
       cid,
     } = event;
+    // Mirrors what `Channel` writes into `state.read`: mark-unread uses the server's
+    // `last_read_at`, other read events its `created_at`. `received_at` is the local clock, so only
+    // a fallback.
+    const last_read =
+      (event.type === 'notification.mark_unread' ? event.last_read_at : undefined) ??
+      event.created_at ??
+      event.received_at ??
+      nowNs();
 
     const overriddenUnreadMessages = unreadMessages ?? unread_messages;
 
@@ -762,7 +666,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
           execute: executeOverride,
           reads: [
             {
-              last_read: last_read as string,
+              last_read,
               last_read_message_id,
               unread_messages: overriddenUnreadMessages,
               user,
@@ -776,23 +680,22 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   };
 
   /**
-   * A utility method used to handle member events. It guards the processing
-   * of each event with a channel guard and also forces an update of member_count
-   * for the respective channel if applicable.
-   * @param event - the WS event we are trying to process
-   * @param execute - whether to immediately execute the operation.
+   * Removes or upserts the member, forcing a channel upsert so `member_count` updates.
+   *
+   * @param payload.event - The WS event we are trying to process.
+   * @param payload.execute - Whether to immediately execute the queries. Defaults to `true`.
+   * @returns The prepared queries.
    */
   public handleMemberEvent = async ({
     event,
     execute = true,
   }: {
-    event: Event;
+    event: EventPayload<`member.${string}`>;
     execute?: boolean;
   }) => {
     const { member, cid, type } = event;
 
     if (member && cid) {
-      // we force update here so that member_count gets updated
       // TODO: Although this is more than fine for now, we should look into
       //       changing this to be an actual update to the DB instead.
       return await this.queriesWithChannelGuard(
@@ -815,16 +718,17 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   };
 
   /**
-   * A utility method used to handle message.updated events. It guards each
-   * event handler within a channel guard.
-   * @param event - the WS event we are trying to process
-   * @param execute - whether to immediately execute the operation.
+   * Updates the message behind the channel guard. Thread replies are ignored.
+   *
+   * @param payload.event - The WS event we are trying to process.
+   * @param payload.execute - Whether to immediately execute the queries. Defaults to `true`.
+   * @returns The prepared queries.
    */
   public handleMessageUpdatedEvent = async ({
     event,
     execute = true,
   }: {
-    event: Event;
+    event: EventPayload<'message.updated' | 'message.undeleted'>;
     execute?: boolean;
   }) => {
     const { message } = event;
@@ -841,19 +745,17 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   };
 
   /**
-   * An event handler for channel.visible and channel.hidden events. We need a separate
-   * handler because event.channel.hidden does not arrive with the baseline event, so a
-   * simple upsertion is not enough.
-   * It will update the hidden property of a channel to true if handling the `channel.hidden`
-   * event and to false if handling `channel.visible`.
-   * @param event - the WS event we are trying to process
-   * @param execute - whether to immediately execute the operation.
+   * Sets `hidden` from the event type, as the event's channel does not carry it.
+   *
+   * @param payload.event - The WS event we are trying to process.
+   * @param payload.execute - Whether to immediately execute the queries. Defaults to `true`.
+   * @returns The prepared queries.
    */
   public handleChannelVisibilityEvent = async ({
     event,
     execute = true,
   }: {
-    event: Event;
+    event: EventPayload<'channel.visible' | 'channel.hidden'>;
     execute?: boolean;
   }) => {
     const { type, channel } = event;
@@ -870,17 +772,17 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   };
 
   /**
-   * A utility handler used to handle channel.truncated events. It handles both
-   * removing all messages and relying on truncated_at as well. It will also upsert
-   * reads adequately (and calculate the correct unread messages when truncating).
-   * @param event - the WS event we are trying to process
-   * @param execute - whether to immediately execute the operation.
+   * Deletes the channel's messages (before `truncated_at` when set) and upserts the reads.
+   *
+   * @param payload.event - The WS event we are trying to process.
+   * @param payload.execute - Whether to immediately execute the queries. Defaults to `true`.
+   * @returns The prepared queries.
    */
   public handleChannelTruncatedEvent = async ({
     event,
     execute = true,
   }: {
-    event: Event;
+    event: EventPayload<'channel.truncated'>;
     execute?: boolean;
   }) => {
     const { channel } = event;
@@ -895,19 +797,16 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
 
       let finalQueries = [...truncateQueries];
 
-      // Persist read state for channels that track reads server-side. When the client opted into a
-      // local unread count, also persist it for read-events-disabled channels (e.g. livestreams) so
-      // the client-local count survives a cold start. state.read[userId] may be absent for those, so
-      // fall back accordingly.
+      // Same condition as in `handleNewMessage`.
       const userId = ownUser.id;
-      const activeChannel = this.client.activeChannels[cid];
+      const activeChannel = this.client.channelManager.get(cid);
       const tracksReadLocally = channelTracksReadLocally(activeChannel);
-      if (activeChannel && (channelHasReadEvents(activeChannel) || tracksReadLocally)) {
+      if (activeChannel && (activeChannel.readEventsEnabled || tracksReadLocally)) {
         const ownReads = activeChannel.state.read[userId];
 
         let unreadCount = 0;
-        if (truncated_at) {
-          unreadCount = activeChannel.countUnread(new Date(truncated_at));
+        if (truncated_at != null) {
+          unreadCount = activeChannel.countUnread(truncated_at);
         }
 
         const upsertReadQueries = await this.upsertReads({
@@ -915,10 +814,13 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
           execute: false,
           reads: [
             {
-              last_read: (ownReads?.last_read ?? new Date(0)).toString() as string,
+              last_read: ownReads?.last_read ?? 0,
               last_read_message_id: ownReads?.last_read_message_id,
               unread_messages: unreadCount,
-              user: ownUser,
+              user: {
+                ...ownUser,
+                blocked_user_ids: ownUser.blocked_user_ids ?? [],
+              } as UserResponse,
             },
           ],
         });
@@ -936,19 +838,17 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   };
 
   /**
-   * A utility handler for all reaction events. It wraps the inner queries
-   * within a channel guard and maps them like so:
-   * - reaction.new -> insertReaction
-   * - reaction.updated -> updateReaction
-   * - reaction.deleted -> deleteReaction
-   * @param event - the WS event we are trying to process
-   * @param execute - whether to immediately execute the operation.
+   * Maps `reaction.new`, `.updated` and `.deleted` to the matching reaction write.
+   *
+   * @param payload.event - The WS event we are trying to process.
+   * @param payload.execute - Whether to immediately execute the queries. Defaults to `true`.
+   * @returns The prepared queries.
    */
   public handleReactionEvent = async ({
     event,
     execute = true,
   }: {
-    event: Event;
+    event: EventPayload<`reaction.${string}`>;
     execute?: boolean;
   }) => {
     const { type, message, reaction } = event;
@@ -957,7 +857,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
       return [];
     }
 
-    const getReactionMethod = (type: Event['type']) => {
+    const getReactionMethod = (type: EventType) => {
       switch (type) {
         case 'reaction.new':
           return this.insertReaction;
@@ -980,17 +880,17 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   };
 
   /**
-   * A utility handler for all draft events:
-   * - draft.updated -> updateDraft
-   * - draft.deleted -> deleteDraft
-   * @param event - the WS event we are trying to process
-   * @param execute - whether to immediately execute the operation.
+   * Maps `draft.updated` and `draft.deleted` to `upsertDraft` and `deleteDraft`.
+   *
+   * @param payload.event - The WS event we are trying to process.
+   * @param payload.execute - Whether to immediately execute the queries. Defaults to `true`.
+   * @returns The prepared queries.
    */
   handleDraftEvent = async ({
     event,
     execute = true,
   }: {
-    event: Event;
+    event: EventPayload<`draft.${string}`>;
     execute?: boolean;
   }) => {
     const { cid, draft, type } = event;
@@ -1018,11 +918,11 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   };
 
   /**
-   * A generic event handler that decides which DB API to invoke based on
-   * event.type for all events we are currently handling. It is used to both
-   * react on WS events as well as process the sync API events.
-   * @param event - the WS event we are trying to process
-   * @param execute - whether to immediately execute the operation.
+   * Routes an event to its handler by type. Used for WS events and for sync events.
+   *
+   * @param payload.event - The WS event we are trying to process.
+   * @param payload.execute - Whether to immediately execute the queries. Defaults to `true`.
+   * @returns The prepared queries.
    */
   public handleEvent = async ({
     event,
@@ -1031,10 +931,13 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     event: Event;
     execute?: boolean;
   }) => {
-    const { type, channel } = event;
+    const { type } = event;
 
     if (type.startsWith('reaction')) {
-      return await this.handleReactionEvent({ event, execute });
+      return await this.handleReactionEvent({
+        event: event as EventPayload<`reaction.${string}`>,
+        execute,
+      });
     }
 
     if (type === 'message.new') {
@@ -1050,19 +953,17 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     }
 
     if (type === 'message.read' || type === 'notification.mark_read') {
-      // We make sure not to update channel reads (which is what's stored in
-      // the offline DB in any case) whenever we receive a read event for a
-      // a thread specifically.
+      // The DB stores channel reads only, so thread read events are skipped.
       if (event.thread) return [];
       return this.handleRead({ event, unreadMessages: 0, execute });
     }
 
-    // `message.read_locally` is the client-only reset dispatched by `Channel.markReadLocally()`. Only
-    // persist it for read-events-disabled channels with the local unread count opted in (the only
-    // situation it is ever dispatched), so it can never touch channels that track reads server-side.
+    // The client-only reset from `Channel.markReadLocally()`: persisted only for channels with a
+    // local unread count, never for channels that track reads server-side.
     if (type === 'message.read_locally') {
-      const localChannel = event.cid ? this.client.activeChannels[event.cid] : undefined;
-      // channelTracksReadLocally returns false when localChannel is undefined, so no extra guard.
+      const localChannel = event.cid
+        ? this.client.channelManager.get(event.cid)
+        : undefined;
       if (channelTracksReadLocally(localChannel)) {
         return this.handleRead({ event, unreadMessages: 0, execute });
       }
@@ -1074,7 +975,10 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     }
 
     if (type.startsWith('member.')) {
-      return await this.handleMemberEvent({ event, execute });
+      return await this.handleMemberEvent({
+        event: event as EventPayload<`member.${string}`>,
+        execute,
+      });
     }
 
     if (type === 'channel.hidden' || type === 'channel.visible') {
@@ -1085,29 +989,24 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
       return await this.handleDraftEvent({ event, execute });
     }
 
-    // Note: It is a bit counter-intuitive that we do not touch the messages in the
-    //       offline DB when receiving notification.message_new, however we do this
-    //       because we anyway cannot get the messages for a channel until we run
-    //       either channel.watch() or channel.query(...) to get them. So, when
-    //       receiving the event we only upsert the channel data and we leave the
-    //       rest of the entities to be updated whenever we actually start watching
-    //       or we at least query.
+    // `notification.message_new` only upserts the channel data: its messages are stored when the
+    // channel is watched or queried.
     if (
       (type === 'channel.updated' ||
         type === 'notification.message_new' ||
         type === 'notification.added_to_channel') &&
-      channel
+      event.channel
     ) {
-      return await this.upsertChannelData({ channel, execute });
+      return await this.upsertChannelData({ channel: event.channel, execute });
     }
 
     if (
       (type === 'channel.deleted' ||
         type === 'notification.channel_deleted' ||
         type === 'notification.removed_from_channel') &&
-      channel
+      event.channel
     ) {
-      return await this.deleteChannel({ cid: channel.cid, execute });
+      return await this.deleteChannel({ cid: event.channel.cid, execute });
     }
 
     if (type === 'channel.truncated') {
@@ -1118,15 +1017,16 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   };
 
   /**
-   * A method used to enqueue a pending task if the execution of it fails.
-   * It will try to do the following:
+   * Executes the task now. On an {@link isEphemeral} failure the task goes to
+   * `handleAddPendingTask`, and the error is rethrown. With an unhealthy socket it fails with an
+   * `OfflineError` without executing.
    *
-   * 1. Execute the task immediately
-   * 2. If this fails, checks if the failure was due to something valid for a pending task
-   * 3. If it is, it will insert the task in the pending tasks table
+   * The payload carries the request options, including an `AbortSignal`. It is live while the task
+   * runs now, but a replay from the table gets an inert `{}` when the store serializes the payload
+   * (always across a restart), and `ApiClient` then runs the request uncancellable.
    *
-   * It will return the response from the execution if it succeeded.
-   * @param task - the pending task we want to execute
+   * @param payload.task - The pending task we want to execute.
+   * @returns The response of the task's request.
    */
   public queueTask = async <T>({ task }: { task: PendingTask }): Promise<T> => {
     const attemptTaskExecution = async () => {
@@ -1141,113 +1041,69 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     try {
       return await attemptTaskExecution();
     } catch (e) {
-      if (!this.shouldSkipQueueingTask(e as AxiosError<APIErrorResponse>)) {
+      if (!this.shouldSkipQueueingTask(e as AxiosError<APIError>)) {
         await this.handleAddPendingTask({ task });
       }
       throw e;
     }
   };
 
-  /**
-   * A utility method that determines if a failed task should be added to the
-   * queue based on its error.
-   * Error code 4 - bad request data
-   * Error code 17 - missing own_capabilities to execute the task
-   * @param error
-   */
-  private shouldSkipQueueingTask = (error: AxiosError<APIErrorResponse>) =>
-    error?.response?.data?.code === 4 || error?.response?.data?.code === 17;
-
-  private mergeFailedMessageUpdateIntoPendingSendMessage = ({
-    editedMessage,
-    pendingMessage,
-  }: {
-    editedMessage: LocalMessage | Partial<MessageResponse>;
-    pendingMessage: Message;
-  }) => {
-    const normalizedEditedMessageSource = {
-      ...editedMessage,
-    } as LocalMessage & { message_text_updated_at?: string };
-
-    if (editedMessage.status === 'failed') {
-      delete normalizedEditedMessageSource.message_text_updated_at;
-    }
-
-    const normalizedEditedMessage = localMessageToNewMessagePayload(
-      normalizedEditedMessageSource,
-    );
-    const pendingMessageStatus = (pendingMessage as { status?: string }).status;
-
-    return {
-      ...pendingMessage,
-      ...normalizedEditedMessage,
-      ...(typeof pendingMessageStatus !== 'undefined'
-        ? { status: pendingMessageStatus }
-        : {}),
-    } as Message;
-  };
+  /** A definitive rejection (non-retryable server error or a cancelled request) is not queued. */
+  private shouldSkipQueueingTask = (error: AxiosError<APIError>) => !isEphemeral(error);
 
   private isPendingSendMessageTask = (
     task: PendingTask,
   ): task is Extract<PendingTask, { type: 'send-message' }> =>
     task.type === 'send-message';
 
-  private handleOfflineFailedUpdateMessagePendingTask = async (
+  /**
+   * Folds an edit of a never-sent message into its queued `send-message` task, so a replay sends
+   * the edited text once. The send task keeps its row and so its place in the queue. With no send
+   * task the edit is queued on its own if `isMessageUpdateReplayable` allows it.
+   *
+   * A queued send is the only reliable sign the server never saw the message (a `failed` status can
+   * also come from a rejected edit). The payloads are already `MessageRequest`s, so they merge by
+   * plain spread: normalizing again would turn a flattened `mentioned_users` into `[undefined]`.
+   */
+  private handleUpdateMessagePendingTask = async (
     task: Extract<PendingTask, { type: 'update-message' }>,
   ) => {
-    const [message] = task.payload;
-    if (!message.id) {
+    const [{ id }, { message }] = task.payload;
+    const pendingTasks = await this.getPendingTasks({ messageId: id });
+    const sendTask = pendingTasks.find(this.isPendingSendMessageTask);
+
+    // No queued send, or one without an ID to rewrite (a task read from the DB always has one).
+    if (sendTask?.id === undefined) {
+      if (!isMessageUpdateReplayable(message)) return;
+
+      await this.addPendingTask(task);
       return;
     }
 
-    const pendingTasks = await this.getPendingTasks({ messageId: message.id });
-    const pendingSendMessageTask = pendingTasks.find(this.isPendingSendMessageTask);
+    const [sendRequest, ...sendRequestOptions] = sendTask.payload;
 
-    if (!pendingSendMessageTask) {
-      return;
-    }
-
-    const updatedPendingSendMessage = this.mergeFailedMessageUpdateIntoPendingSendMessage(
-      {
-        editedMessage: message,
-        pendingMessage: pendingSendMessageTask.payload[0],
+    await this.updatePendingTask({
+      id: sendTask.id,
+      task: {
+        ...sendTask,
+        payload: [
+          { ...sendRequest, message: { ...sendRequest.message, ...message } },
+          ...sendRequestOptions,
+        ],
       },
-    );
-
-    const updatedPendingTask: Extract<PendingTask, { type: 'send-message' }> = {
-      ...pendingSendMessageTask,
-      payload: [updatedPendingSendMessage, pendingSendMessageTask.payload[1]],
-    };
-
-    if (pendingSendMessageTask.id) {
-      await this.updatePendingTask({
-        id: pendingSendMessageTask.id,
-        task: updatedPendingTask,
-      });
-      return;
-    }
-
-    await this.addPendingTask({
-      ...updatedPendingTask,
-      id: undefined,
     });
   };
 
   /**
-   * Central ingress for persisting pending tasks. It either stores the task as-is
-   * or rewrites an existing pending `send-message` task for offline edits of failed messages.
+   * Stores the task. An edit of a never-sent message is folded into its queued send instead. With no
+   * queued send, an edit `isMessageUpdateReplayable` refuses (attachments still on local URLs) is
+   * dropped.
+   *
+   * @param payload.task - The pending task to store.
    */
   public handleAddPendingTask = async ({ task }: { task: PendingTask }) => {
-    if (task.type === 'update-message' && !isMessageUpdateReplayable(task.payload[0])) {
-      return;
-    }
-
-    if (
-      task.type === 'update-message' &&
-      !this.client.wsConnection?.isHealthy &&
-      task.payload[0].status === 'failed'
-    ) {
-      await this.handleOfflineFailedUpdateMessagePendingTask(task);
+    if (task.type === 'update-message') {
+      await this.handleUpdateMessagePendingTask(task);
       return;
     }
 
@@ -1255,79 +1111,26 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   };
 
   /**
-   * Executes a task from the list of supported pending tasks. Currently supported pending tasks
-   * are:
-   * - Updating a message
-   * - Deleting a message
-   * - Sending a reaction
-   * - Removing a reaction
-   * - Sending a message
-   * - Creating a draft
-   * - Deleting a draft
-   * It will throw if we try to execute a pending task that is not supported.
-   * @param task - The task we want to execute
-   * @param isPendingTask - a control value telling us if it's an actual pending task being executed
-   * or delayed execution
+   * Runs the task through {@link QUEUEABLE_OPERATIONS}. With `isPendingTask` (a replay) it also
+   * runs the operation's `onReplay`.
    */
-  private executeTask = async (
-    { task }: { task: PendingTask },
+  private executeTask = async <T extends QueueableType>(
+    { task }: { task: PendingTaskOf<T> },
     isPendingTask = false,
   ) => {
-    if (task.type === 'update-message') {
-      return await this.client._updateMessage(...task.payload);
+    const result = await runQueueableOperation({ client: this.client, task });
+
+    if (isPendingTask) {
+      const operation = QUEUEABLE_OPERATIONS[task.type] as QueueableOperation<T>;
+      operation.onReplay?.({ client: this.client, result, task });
     }
 
-    if (task.type === 'delete-message') {
-      return await this.client._deleteMessage(...task.payload);
-    }
-
-    const { channelType, channelId } = task;
-
-    if (channelType && channelId) {
-      const channel = this.client.channel(channelType, channelId);
-
-      if (task.type === 'send-reaction') {
-        return await channel._sendReaction(...task.payload);
-      }
-
-      if (task.type === 'delete-reaction') {
-        return await channel._deleteReaction(...task.payload);
-      }
-
-      if (task.type === 'create-draft') {
-        return await channel._createDraft(...task.payload);
-      }
-
-      if (task.type === 'delete-draft') {
-        return await channel._deleteDraft(...task.payload);
-      }
-
-      if (task.type === 'send-message') {
-        const newMessageResponse = await channel._sendMessage(...task.payload);
-        const newMessage = newMessageResponse?.message;
-        if (isPendingTask && newMessage) {
-          if (newMessage?.parent_id) {
-            this.client.threads.threadsById[newMessage.parent_id]?.upsertReplyLocally({
-              message: newMessage,
-              timestampChanged: true,
-            });
-          }
-          channel.state.addMessageSorted(newMessage, true);
-        }
-        return newMessageResponse;
-      }
-    }
-
-    throw new Error(
-      `Tried to execute invalid pending task type (${task.type}) while synchronizing the database.`,
-    );
+    return result;
   };
 
   /**
-   * A utility method used to execute all pending tasks. As each task succeeds execution,
-   * it is going to be removed from the DB. If the execution failed due to a valid reason
-   * it is going to remove the pending task from the DB even if execution fails, otherwise
-   * it will keep it for the next time we try to execute all pending taks.
+   * Replays the pending tasks in order and deletes each one that succeeded or was definitively
+   * rejected. A task that failed for an ephemeral reason stays for the next run.
    */
   public executePendingTasks = async () => {
     const queue = await this.getPendingTasks();
@@ -1344,9 +1147,13 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
           true,
         );
       } catch (e) {
-        const error = e as AxiosError<APIErrorResponse>;
+        const operation = QUEUEABLE_OPERATIONS[task.type] as QueueableOperation<
+          typeof task.type
+        >;
+        operation.onReplayRejected?.({ client: this.client, error: e, task });
+
+        const error = e as AxiosError<APIError>;
         if (!this.shouldSkipQueueingTask(error)) {
-          // executing the pending task has failed, so keep it in the queue
           continue;
         }
       }

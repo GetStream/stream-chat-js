@@ -26,7 +26,7 @@ describe('_default/03-channels/06-channel_members.md', () => {
   /** A channel created by the connected user (the owner), with the given extra members. */
   const createOwnedChannel = async (members: string[] = []) => {
     const channel = client.channel('messaging', uniqueId('channel'), {
-      members: [owner, ...members],
+      members: [owner, ...members].map((user_id) => ({ user_id })),
     });
     await channel.create();
     if (channel.cid) cleanup.channels.push(channel.cid);
@@ -76,13 +76,17 @@ describe('_default/03-channels/06-channel_members.md', () => {
 
     // #region snippet docs="chat/_default/03-channels/06-channel_members.md" heading="Adding Members" tab="JavaScript" index=1
     // COPY: thierry="thierry", josh="josh", jamesBond="james_bond", alecTrevelyan="alec_trevelyan"
-    await channel.addMembers([thierry, josh]);
+    await channel.addMembers({ members: [thierry, josh] });
 
     // Add user to the channel with role set
-    await channel.addMembers([{ user_id: jamesBond, channel_role: 'channel_moderator' }]);
+    await channel.addMembers({
+      members: [{ user_id: jamesBond, channel_role: 'channel_moderator' }],
+    });
 
     // Add new channel member with custom data
-    await channel.addMembers([{ user_id: alecTrevelyan, code_name: '006' }]);
+    await channel.addMembers({
+      members: [{ user_id: alecTrevelyan, custom: { code_name: '006' } }],
+    });
     // #endregion snippet
 
     const members = await membersOf(channel);
@@ -101,8 +105,8 @@ describe('_default/03-channels/06-channel_members.md', () => {
     // COPY: jamesBond="james_bond", alecTrevelyan="alec_trevelyan"
     const channel = client.channel('messaging', randomID, {
       members: [
-        { user_id: jamesBond, code_name: '007' },
-        { user_id: alecTrevelyan, code_name: '006' },
+        { user_id: jamesBond, custom: { code_name: '007' } },
+        { user_id: alecTrevelyan, custom: { code_name: '006' } },
       ],
     });
     await channel.create();
@@ -118,7 +122,7 @@ describe('_default/03-channels/06-channel_members.md', () => {
 
     // #region snippet docs="chat/_default/03-channels/06-channel_members.md" heading="Removing Members" tab="JavaScript" index=1
     // COPY: tommaso="tommaso"
-    await channel.removeMembers([tommaso]);
+    await channel.removeMembers({ members: [tommaso] });
     // #endregion snippet
 
     expect(Object.keys(await membersOf(channel))).toEqual([owner]);
@@ -139,7 +143,7 @@ describe('_default/03-channels/06-channel_members.md', () => {
     // #region snippet docs="chat/_default/03-channels/06-channel_members.md" heading="Leaving a Channel" tab="JavaScript" index=1
     // COPY: owner="my_user_id"
     // Remove own channel membership
-    await channel.removeMembers([owner]);
+    await channel.removeMembers({ members: [owner] });
     // #endregion snippet
 
     expect(Object.keys(await membersOf(channel))).toEqual([thierry]);
@@ -147,11 +151,11 @@ describe('_default/03-channels/06-channel_members.md', () => {
 
   it('hides history', async () => {
     const channel = await createOwnedChannel();
-    await channel.sendMessage({ text: 'Before thierry joined' });
+    await channel.sendMessage({ message: { text: 'Before thierry joined' } });
 
     // #region snippet docs="chat/_default/03-channels/06-channel_members.md" heading="Hide History" tab="JavaScript" index=1
     // COPY: thierry="thierry"
-    await channel.addMembers([thierry], undefined, { hide_history: true });
+    await channel.addMembers({ members: [thierry], hide_history: true });
     // #endregion snippet
 
     // The message sent before thierry joined is hidden from him.
@@ -160,15 +164,13 @@ describe('_default/03-channels/06-channel_members.md', () => {
 
   it('hides history before a date', async () => {
     const channel = await createOwnedChannel();
-    await channel.sendMessage({ text: 'Sent today' });
+    await channel.sendMessage({ message: { text: 'Sent today' } });
 
     // #region snippet docs="chat/_default/03-channels/06-channel_members.md" heading="Hide History Before a Specific Date" tab="JavaScript" index=1
     // COPY: thierry="thierry"
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - 7); // Last 7 days
-    await channel.addMembers([thierry], undefined, {
-      hide_history_before: cutoff.toISOString(),
-    });
+    await channel.addMembers({ members: [thierry], hide_history_before: cutoff });
     // #endregion snippet
 
     // Only history older than the cutoff is hidden: today's message is visible.
@@ -180,7 +182,10 @@ describe('_default/03-channels/06-channel_members.md', () => {
 
     // #region snippet docs="chat/_default/03-channels/06-channel_members.md" heading="System Message Parameter" tab="JavaScript" index=1
     // COPY: tommaso="tommaso"
-    await channel.addMembers([tommaso], { text: 'Tommaso joined the channel.' });
+    await channel.addMembers({
+      members: [tommaso],
+      message: { text: 'Tommaso joined the channel.' },
+    });
     // #endregion snippet
 
     const { messages } = await serverClient.chat
@@ -201,15 +206,17 @@ describe('_default/03-channels/06-channel_members.md', () => {
     // Add custom data while creating the channel
     const channel = client.channel('messaging', randomID, {
       members: [
-        { user_id: userid1, key1: 'value1' },
-        { user_id: userid2, key1: 'value1' },
-        { user_id: userid3, key2: 'value2' },
+        { user_id: userid1, custom: { key1: 'value1' } },
+        { user_id: userid2, custom: { key1: 'value1' } },
+        { user_id: userid3, custom: { key2: 'value2' } },
       ],
     });
     await channel.create();
 
     // Add custom data with addMembers method
-    await channel.addMembers([{ user_id: userid1, key1: 'value1' }]);
+    await channel.addMembers({
+      members: [{ user_id: userid1, custom: { key1: 'value1' } }],
+    });
     // #endregion snippet
 
     const members = await membersOf(channel);

@@ -1,22 +1,46 @@
 import type { StreamChat } from '../client';
+import { deepFreezeConfig } from '../configuration/utils/deepFreezeConfig';
+import type { StateStore } from '@stream-io/state-store';
+import { ConfigController } from '../configuration/ConfigController';
 import { Channel } from '../channel';
 import type { ThreadUserReadState } from '../thread';
 import { Thread } from '../thread';
 import type {
-  ErrorFromResponse,
-  EventAPIResponse,
   LocalMessage,
-  MarkDeliveredOptions,
-  MarkReadOptions,
+  MarkDeliveredRequest,
+  MarkReadRequest,
+  MarkReadResponse,
+  StreamAPIError,
+  StreamResponse,
+  TimestampNS,
 } from '../types';
-import { type APIErrorResponse } from '../types';
 import { throttle } from '../utils';
 import { isAPIError, isErrorRetryable } from '../errors';
 
-const MAX_DELIVERED_MESSAGE_COUNT_IN_PAYLOAD = 100 as const;
-const MARK_AS_DELIVERED_BUFFER_TIMEOUT = 1000 as const;
-const MARK_AS_READ_THROTTLE_TIMEOUT = 1000 as const;
-const RETRY_COUNT_LIMIT_FOR_TIMEOUT_INCREASE = 3 as const;
+export type MessageDeliveryReporterConfig = {
+  /** How long delivery reports are buffered before being sent as one batch. Defaults to 1000ms. */
+  markAsDeliveredBufferTimeoutMs: number;
+  /**
+   * Minimum gap between automatic `markRead` calls for the same channel or thread. Changes rebuild
+   * the throttles. Defaults to 1000ms.
+   */
+  markAsReadThrottleTimeoutMs: number;
+  /** Most delivery receipts sent in one request; the rest go in the next. Defaults to 100. */
+  maxDeliveredMessageCountInPayload: number;
+  /**
+   * Most times consecutive retryable failures double the buffer window. A success resets it.
+   * Defaults to 3.
+   */
+  retryCountLimitForTimeoutIncrease: number;
+};
+
+export const DEFAULT_MESSAGE_DELIVERY_REPORTER_CONFIG: MessageDeliveryReporterConfig =
+  deepFreezeConfig({
+    markAsDeliveredBufferTimeoutMs: 1000,
+    markAsReadThrottleTimeoutMs: 1000,
+    maxDeliveredMessageCountInPayload: 100,
+    retryCountLimitForTimeoutIncrease: 3,
+  });
 
 const isChannel = (item: Channel | Thread): item is Channel => item instanceof Channel;
 const isThread = (item: Channel | Thread): item is Thread => item instanceof Thread;
@@ -25,7 +49,7 @@ type MessageId = string;
 type ChannelThreadCompositeId = string;
 
 export type AnnounceDeliveryOptions = Omit<
-  MarkDeliveredOptions,
+  MarkDeliveredRequest,
   'latest_delivered_messages'
 >;
 
@@ -41,16 +65,62 @@ export class MessageDeliveryReporter {
   protected nextDeliveryReportCandidates: Map<ChannelThreadCompositeId, MessageId> =
     new Map();
 
-  protected markDeliveredRequestPromise: Promise<EventAPIResponse | void> | null = null;
+  protected markDeliveredRequestPromise: Promise<void> | null = null;
   protected markDeliveredTimeout: ReturnType<typeof setTimeout> | null = null;
 
-  protected requestTimeoutMs: number = MARK_AS_DELIVERED_BUFFER_TIMEOUT;
-  // increased up to RETRY_COUNT_LIMIT_FOR_TIMEOUT_INCREASE
+  protected requestTimeoutMs: number =
+    DEFAULT_MESSAGE_DELIVERY_REPORTER_CONFIG.markAsDeliveredBufferTimeoutMs;
+  // Capped at `config.retryCountLimitForTimeoutIncrease`.
   protected requestRetryCount: number = 0;
+
+  private readonly configController: ConfigController<MessageDeliveryReporterConfig>;
+  get configState(): StateStore<MessageDeliveryReporterConfig> {
+    return this.configController.state;
+  }
 
   constructor({ client }: MessageDeliveryReporterOptions) {
     this.client = client;
+    this.configController = new ConfigController<MessageDeliveryReporterConfig>({
+      defaults: DEFAULT_MESSAGE_DELIVERY_REPORTER_CONFIG,
+      // The throttle captures its interval, so it is rebuilt whenever the interval changes.
+      onChanged: (next, previous) => {
+        if (next.markAsReadThrottleTimeoutMs === previous.markAsReadThrottleTimeoutMs)
+          return;
+        this.throttledMarkRead = this.buildThrottledMarkRead(
+          next.markAsReadThrottleTimeoutMs,
+        );
+      },
+    });
   }
+
+  get config(): Readonly<MessageDeliveryReporterConfig> {
+    return this.configState.getLatestValue();
+  }
+
+  /**
+   * Merges a partial configuration into the resolved config.
+   *
+   * @param config - Fields to merge into the resolved config.
+   */
+  updateConfig(config: Partial<MessageDeliveryReporterConfig>) {
+    this.configController.patch(config);
+  }
+
+  /**
+   * Re-derives the configuration from the declarative slice.
+   *
+   * @param config - The declarative slice. Leave it out to rebuild from the defaults.
+   */
+  initializeConfig(config?: Partial<MessageDeliveryReporterConfig>) {
+    this.configController.initialize(config);
+  }
+
+  /** Sets `markAsReadThrottleTimeoutMs`, which rebuilds the `markRead` throttle. */
+  setMarkAsReadThrottleOptions = ({
+    markAsReadThrottleTimeoutMs,
+  }: Pick<MessageDeliveryReporterConfig, 'markAsReadThrottleTimeoutMs'>) => {
+    this.updateConfig({ markAsReadThrottleTimeoutMs });
+  };
 
   private get markDeliveredRequestInFlight() {
     return this.markDeliveredRequestPromise !== null;
@@ -69,24 +139,22 @@ export class MessageDeliveryReporter {
   }
 
   private static hasPermissionToReportDeliveryFor(collection: Channel | Thread) {
-    if (isChannel(collection)) return !!collection.getConfig()?.delivery_events;
-    if (isThread(collection)) return !!collection.channel.getConfig()?.delivery_events;
+    if (isChannel(collection)) return collection.config.deliveryEvents.enabled;
+    if (isThread(collection)) return collection.channel.config.deliveryEvents.enabled;
   }
 
   private increaseBackOff() {
-    if (this.requestRetryCount >= RETRY_COUNT_LIMIT_FOR_TIMEOUT_INCREASE) return;
+    if (this.requestRetryCount >= this.config.retryCountLimitForTimeoutIncrease) return;
     this.requestRetryCount = this.requestRetryCount + 1;
     this.requestTimeoutMs = this.requestTimeoutMs * 2;
   }
 
   private resetBackOff() {
-    this.requestTimeoutMs = MARK_AS_DELIVERED_BUFFER_TIMEOUT;
+    this.requestTimeoutMs = this.config.markAsDeliveredBufferTimeoutMs;
     this.requestRetryCount = 0;
   }
 
-  /**
-   * Build latest_delivered_messages payload from an arbitrary buffer (deliveryReportCandidates / nextDeliveryReportCandidates)
-   */
+  /** Builds the `latest_delivered_messages` payload from a candidates buffer. */
   private confirmationsFrom(map: Map<ChannelThreadCompositeId, MessageId>) {
     return Array.from(map.entries()).map(([key, messageId]) => {
       const [type, id, parent_id] = key.split(':');
@@ -98,19 +166,17 @@ export class MessageDeliveryReporter {
 
   private confirmationsFromDeliveryReportCandidates() {
     const entries = Array.from(this.deliveryReportCandidates);
-    const sendBuffer = new Map(entries.slice(0, MAX_DELIVERED_MESSAGE_COUNT_IN_PAYLOAD));
+    const sendBuffer = new Map(
+      entries.slice(0, this.config.maxDeliveredMessageCountInPayload),
+    );
     this.deliveryReportCandidates = new Map(
-      entries.slice(MAX_DELIVERED_MESSAGE_COUNT_IN_PAYLOAD),
+      entries.slice(this.config.maxDeliveredMessageCountInPayload),
     );
 
     return { latest_delivered_messages: this.confirmationsFrom(sendBuffer), sendBuffer };
   }
 
-  /**
-   * Generate candidate key for storing in the candidates buffer
-   * @param collection
-   * @private
-   */
+  /** The buffer key: the channel `cid`, or `cid:threadId` for a thread. */
   private candidateKeyFor(
     collection: Channel | Thread,
   ): ChannelThreadCompositeId | undefined {
@@ -118,29 +184,31 @@ export class MessageDeliveryReporter {
     if (isThread(collection)) return `${collection.channel.cid}:${collection.id}`;
   }
 
-  /**
-   * Retrieve the reference to the latest message in the state that is nor read neither reported as delivered
-   * @param collection
-   */
+  /** The latest message that is neither read nor reported as delivered (`id: null` when none). */
   private getNextDeliveryReportCandidate = (
     collection: Channel | Thread,
   ): { key: ChannelThreadCompositeId; id: MessageId | null } | undefined => {
     const ownUserId = this.client.user?.id;
     if (!ownUserId) return;
 
-    let latestMessages: LocalMessage[] = [];
-    let lastDeliveredAt: Date | undefined;
-    let lastReadAt: Date | undefined;
+    // The newest message the collection knows, whether or not the interval holding it is loaded: a
+    // message received live while an older interval is active is still delivered.
+    let latestMessage: LocalMessage | null = null;
+    // Unix nanoseconds, comparable with a message's `created_at`.
+    let lastDeliveredAt: TimestampNS | undefined;
+    let lastReadAt: TimestampNS | undefined;
     let key: string | undefined = undefined;
 
+    // todo: unify the API for read state access btw channel and threads
     if (isChannel(collection)) {
-      latestMessages = collection.state.latestMessages;
+      latestMessage = collection.messagePaginator.latestMessage;
       const ownReadState = collection.state.read[ownUserId] ?? {};
       lastReadAt = ownReadState?.last_read;
       lastDeliveredAt = ownReadState?.last_delivered_at;
       key = collection.cid;
     } else if (isThread(collection)) {
-      latestMessages = collection.state.getLatestValue().replies;
+      // The newest reply, as for channels: the active interval may be scrolled away from it.
+      latestMessage = collection.messagePaginator.latestMessage;
       const ownReadState =
         collection.state.getLatestValue().read[ownUserId] ?? ({} as ThreadUserReadState);
       lastReadAt = ownReadState?.lastReadAt;
@@ -154,23 +222,18 @@ export class MessageDeliveryReporter {
     }
 
     if (!key) return;
+    if (!latestMessage) return { key, id: null };
 
-    const [latestMessage] = latestMessages.slice(-1);
-
-    const wholeCollectionIsRead =
-      !latestMessage || lastReadAt >= latestMessage.created_at;
+    const wholeCollectionIsRead = (lastReadAt ?? 0) >= latestMessage.created_at;
     if (wholeCollectionIsRead) return { key, id: null };
     const wholeCollectionIsMarkedDelivered =
-      !latestMessage || (lastDeliveredAt ?? 0) >= latestMessage.created_at;
+      (lastDeliveredAt ?? 0) >= latestMessage.created_at;
     if (wholeCollectionIsMarkedDelivered) return { key, id: null };
 
     return { key, id: latestMessage.id || null };
   };
 
-  /**
-   * Updates the delivery candidates buffer with the latest delivery candidates
-   * @param collection
-   */
+  // Candidates found while a request is in flight wait in the next buffer.
   private trackDeliveredCandidate(collection: Channel | Thread) {
     if (!MessageDeliveryReporter.hasPermissionToReportDeliveryFor(collection)) return;
     const candidate = this.getNextDeliveryReportCandidate(collection);
@@ -182,11 +245,6 @@ export class MessageDeliveryReporter {
     else buffer.set(candidate.key, candidate.id);
   }
 
-  /**
-   * Removes candidate from the delivery report buffer
-   * @param collection
-   * @private
-   */
   private removeCandidateFor(collection: Channel | Thread) {
     const candidateKey = this.candidateKeyFor(collection);
     if (!candidateKey) return;
@@ -195,10 +253,10 @@ export class MessageDeliveryReporter {
   }
 
   /**
-   * Records the latest message delivered for Channel or Thread instances and schedules the next report
-   * if not already scheduled and candidates exist.
-   * Should be used for WS handling (message.new) as well as for ingesting HTTP channel query results.
-   * @param collections
+   * Records each collection's latest undelivered message and schedules a report if none is
+   * pending. For WS handling (`message.new`) and for ingesting channel query results.
+   *
+   * @param collections - The channels or threads whose candidates should be synced.
    */
   public syncDeliveredCandidates(collections: (Channel | Thread)[]) {
     if (this.client.user?.privacy_settings?.delivery_receipts?.enabled === false) return;
@@ -207,8 +265,9 @@ export class MessageDeliveryReporter {
   }
 
   /**
-   * Fires delivery announcement request followed by immediate delivery candidate buffer reset.
-   * @param options
+   * Sends the buffered report immediately, at most `maxDeliveredMessageCountInPayload` entries.
+   *
+   * @param options - Flags forwarded to `client.markDelivered`.
    */
   public announceDelivery = (options?: AnnounceDeliveryOptions) => {
     if (!this.canExecuteRequest) return;
@@ -224,14 +283,14 @@ export class MessageDeliveryReporter {
     }: { preventSchedulingRetry?: boolean } = {}) => {
       this.markDeliveredRequestPromise = null;
 
-      // promote anything that arrived during request
+      // Promote candidates that arrived during the request.
       for (const [k, v] of this.nextDeliveryReportCandidates.entries()) {
         this.deliveryReportCandidates.set(k, v);
       }
       this.nextDeliveryReportCandidates = new Map();
 
       if (preventSchedulingRetry) return;
-      // checks internally whether there are candidates to announce
+      // Checks internally whether there are candidates to announce.
       this.announceDeliveryBuffered(options);
     };
 
@@ -240,9 +299,8 @@ export class MessageDeliveryReporter {
       postFlightReconcile();
     };
 
-    const handleError = (error: ErrorFromResponse<APIErrorResponse> | Error) => {
-      // re-populate relevant candidates for the next report
-      // but make sure to keep the items that failed to be reported the first next time
+    const handleError = (error: StreamAPIError | Error) => {
+      // Requeue the failed batch ahead of the remaining candidates, so it is retried first.
       const newDeliveryReportCandidates = new Map(sendBuffer);
       for (const [k, v] of this.deliveryReportCandidates.entries()) {
         newDeliveryReportCandidates.set(k, v);
@@ -251,7 +309,9 @@ export class MessageDeliveryReporter {
 
       if (
         (isAPIError(error) && isErrorRetryable(error)) ||
-        (error as ErrorFromResponse<APIErrorResponse>).status >= 500
+        (typeof (error as StreamAPIError).status === 'number' &&
+          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+          (error as StreamAPIError).status! >= 500)
       ) {
         this.increaseBackOff();
         postFlightReconcile();
@@ -261,7 +321,7 @@ export class MessageDeliveryReporter {
     };
 
     this.markDeliveredRequestPromise = this.client
-      .markChannelsDelivered(payload)
+      .markDelivered(payload)
       .then(handleSuccess, handleError);
   };
 
@@ -274,35 +334,78 @@ export class MessageDeliveryReporter {
   };
 
   /**
-   * Delegates the mark-read call to the Channel or Thread instance
-   * @param collection
-   * @param options
+   * Marks the channel or thread read. With read events off (`channel.readEventsEnabled`) no request
+   * goes out: a channel is marked read locally when `localUnreadCountEnabled` is set.
+   *
+   * @param collection - The channel or thread to mark as read.
+   * @param options - Flags forwarded to the underlying `markRead` call.
+   * @returns The server response, or `null` when no request went out.
    */
-  public markRead = async (collection: Channel | Thread, options?: MarkReadOptions) => {
-    let result: EventAPIResponse | null = null;
-    if (isChannel(collection)) {
-      result = await collection.markAsReadRequest(options);
-    } else if (isThread(collection)) {
-      result = await collection.channel.markAsReadRequest({
-        ...options,
-        thread_id: collection.id,
-      });
+  public markRead = async (collection: Channel | Thread, options?: MarkReadRequest) => {
+    const isThreadCollection = isThread(collection);
+    const channel = isThreadCollection ? collection.channel : collection;
+    const requestOptions = isThreadCollection
+      ? { ...options, thread_id: collection.id }
+      : options;
+
+    let result: Partial<StreamResponse<MarkReadResponse>> | null = null;
+
+    if (isThreadCollection) {
+      const markReadRequestHandler =
+        collection.configState.getLatestValue().requestHandlers?.markReadRequest;
+      result = markReadRequestHandler
+        ? ((await markReadRequestHandler({
+            options: requestOptions,
+            thread: collection,
+          })) ?? null)
+        : channel.readEventsEnabled
+          ? await channel.markRead(requestOptions)
+          : null;
+    } else {
+      const { readEvents, requestHandlers } = channel.configState.getLatestValue();
+      const markReadRequestHandler = requestHandlers?.markReadRequest;
+      if (markReadRequestHandler) {
+        result =
+          (await markReadRequestHandler({ channel, options: requestOptions })) ?? null;
+      } else if (channel.readEventsEnabled) {
+        result = await channel.markRead(requestOptions);
+      } else if (readEvents.localUnreadCountEnabled) {
+        channel.markReadLocally();
+      }
     }
 
-    // A read implies delivery, so the candidate is only dropped once the request actually went
-    // out. `markAsReadRequest` returns null for channels that do not track read state on the
-    // backend, and those candidates must survive for the next delivery report.
+    // A read implies delivery, so the candidate is dropped only if a request went out (a declining
+    // `markReadRequest` handler returns nothing).
     if (result) this.removeCandidateFor(collection);
     return result;
   };
 
-  /**
-   * Throttles the MessageDeliveryReporter.markRead call
-   * @param collection
-   * @param options
-   */
-  public throttledMarkRead = throttle(this.markRead, MARK_AS_READ_THROTTLE_TIMEOUT, {
-    leading: false,
-    trailing: true,
-  });
+  // Fire-and-forget: no caller awaits an automatic mark-read, so rejections are swallowed (the next
+  // trigger retries; explicit `markRead()` callers still get the error). One throttle per collection:
+  // a shared one keeps only the latest call for its trailing edge and would drop another
+  // collection's pending mark-read.
+  private buildThrottledMarkRead = (intervalMs: number) => {
+    const throttled = new WeakMap<
+      Channel | Thread,
+      (options?: MarkReadRequest) => void
+    >();
+    return (collection: Channel | Thread, options?: MarkReadRequest) => {
+      let markRead = throttled.get(collection);
+      if (!markRead) {
+        markRead = throttle(
+          (markReadOptions?: MarkReadRequest) => {
+            void this.markRead(collection, markReadOptions).catch(() => undefined);
+          },
+          intervalMs,
+          { leading: true, trailing: true },
+        ).throttledFn;
+        throttled.set(collection, markRead);
+      }
+      markRead(options);
+    };
+  };
+
+  public throttledMarkRead = this.buildThrottledMarkRead(
+    DEFAULT_MESSAGE_DELIVERY_REPORTER_CONFIG.markAsReadThrottleTimeoutMs,
+  );
 }

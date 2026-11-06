@@ -23,10 +23,11 @@
     "outDir": "./dist/types",
     "rootDir": "./src",
 
-    "lib": ["ES2020", "DOM", "ES2022.Error"],
+    "lib": ["ES2022", "DOM", "ES2022.Error"],
     "moduleResolution": "bundler",
     "module": "Preserve",
-    "target": "ES2020"
+    "target": "ES2020",
+    "types": ["node"]
   },
   "include": ["./src/**/*"]
 }

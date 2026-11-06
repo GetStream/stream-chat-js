@@ -2,11 +2,175 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { getClientWithUser } from './test-utils/getClient';
 import { generateMsg } from './test-utils/generateMessage';
-import type { ChannelResponse, Event } from '../../src';
+import { formatMessage } from '../../src';
+import type { Channel, ChannelResponse, Event } from '../../src';
+import { convertDateToTimestamp } from './test-utils/time';
+
+// CooldownTimer.refresh() derives the current user's latest message from the message paginator's
+// newest window (its anchored head), so tests seed the paginator (formatted) rather than legacy
+// channel state.
+const seedLatestWindow = (
+  channel: Channel,
+  ...messages: ReturnType<typeof generateMsg>[]
+) =>
+  channel.messagePaginator.ingestPage({
+    page: messages.map((m) => formatMessage(m)),
+    isHead: true,
+    isTail: true,
+    setActive: true,
+  });
 
 describe('CooldownTimer', () => {
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  /**
+   * `canSkipCooldown` derives from `own_capabilities` and is *stored*, so a capability-only change has to
+   * trigger a refresh. `channel.updated` handling is guarded on `cooldown` having moved, which filters
+   * exactly this case out, and `updatePartial()` announced the change without refreshing.
+   *
+   * These drive `channel.updatePartial()` — the real route — rather than registering the timer's own
+   * subscriptions and dispatching the event by hand. The earlier version of this suite did the latter, and
+   * it proved nothing: nothing in `src/` calls `cooldownTimer.registerSubscriptions()`, so the subscription
+   * it exercised does not exist in a running app. A probe has to fail in the broken configuration to be
+   * worth anything, and that one passed against code that was inert.
+   */
+  /**
+   * The timer derives itself from `channel.state` and the message paginator's store, subscribed in its
+   * constructor. Before that it was refreshed imperatively from four places in `Channel`, which left two
+   * writes to `channel.data` uncovered: `query()` (which never called it) and any `updatePartial` that
+   * changed `cooldown` without changing capabilities.
+   */
+  describe('derives from state rather than being refreshed', () => {
+    const open = async (id: string) => {
+      const client = await getClientWithUser({ id: 'user-1' });
+      return client.channelManager.ensure({ type: 'messaging', id: id });
+    };
+
+    it('picks up a cooldown that arrives through a channel-data sync', async () => {
+      const channel = await open('cooldown-sync');
+      expect(channel.cooldownTimer.cooldownConfigSeconds).toBe(0);
+
+      const previous = channel.data;
+      channel.data = { ...previous, cooldown: 30 } as Partial<ChannelResponse>;
+
+      expect(channel.cooldownTimer.cooldownConfigSeconds).toBe(30);
+    });
+
+    it('picks up a capability change through a channel-data sync', async () => {
+      const channel = await open('cooldown-capability-sync');
+      expect(channel.cooldownTimer.canSkipCooldown).toBe(false);
+
+      const previous = channel.data;
+      channel.data = {
+        ...previous,
+        own_capabilities: ['skip-slow-mode'],
+      } as Partial<ChannelResponse>;
+
+      expect(channel.cooldownTimer.canSkipCooldown).toBe(true);
+    });
+
+    it('picks up the own latest message from a paginator ingest', async () => {
+      const channel = await open('cooldown-paginator');
+      const created_at = convertDateToTimestamp('2024-01-01T00:00:00.000Z');
+
+      seedLatestWindow(channel, generateMsg({ created_at, user: { id: 'user-1' } }));
+
+      expect(channel.cooldownTimer.ownLatestMessageTimestamp).toBe(
+        convertDateToTimestamp(created_at),
+      );
+    });
+
+    it('keeps the own latest message while only an older window is loaded', async () => {
+      const channel = await open('cooldown-older-window');
+      const created_at = convertDateToTimestamp('2024-01-01T00:10:00.000Z');
+      seedLatestWindow(channel, generateMsg({ created_at, user: { id: 'user-1' } }));
+
+      // the reader jumps to an older part of the channel, and the newest window is dropped
+      channel.messagePaginator.clearStateAndCache();
+      channel.messagePaginator.ingestPage({
+        page: [
+          formatMessage(
+            generateMsg({
+              created_at: convertDateToTimestamp('2024-01-01T00:00:00.000Z'),
+              user: { id: 'someone-else' },
+            }),
+          ),
+        ],
+        setActive: true,
+      });
+
+      expect(channel.cooldownTimer.ownLatestMessageTimestamp).toBe(created_at);
+    });
+
+    it('stops deriving once unregistered', async () => {
+      const channel = await open('cooldown-unregister');
+      channel.cooldownTimer.unregisterSubscriptions();
+
+      const previous = channel.data;
+      channel.data = { ...previous, cooldown: 30 } as Partial<ChannelResponse>;
+
+      expect(channel.cooldownTimer.cooldownConfigSeconds).toBe(0);
+    });
+  });
+
+  describe('capability changes through updatePartial', () => {
+    const setup = async (own_capabilities: string[]) => {
+      const client = await getClientWithUser({ id: 'user-1' });
+      const channel = client.channelManager.ensure({
+        type: 'messaging',
+        id: 'cooldown-capabilities',
+      });
+      channel.data = {
+        cid: channel.cid,
+        cooldown: 30,
+        id: channel.id,
+        own_capabilities,
+        type: channel.type,
+      } as Partial<ChannelResponse>;
+      channel.cooldownTimer.refresh();
+      return { channel, client };
+    };
+
+    const updatePartialWithCapabilities = async (
+      channel: Channel,
+      own_capabilities: string[],
+    ) => {
+      vi.spyOn(channel, 'updateChannelPartial').mockResolvedValue({
+        channel: { ...channel.data, own_capabilities },
+      } as never);
+      await channel.updatePartial({ set: { frozen: false } } as never);
+    };
+
+    it('picks up a newly granted skip-slow-mode', async () => {
+      const { channel } = await setup([]);
+      expect(channel.cooldownTimer.canSkipCooldown).toBe(false);
+
+      await updatePartialWithCapabilities(channel, ['skip-slow-mode']);
+
+      expect(channel.cooldownTimer.canSkipCooldown).toBe(true);
+    });
+
+    it('picks up a revoked skip-slow-mode', async () => {
+      const { channel } = await setup(['skip-slow-mode']);
+      expect(channel.cooldownTimer.canSkipCooldown).toBe(true);
+
+      await updatePartialWithCapabilities(channel, []);
+
+      expect(channel.cooldownTimer.canSkipCooldown).toBe(false);
+    });
+
+    it('clears a running cooldown as soon as the capability is granted', async () => {
+      const { channel } = await setup([]);
+      channel.cooldownTimer.setCooldownRemaining(12);
+      expect(channel.cooldownTimer.cooldownRemaining).toBe(12);
+
+      await updatePartialWithCapabilities(channel, ['skip-slow-mode']);
+
+      // `refresh()` short-circuits to zero once the cooldown can be skipped.
+      expect(channel.cooldownTimer.cooldownRemaining).toBe(0);
+    });
   });
 
   it('ticks down every second until it reaches 0', async () => {
@@ -15,7 +179,7 @@ describe('CooldownTimer', () => {
     vi.setSystemTime(now);
 
     const client = await getClientWithUser({ id: 'user-1' });
-    const channel = client.channel('messaging', 'cooldown-1');
+    const channel = client.channelManager.ensure({ type: 'messaging', id: 'cooldown-1' });
 
     channel.data = {
       cooldown: 12,
@@ -23,11 +187,12 @@ describe('CooldownTimer', () => {
     };
 
     const lastOwnMessageAt = new Date('2026-01-01T00:00:00.000Z');
-    channel.state.addMessageSorted(
+    seedLatestWindow(
+      channel,
       generateMsg({
-        created_at: lastOwnMessageAt.toISOString(),
-        updated_at: lastOwnMessageAt.toISOString(),
-        user: { id: client.userID as string },
+        created_at: convertDateToTimestamp(lastOwnMessageAt),
+        updated_at: convertDateToTimestamp(lastOwnMessageAt),
+        user: { id: client.userId as string },
       }),
     );
 
@@ -53,17 +218,18 @@ describe('CooldownTimer', () => {
     vi.setSystemTime(now);
 
     const client = await getClientWithUser({ id: 'user-1' });
-    const channel = client.channel('messaging', 'cooldown-0');
+    const channel = client.channelManager.ensure({ type: 'messaging', id: 'cooldown-0' });
 
     channel.data = {
       own_capabilities: [],
     };
 
-    channel.state.addMessageSorted(
+    seedLatestWindow(
+      channel,
       generateMsg({
-        created_at: now.toISOString(),
-        updated_at: now.toISOString(),
-        user: { id: client.userID as string },
+        created_at: convertDateToTimestamp(now),
+        updated_at: convertDateToTimestamp(now),
+        user: { id: client.userId as string },
       }),
     );
 
@@ -73,11 +239,12 @@ describe('CooldownTimer', () => {
 
     channel.data.cooldown = 0;
 
-    channel.state.addMessageSorted(
+    seedLatestWindow(
+      channel,
       generateMsg({
-        created_at: now.toISOString(),
-        updated_at: now.toISOString(),
-        user: { id: client.userID as string },
+        created_at: convertDateToTimestamp(now),
+        updated_at: convertDateToTimestamp(now),
+        user: { id: client.userId as string },
       }),
     );
 
@@ -87,11 +254,12 @@ describe('CooldownTimer', () => {
 
     channel.data.cooldown = 10;
 
-    channel.state.addMessageSorted(
+    seedLatestWindow(
+      channel,
       generateMsg({
-        created_at: now.toISOString(),
-        updated_at: now.toISOString(),
-        user: { id: client.userID as string },
+        created_at: convertDateToTimestamp(now),
+        updated_at: convertDateToTimestamp(now),
+        user: { id: client.userId as string },
       }),
     );
 
@@ -111,7 +279,10 @@ describe('CooldownTimer', () => {
     vi.setSystemTime(now);
 
     const client = await getClientWithUser({ id: 'user-1' });
-    const channel = client.channel('messaging', 'cooldown-remaining-0');
+    const channel = client.channelManager.ensure({
+      type: 'messaging',
+      id: 'cooldown-remaining-0',
+    });
 
     channel.data = {
       cooldown: 5,
@@ -119,11 +290,12 @@ describe('CooldownTimer', () => {
     };
 
     const lastOwnMessageAt = new Date('2026-01-01T00:00:00.000Z'); // 10s ago
-    channel.state.addMessageSorted(
+    seedLatestWindow(
+      channel,
       generateMsg({
-        created_at: lastOwnMessageAt.toISOString(),
-        updated_at: lastOwnMessageAt.toISOString(),
-        user: { id: client.userID as string },
+        created_at: convertDateToTimestamp(lastOwnMessageAt),
+        updated_at: convertDateToTimestamp(lastOwnMessageAt),
+        user: { id: client.userId as string },
       }),
     );
 
@@ -138,18 +310,22 @@ describe('CooldownTimer', () => {
     vi.setSystemTime(now);
 
     const client = await getClientWithUser({ id: 'user-1' });
-    const channel = client.channel('messaging', 'cooldown-skip');
+    const channel = client.channelManager.ensure({
+      type: 'messaging',
+      id: 'cooldown-skip',
+    });
 
     channel.data = {
       cooldown: 10,
       own_capabilities: ['skip-slow-mode'],
     };
 
-    channel.state.addMessageSorted(
+    seedLatestWindow(
+      channel,
       generateMsg({
-        created_at: now.toISOString(),
-        updated_at: now.toISOString(),
-        user: { id: client.userID as string },
+        created_at: convertDateToTimestamp(now),
+        updated_at: convertDateToTimestamp(now),
+        user: { id: client.userId as string },
       }),
     );
 
@@ -164,15 +340,19 @@ describe('CooldownTimer', () => {
     vi.setSystemTime(now);
 
     const client = await getClientWithUser({ id: 'user-1' });
-    const channel = client.channel('messaging', 'cooldown-updated-increase');
+    const channel = client.channelManager.ensure({
+      type: 'messaging',
+      id: 'cooldown-updated-increase',
+    });
 
     // timeSince = 2s
     const lastOwnMessageAt = new Date('2026-01-01T00:00:08.000Z');
-    channel.state.addMessageSorted(
+    seedLatestWindow(
+      channel,
       generateMsg({
-        created_at: lastOwnMessageAt.toISOString(),
-        updated_at: lastOwnMessageAt.toISOString(),
-        user: { id: client.userID as string },
+        created_at: convertDateToTimestamp(lastOwnMessageAt),
+        updated_at: convertDateToTimestamp(lastOwnMessageAt),
+        user: { id: client.userId as string },
       }),
     );
 
@@ -198,15 +378,19 @@ describe('CooldownTimer', () => {
     vi.setSystemTime(now);
 
     const client = await getClientWithUser({ id: 'user-1' });
-    const channel = client.channel('messaging', 'cooldown-updated-decrease-to-zero');
+    const channel = client.channelManager.ensure({
+      type: 'messaging',
+      id: 'cooldown-updated-decrease-to-zero',
+    });
 
     // timeSince = 2s
     const lastOwnMessageAt = new Date('2026-01-01T00:00:08.000Z');
-    channel.state.addMessageSorted(
+    seedLatestWindow(
+      channel,
       generateMsg({
-        created_at: lastOwnMessageAt.toISOString(),
-        updated_at: lastOwnMessageAt.toISOString(),
-        user: { id: client.userID as string },
+        created_at: convertDateToTimestamp(lastOwnMessageAt),
+        updated_at: convertDateToTimestamp(lastOwnMessageAt),
+        user: { id: client.userId as string },
       }),
     );
 
@@ -232,15 +416,19 @@ describe('CooldownTimer', () => {
     vi.setSystemTime(now);
 
     const client = await getClientWithUser({ id: 'user-1' });
-    const channel = client.channel('messaging', 'cooldown-updated-to-0');
+    const channel = client.channelManager.ensure({
+      type: 'messaging',
+      id: 'cooldown-updated-to-0',
+    });
 
     // timeSince = 2s
     const lastOwnMessageAt = new Date('2026-01-01T00:00:08.000Z');
-    channel.state.addMessageSorted(
+    seedLatestWindow(
+      channel,
       generateMsg({
-        created_at: lastOwnMessageAt.toISOString(),
-        updated_at: lastOwnMessageAt.toISOString(),
-        user: { id: client.userID as string },
+        created_at: convertDateToTimestamp(lastOwnMessageAt),
+        updated_at: convertDateToTimestamp(lastOwnMessageAt),
+        user: { id: client.userId as string },
       }),
     );
 
@@ -265,7 +453,7 @@ describe('CooldownTimer', () => {
     vi.setSystemTime(now);
 
     const client = await getClientWithUser({ id: 'user-1' });
-    const channel = client.channel('messaging', 'cooldown-4');
+    const channel = client.channelManager.ensure({ type: 'messaging', id: 'cooldown-4' });
 
     channel.data = { cooldown: 5, own_capabilities: [] };
     channel.cooldownTimer.refresh();
@@ -273,11 +461,12 @@ describe('CooldownTimer', () => {
 
     channel._handleChannelEvent({
       type: 'message.new',
-      user: { id: client.userID as string },
+      user: { id: client.userId as string },
       message: generateMsg({
-        created_at: now.toISOString(),
-        updated_at: now.toISOString(),
-        user: { id: client.userID as string },
+        cid: channel.cid, // must match the paginator filter so message.new ingests into an interval
+        created_at: convertDateToTimestamp(now),
+        updated_at: convertDateToTimestamp(now),
+        user: { id: client.userId as string },
       }),
     } as Event);
 

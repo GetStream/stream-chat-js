@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { StreamChat, UploadRecord } from '../../../src';
-import { UploadManager } from '../../../src';
+import { isUploadConfirmationPending, UploadManager } from '../../../src';
 
 const TEST_CID = 'channelType:channelId';
 
@@ -13,9 +13,11 @@ const createManager = (
     config: { trackUploadProgress },
   };
   const client = {
-    channel: vi.fn().mockReturnValue({
-      messageComposer: { attachmentManager },
-    }),
+    channelManager: {
+      ensure: vi.fn().mockReturnValue({
+        messageComposer: { attachmentManager },
+      }),
+    },
   } as unknown as StreamChat;
   const manager = new UploadManager(client);
   return { manager, client, doUploadRequest };
@@ -349,6 +351,21 @@ describe('UploadManager', () => {
     });
   });
 
+  it('rejects and clears the in-flight entry for an invalid channelCid', async () => {
+    const { manager, doUploadRequest } = createManager();
+    const file = new File([], 'x');
+
+    await expect(
+      manager.upload({ id: 'u1', channelCid: 'no-colon', file }),
+    ).rejects.toThrow('Invalid channelCid: no-colon');
+    expect(manager.getUpload('u1')).toBeUndefined();
+    expect(doUploadRequest).not.toHaveBeenCalled();
+
+    // A retry with a valid cid starts a new upload instead of reusing the failed promise.
+    await manager.upload({ id: 'u1', channelCid: TEST_CID, file });
+    expect(doUploadRequest).toHaveBeenCalledTimes(1);
+  });
+
   describe('deleteUploadRecord', () => {
     it('removes matching in-flight record and leaves others', async () => {
       const { manager, doUploadRequest } = createManager(
@@ -501,5 +518,43 @@ describe('UploadManager', () => {
       expect(manager.getUpload('removed-mid-flight')).toBeUndefined();
       expect(doUploadRequest).toHaveBeenCalledTimes(1);
     });
+  });
+});
+
+describe('isUploadConfirmationPending', () => {
+  it('is false unless the attachment is uploading', () => {
+    expect(isUploadConfirmationPending(undefined)).toBe(false);
+    expect(
+      isUploadConfirmationPending({ uploadProgress: 100, uploadState: 'finished' }),
+    ).toBe(false);
+  });
+
+  it('reads the record-supplied flag when present', () => {
+    expect(
+      isUploadConfirmationPending({
+        uploadConfirmationPending: true,
+        uploadProgress: 10,
+        uploadState: 'uploading',
+      }),
+    ).toBe(true);
+    // The flag wins over the progress-derived guess, in both directions.
+    expect(
+      isUploadConfirmationPending({
+        uploadConfirmationPending: false,
+        uploadProgress: 100,
+        uploadState: 'uploading',
+      }),
+    ).toBe(false);
+  });
+
+  it('infers it from full progress when the flag is absent', () => {
+    expect(
+      isUploadConfirmationPending({ uploadProgress: 100, uploadState: 'uploading' }),
+    ).toBe(true);
+    expect(
+      isUploadConfirmationPending({ uploadProgress: 99, uploadState: 'uploading' }),
+    ).toBe(false);
+    // No progress reported at all (trackUploadProgress off): nothing to infer from.
+    expect(isUploadConfirmationPending({ uploadState: 'uploading' })).toBe(false);
   });
 });

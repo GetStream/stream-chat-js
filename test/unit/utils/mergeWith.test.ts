@@ -638,10 +638,13 @@ describe('isEqual', () => {
     expect(isEqual(true, true)).toBe(true);
     expect(isEqual(null, null)).toBe(true);
     expect(isEqual(undefined, undefined)).toBe(true);
+    expect(isEqual(-0, 0)).toBe(true);
   });
 
   it('should consider different primitives not equal', () => {
     expect(isEqual(42, 43)).toBe(false);
+    expect(isEqual('1', 1)).toBe(false);
+    expect(isEqual(1, true)).toBe(false);
     expect(isEqual('hello', 'world')).toBe(false);
     expect(isEqual(true, false)).toBe(false);
     expect(isEqual(null, undefined)).toBe(false);
@@ -659,6 +662,7 @@ describe('isEqual', () => {
     expect(isEqual([1, 2, 3], [1, 2, 3])).toBe(true);
     expect(isEqual([1, 2, 3], [1, 2, 4])).toBe(false);
     expect(isEqual([1, 2], [1, 2, 3])).toBe(false);
+    expect(isEqual([1, 2], [2, 1])).toBe(false);
     expect(isEqual([], [])).toBe(true);
   });
 
@@ -666,6 +670,7 @@ describe('isEqual', () => {
     expect(isEqual([1, [2, 3]], [1, [2, 3]])).toBe(true);
     expect(isEqual([1, [2, 3]], [1, [2, 4]])).toBe(false);
     expect(isEqual([1, [2, [3]]], [1, [2, [3]]])).toBe(true);
+    expect(isEqual([1], [1, 2])).toBe(false);
   });
 
   it('should compare objects by value', () => {
@@ -684,10 +689,117 @@ describe('isEqual', () => {
     );
   });
 
+  it('ignores property order; compares by keys/values', () => {
+    expect(isEqual({ a: 1, b: 2 }, { b: 2, a: 1 })).toBe(true);
+  });
+
   it('should compare mixed nested structures', () => {
     expect(isEqual({ a: [1, { b: 2 }] }, { a: [1, { b: 2 }] })).toBe(true);
     expect(isEqual({ a: [1, { b: 2 }] }, { a: [1, { b: 3 }] })).toBe(false);
     expect(isEqual([{ a: 1 }, [2, 3]], [{ a: 1 }, [2, 3]])).toBe(true);
+  });
+
+  it('arrays: holes vs explicit undefined are not equal', () => {
+    const a = [, 1]; // hole at index 0
+    const b = [undefined, 1];
+    expect(isEqual(a, b)).toBe(false);
+  });
+
+  it('symbol keys: equal when both present and equal; unequal when missing or different', () => {
+    const s1 = Symbol('s');
+    const s2 = Symbol('s'); // different identity even if same description
+
+    expect(isEqual({ [s1]: 1 }, { [s1]: 1 })).toBe(true);
+    expect(isEqual({ [s1]: 1 }, { [s1]: 2 })).toBe(false);
+    expect(isEqual({ [s1]: 1 }, {})).toBe(false);
+    expect(isEqual({ [s1]: 1 }, { [s2]: 1 })).toBe(false);
+  });
+
+  it('sets: equal contents regardless of order', () => {
+    const a = new Set([1, 2, 3]);
+    const b = new Set([3, 2, 1]);
+    expect(isEqual(a, b)).toBe(true);
+  });
+
+  it('sets: unequal when contents differ', () => {
+    expect(isEqual(new Set([1, 2]), new Set([1, 3]))).toBe(false);
+  });
+
+  it('sets: deep equality of object elements', () => {
+    expect(
+      isEqual(new Set([{ id: 1 }, { id: 2 }]), new Set([{ id: 2 }, { id: 1 }])),
+    ).toBe(true);
+    expect(
+      isEqual(new Set([{ id: 1 }, { id: 1 }]), new Set([{ id: 2 }, { id: 1 }])),
+    ).toBe(false);
+    expect(
+      isEqual(new Set([{ id: 2 }, { id: 1 }]), new Set([{ id: 1 }, { id: 1 }])),
+    ).toBe(false);
+  });
+
+  it('sets: unequal sizes', () => {
+    expect(isEqual(new Set([1]), new Set([1, 2]))).toBe(false);
+  });
+
+  it('sets: identical references are always equal', () => {
+    const s = new Set([1]);
+    expect(isEqual(s, s)).toBe(true);
+  });
+
+  it('maps: same entries regardless of order', () => {
+    const a = new Map([
+      ['x', 1],
+      ['y', 2],
+    ]);
+    const b = new Map([
+      ['y', 2],
+      ['x', 1],
+    ]);
+    expect(isEqual(a, b)).toBe(true);
+  });
+
+  it('maps: unequal size', () => {
+    const a = new Map([['x', 1]]);
+    const b = new Map([
+      ['x', 1],
+      ['y', 2],
+    ]);
+    expect(isEqual(a, b)).toBe(false);
+  });
+
+  it('maps: unequal value for same key', () => {
+    const a = new Map([['x', 1]]);
+    const b = new Map([['x', 2]]);
+    expect(isEqual(a, b)).toBe(false);
+  });
+
+  it('maps: deep key equality', () => {
+    const a = new Map([[{ id: 1 }, 'A']]);
+    const b = new Map([[{ id: 1 }, 'A']]);
+    expect(isEqual(a, b)).toBe(true);
+  });
+
+  it('maps: deep value equality', () => {
+    const a = new Map([['user', { name: 'Ann' }]]);
+    const b = new Map([['user', { name: 'Ann' }]]);
+    expect(isEqual(a, b)).toBe(true);
+  });
+
+  it('maps: duplicate keys or values require one-to-one pairing', () => {
+    const a = new Map([
+      [{ id: 1 }, 'x'],
+      [{ id: 1 }, 'x'],
+    ]);
+    const b = new Map([
+      [{ id: 1 }, 'x'],
+      [{ id: 2 }, 'x'],
+    ]);
+    expect(isEqual(a, b)).toBe(false);
+  });
+
+  it('maps: identical reference maps equal', () => {
+    const m = new Map([['a', 1]]);
+    expect(isEqual(m, m)).toBe(true);
   });
 
   it('should handle Date objects', () => {
@@ -698,6 +810,8 @@ describe('isEqual', () => {
     expect(isEqual(date1, date2)).toBe(true);
     expect(isEqual(date1, date3)).toBe(false);
     expect(isEqual({ date: date1 }, { date: date2 })).toBe(true);
+    // invalid dates compare false
+    expect(isEqual(new Date('x'), new Date('x'))).toBe(false);
   });
 
   it('should handle RegExp objects', () => {
@@ -708,6 +822,18 @@ describe('isEqual', () => {
     expect(isEqual(regex1, regex2)).toBe(true);
     expect(isEqual(regex1, regex3)).toBe(false);
     expect(isEqual({ regex: regex1 }, { regex: regex2 })).toBe(true);
+    expect(isEqual([regex1, regex2], [regex1, regex2])).toBe(true);
+    expect(isEqual([regex2, regex1], [regex1, regex2])).toBe(true);
+    expect(isEqual([regex3, regex1], [regex1, regex3])).toBe(false);
+  });
+
+  it('different object prototypes but same enumerable props', () => {
+    const a = { x: 1 };
+    // creates an object without a prototype
+    const b = Object.create(null);
+    b.x = 1;
+
+    expect(isEqual(a, b)).toBe(false);
   });
 
   it('should handle class instances as not equal', () => {
@@ -717,6 +843,13 @@ describe('isEqual', () => {
     // Class instances should not be considered equal even with same properties
     expect(isEqual(file1, file2)).toBe(false);
     expect(isEqual(file1, file1)).toBe(true); // Same reference is equal
+  });
+
+  it('typed arrays / buffers (treated atomically via instance rule)', () => {
+    const ta1 = new Uint8Array([1, 2, 3]);
+    const ta2 = new Uint8Array([1, 2, 3]);
+    expect(isEqual(ta1, ta2)).toBe(false);
+    expect(isEqual(ta1, ta1)).toBe(true);
   });
 
   it('should handle circular references', () => {
@@ -748,15 +881,17 @@ describe('isEqual', () => {
 
     expect(isEqual(obj1, obj3)).toBe(true);
     expect(isEqual(obj1, obj5)).toBe(false);
-  });
 
-  it('should compare object property keys correctly', () => {
-    // Objects with same keys but different order
-    expect(isEqual({ a: 1, b: 2, c: 3 }, { c: 3, b: 2, a: 1 })).toBe(true);
+    const a1: any = { n: 1 },
+      a2: any = { n: 2 };
+    a1.other = a2;
+    a2.other = a1;
 
-    // Ensure keys in second object are correctly checked
-    const obj1 = { a: 1, b: 2 };
-    const obj2 = { a: 1, c: 3 };
-    expect(isEqual(obj1, obj2)).toBe(false);
+    const b1: any = { n: 1 },
+      b2: any = { n: 2 };
+    b1.other = b2;
+    b2.other = b1;
+
+    expect(isEqual(a1, b1)).toBe(true);
   });
 });

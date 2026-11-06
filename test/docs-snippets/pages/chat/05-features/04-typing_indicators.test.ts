@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import type { Channel, Event, StreamChat } from '../../../../../src';
+import type { Channel, EventPayload, StreamChat } from '../../../../../src';
 import {
   disconnectClients,
   getClientSideClient,
@@ -20,18 +20,20 @@ describe('_default/05-features/04-typing_indicators.md', () => {
   // A fresh channel per test, watched by both users, with a parent message for thread typing.
   const createWatchedChannels = async () => {
     const id = uniqueId('channel');
-    const channel = client.channel('messaging', id, { members: [userId, otherId] });
+    const channel = client.channel('messaging', id, {
+      members: [{ user_id: userId }, { user_id: otherId }],
+    });
     cleanup.channels.push(`messaging:${id}`);
     await channel.watch();
     const otherChannel = otherClient.channel('messaging', id);
     await otherChannel.watch();
-    const { message } = await channel.sendMessage({ text: 'Thread parent' });
+    const { message } = await channel.sendMessage({ message: { text: 'Thread parent' } });
     return { channel, otherChannel, parentId: message.id };
   };
 
   // Records the typing events a watched channel receives.
   const recordTypingEvents = (channel: Channel) => {
-    const events: Event[] = [];
+    const events: EventPayload<'typing.start' | 'typing.stop'>[] = [];
     channel.on((event) => {
       if (event.type === 'typing.start' || event.type === 'typing.stop') {
         events.push(event);
@@ -97,7 +99,7 @@ describe('_default/05-features/04-typing_indicators.md', () => {
       });
       await channel.stopTyping(thread_id);
     } finally {
-      otherChannel.listeners = {};
+      otherChannel.listeners.clear();
     }
   });
 
@@ -159,7 +161,7 @@ describe('_default/05-features/04-typing_indicators.md', () => {
       });
     } finally {
       logSpy.mockRestore();
-      channel.listeners = {};
+      channel.listeners.clear();
     }
   });
 });

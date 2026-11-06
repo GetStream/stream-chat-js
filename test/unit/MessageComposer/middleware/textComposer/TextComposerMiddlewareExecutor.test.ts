@@ -7,13 +7,11 @@ import {
 } from '../../../../../src/messageComposer/messageComposer';
 import { createMentionsMiddleware } from '../../../../../src/messageComposer/middleware/textComposer/mentions';
 import type { TextComposerSuggestion } from '../../../../../src/messageComposer/';
-import type {
-  CommandResponse,
-  DraftResponse,
-  LocalMessage,
-} from '../../../../../src/types';
+import type { Command, DraftResponse, LocalMessage } from '../../../../../src/types';
 import { TextComposerMiddleware } from '../../../../../src';
 import type { UserSuggestion } from '../../../../../src/messageComposer/middleware/textComposer/types';
+import { getClientWithUser } from '../../../test-utils/getClient';
+import { stubServerConfig } from '../../../test-utils/stubServerConfig';
 
 // Mock dependencies
 vi.mock('../../../src/utils', () => ({
@@ -46,13 +44,13 @@ const setup = ({
   vi.clearAllMocks();
 
   // Setup mocks
-  const client = new StreamChat('apiKey', 'apiSecret');
+  const client = getClientWithUser({ id: 'user' });
   client.queryUsers = vi.fn().mockResolvedValue({ users: [] });
 
-  const channel = client.channel('channelType', 'channelId');
+  const channel = client.channelManager.ensure({ type: 'channelType', id: 'channelId' });
   channel.keystroke = vi.fn().mockResolvedValue({});
   channel.getClient = vi.fn().mockReturnValue(client);
-  channel.getConfig = vi.fn().mockReturnValue({
+  stubServerConfig(channel, {
     commands: [
       { name: 'ban', description: 'Ban a user' },
       { name: 'mute', description: 'Mute a user' },
@@ -81,11 +79,14 @@ describe('TextComposerMiddlewareExecutor', () => {
       messageComposer: { textComposer },
     } = setup();
     const middleware = textComposer.middlewareExecutor.middleware;
-    expect(middleware.length).toBe(4);
-    expect(middleware[0].id).toBe('stream-io/text-composer/pre-validation-middleware');
-    expect(middleware[1].id).toBe('stream-io/text-composer/mentions-middleware');
-    expect(middleware[2].id).toBe('stream-io/text-composer/commands-middleware');
-    expect(middleware[3].id).toBe('stream-io/text-composer/command-effects-middleware');
+    expect(middleware.map(({ id }) => id)).toEqual([
+      'stream-io/text-composer/pre-validation-middleware',
+      'stream-io/text-composer/mentions-middleware',
+      'stream-io/text-composer/active-command-guard',
+      'stream-io/text-composer/commands-middleware',
+      'stream-io/text-composer/command-string-extraction',
+      'stream-io/text-composer/command-effects-middleware',
+    ]);
   });
 
   it('should handle onChange event with mentions', async () => {
@@ -242,7 +243,7 @@ describe('TextComposerMiddlewareExecutor', () => {
       id: 'ban',
       name: 'ban',
       description: 'Ban a user',
-    } as TextComposerSuggestion<CommandResponse>;
+    } as TextComposerSuggestion<Command>;
 
     await textComposer.handleSelect(selectedSuggestion);
 
@@ -273,7 +274,7 @@ describe('TextComposerMiddlewareExecutor', () => {
       id: 'ban',
       name: 'ban',
       description: 'Ban a user',
-    } as TextComposerSuggestion<CommandResponse>);
+    } as TextComposerSuggestion<Command>);
 
     expect(textComposer.text).toBe('/ba');
     expect(textComposer.command).toBeNull();
@@ -313,7 +314,7 @@ describe('TextComposerMiddlewareExecutor', () => {
       name: 'ban',
       description: 'Ban a user',
       set: 'moderation_set',
-    } as TextComposerSuggestion<CommandResponse>);
+    } as TextComposerSuggestion<Command>);
 
     expect(textComposer.text).toBe('/ba');
     expect(textComposer.command).toBeNull();
@@ -338,7 +339,7 @@ describe('TextComposerMiddlewareExecutor', () => {
       messageComposer,
       messageComposer: { textComposer },
     } = setup();
-    channel.getConfig = vi.fn().mockReturnValue({
+    stubServerConfig(channel, {
       commands: [{ name: 'ban', description: 'Ban a user', set: 'moderation_set' }],
     });
     messageComposer.setQuotedMessage({

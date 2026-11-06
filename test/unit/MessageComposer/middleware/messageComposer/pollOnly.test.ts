@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { MessageComposerMiddlewareState } from '../../../../../src';
 import { createPollOnlyCompositionMiddleware } from '../../../../../src/messageComposer/middleware/messageComposer/pollOnly';
+import { convertDateToTimestamp } from '../../../test-utils/time';
 
 const setupMiddlewareApi = (initialState: MessageComposerMiddlewareState) => {
   return {
@@ -20,7 +21,7 @@ const stateSeed: MessageComposerMiddlewareState = {
   },
   localMessage: {
     attachments: [],
-    created_at: new Date(),
+    created_at: convertDateToTimestamp(new Date()),
     deleted_at: null,
     error: undefined,
     id: 'test-id',
@@ -31,7 +32,7 @@ const stateSeed: MessageComposerMiddlewareState = {
     status: 'sending',
     text: '',
     type: 'regular',
-    updated_at: new Date(),
+    updated_at: convertDateToTimestamp(new Date()),
   },
   sendOptions: {},
 };

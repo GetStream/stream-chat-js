@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { Channel, StreamChat } from '../../../../../src';
 import {
   disconnectClients,
@@ -38,7 +38,9 @@ describe('_default/04-messages/07-silent_messages.md', () => {
     await grantMessagingMembers(serverClient, cleanup, EXTRA_MEMBER_GRANTS);
     await waitForChannelTypePropagation();
     client = await getClientSideClient({ id: userId });
-    channel = client.channel(channelType, channelId, { members: [userId, otherId] });
+    channel = client.channel(channelType, channelId, {
+      members: [{ user_id: userId }, { user_id: otherId }],
+    });
     cleanup.channels.push(`${channelType}:${channelId}`);
     await channel.watch();
   });
@@ -49,39 +51,44 @@ describe('_default/04-messages/07-silent_messages.md', () => {
   });
 
   it('sends a silent message', async () => {
-    const tripData = { title: 'Trip to the airport', distance_km: 12 };
+    const tripData = { distance_km: 12 };
     const before = await unreadCountOfOther();
+    const sendSpy = vi.spyOn(channel, 'sendMessage');
 
     // #region snippet docs="chat/_default/04-messages/07-silent_messages.md" heading="Silent Messages" tab="JavaScript" index=1
     const message = {
       text: 'You completed your trip',
       silent: true,
-      attachments: [{ type: 'trip', ...tripData }],
+      attachments: [{ type: 'trip', custom: tripData }],
     };
-    await channel.sendMessage(message);
+    await channel.sendMessage({ message });
     // #endregion snippet
 
-    const { messages } = await channel.query({ messages: { limit: 2 } });
-    const sent = messages[0];
+    const { message: sent } = await sendSpy.mock.results[0].value;
+    sendSpy.mockRestore();
     expect(sent.text).toBe('You completed your trip');
     expect(sent.silent).toBe(true);
-    expect(sent.attachments?.[0]?.type).toBe('trip');
+    expect(sent.attachments[0]?.type).toBe('trip');
+    expect(sent.attachments[0]?.custom.distance_km).toBe(12);
     expect(await unreadCountOfOther()).toBe(before);
     // A regular message does count, so the check above is meaningful.
-    await channel.sendMessage({ text: 'Regular message' });
+    await channel.sendMessage({ message: { text: 'Regular message' } });
     expect(await unreadCountOfOther()).toBe(before + 1);
   });
 
   it('sends a system message', async () => {
+    const sendSpy = vi.spyOn(channel, 'sendMessage');
     // #region snippet docs="chat/_default/04-messages/07-silent_messages.md" heading="System Messages" tab="JavaScript" index=1
     await channel.sendMessage({
-      text: 'You completed your trip',
-      type: 'system',
+      message: {
+        text: 'You completed your trip',
+        type: 'system',
+      },
     });
     // #endregion snippet
 
-    const { messages } = await channel.query({ messages: { limit: 1 } });
-    const sent = messages[messages.length - 1];
+    const { message: sent } = await sendSpy.mock.results[0].value;
+    sendSpy.mockRestore();
     expect(sent.text).toBe('You completed your trip');
     expect(sent.type).toBe('system');
   });

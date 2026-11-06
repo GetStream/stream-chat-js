@@ -1,7 +1,10 @@
+import { createActiveCommandGuardMiddleware } from './activeCommandGuard';
 import { createCommandsMiddleware } from './commands';
 import { createCommandEffectsMiddleware } from './commandEffects';
+import { createCommandStringExtractionMiddleware } from './commandStringExtraction';
 import { createMentionsMiddleware } from './mentions';
 import { createTextComposerPreValidationMiddleware } from './validation';
+import { chatLoggerSystem } from '../../../logger';
 import { MiddlewareExecutor } from '../../../middleware';
 import type {
   ExecuteParams,
@@ -15,6 +18,8 @@ import type {
   TextComposerMiddlewareExecutorOptions,
   TextComposerState,
 } from './types';
+
+const logger = chatLoggerSystem.getLogger('text-composer');
 
 export type TextComposerMiddlewareExecutorState<T extends Suggestion = Suggestion> =
   TextComposerState<T> & {
@@ -46,9 +51,14 @@ export class TextComposerMiddlewareExecutor<
     this.use([
       createTextComposerPreValidationMiddleware(composer) as TextComposerMiddleware<T>,
       createMentionsMiddleware(composer.channel) as TextComposerMiddleware<T>,
+      // While a command is active, the guard stops the commands middleware from suggesting or
+      // activating another one. The extraction moves the active command out of the text, which
+      // the command injection composition middleware puts back in front of the sent text.
+      createActiveCommandGuardMiddleware() as TextComposerMiddleware<T>,
       createCommandsMiddleware(composer.channel, {
         composer,
       }) as TextComposerMiddleware<T>,
+      createCommandStringExtractionMiddleware() as TextComposerMiddleware<T>,
       createCommandEffectsMiddleware() as TextComposerMiddleware<T>,
     ]);
   }
@@ -65,13 +75,14 @@ export class TextComposerMiddlewareExecutor<
     });
 
     const { query, searchSource } = result.state.suggestions ?? ({} as Suggestions);
-    /**
-     * Catching error just for sanity purposes.
-     * The BaseSearchSource.search() method returns debounced result.
-     * That means the result of the previous search call as the debounced call result is unknown at the moment.
-     * Custom search source implementation should handle errors meaningfully internally.
-     */
-    searchSource?.search(query)?.catch(console.error);
+    // `search` is debounced, so its errors are only logged. Custom sources should handle their own.
+    searchSource
+      ?.search(query)
+      ?.catch((error) =>
+        logger
+          .withExtraTags('execute')
+          .error('Searching for suggestions failed.', { error }),
+      );
 
     return result;
   }

@@ -1,15 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { chatLoggerSystem } from '../../../src/logger';
 import {
   AbstractOfflineDB,
   Channel,
-  ChannelAPIResponse,
+  ChannelConfig,
+  ChannelStateResponseFields,
   ChannelConfigWithInfo,
   ChannelResponse,
   createAttachmentsCompositionMiddleware,
-  createSendWithPendingUploadsAttachmentsMiddleware,
+  DEFAULT_COMPOSER_CONFIG,
   LocalMessage,
   MessageComposerConfig,
-  StaticLocationPayload,
+  POLL_ONLY_COMPOSITION_MIDDLEWARE_ID,
+  SharedLocation,
   StreamChat,
   Thread,
 } from '../../../src';
@@ -19,6 +22,10 @@ import { MessageComposer } from '../../../src/messageComposer/messageComposer';
 import { DraftResponse, MessageResponse } from '../../../src/types';
 import { MockOfflineDB } from '../offline-support/MockOfflineDB';
 import { getCommandByName } from '../../../src/messageComposer/middleware/textComposer/commandUtils';
+import { generateMsg } from '../test-utils/generateMessage';
+import { stubServerConfig } from '../test-utils/stubServerConfig';
+import { msToNs, nowNs } from '../../../src/utils/time';
+import { convertDateToTimestamp } from '../test-utils/time';
 
 const generateUuidV4Output = 'test-uuid';
 // Mock dependencies
@@ -40,15 +47,16 @@ vi.mock('../../../src/utils', async (importOriginal) => ({
   isLocalMessage: vi.fn().mockReturnValue(true),
   randomId: vi.fn().mockReturnValue('test-uuid'),
   throttle: vi.fn().mockImplementation((fn) => fn),
+  getEnv: vi.fn(),
 }));
 
 const quotedMessage = {
   id: 'quoted-message-id',
   type: 'regular' as const,
-  created_at: new Date(),
+  created_at: nowNs(),
   deleted_at: null,
   pinned_at: null,
-  updated_at: new Date(),
+  updated_at: nowNs(),
   status: 'received',
   text: 'Quoted message',
   user: { id: 'user-id', name: 'User Name' },
@@ -66,19 +74,19 @@ const getThread = (channel: Channel, client: StreamChat, threadId: string) =>
         text: 'Test message',
         type: 'regular' as const,
         user,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        created_at: nowNs(),
+        updated_at: nowNs(),
       },
       channel: {
-        id: channel.id,
+        id: channel.id!,
         type: channel.type,
         cid: channel.cid,
         disabled: false,
         frozen: false,
       },
       title: 'Test Thread',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      created_at: nowNs(),
+      updated_at: nowNs(),
       channel_cid: channel.cid,
       latest_replies: [],
       thread_participants: [],
@@ -102,17 +110,18 @@ const setup = ({
 } = {}) => {
   const mockClient = new StreamChat('test-api-key');
   mockClient.user = user;
-  mockClient.userID = user.id;
-  const cid = 'messaging:test-channel-id';
+  const channelType = 'messaging';
+  const channelId = 'test-channel-id';
   if (channelConfig) {
+    // Keyed by cid, not channel type — a channel's `config_overrides` make the effective config
+    // per channel. See `Configs`.
     // @ts-expect-error incomplete channel config object
-    mockClient.configs[cid] = channelConfig;
+    mockClient.channelServerConfigs[`${channelType}:${channelId}`] = channelConfig;
   }
   // Create a proper Channel instance with only the necessary attributes mocked
-  const mockChannel = new Channel(mockClient, 'messaging', 'test-channel-id', {
-    id: 'test-channel-id',
-    type: 'messaging',
-    cid: 'messaging:test-channel-id',
+  const mockChannel = mockClient.channelManager.ensure({
+    type: channelType,
+    id: channelId,
   });
 
   // Mock the getClient method
@@ -139,14 +148,12 @@ const offlineModeMessageComposerSetup = ({
 } = {}) => {
   const mockClient = new StreamChat('test-api-key');
   mockClient.user = user;
-  mockClient.userID = user.id;
   mockClient.setOfflineDBApi(new MockOfflineDB({ client: mockClient }));
   vi.spyOn(mockClient.offlineDb!, 'initializeDB').mockResolvedValue(false);
   // Create a proper Channel instance with only the necessary attributes mocked
-  const mockChannel = new Channel(mockClient, 'messaging', 'test-channel-id', {
-    id: 'test-channel-id',
+  const mockChannel = mockClient.channelManager.ensure({
     type: 'messaging',
-    cid: 'messaging:test-channel-id',
+    id: 'test-channel-id',
   });
 
   // Mock the getClient method
@@ -162,8 +169,20 @@ const offlineModeMessageComposerSetup = ({
   return { mockClient, mockChannel, messageComposer };
 };
 
+/**
+ * Stubs the send request the way an integrator does — through the registered handler seam
+ * (`configState.requestHandlers`), which is what `MessageOperations` consults. There is deliberately
+ * no per-call override on `messageOperations.send`: it would win over whatever the host SDK
+ * registered, so the SDK does not offer callers that footgun.
+ */
+const stubSendRequest = (
+  channel: Channel,
+  sendMessageRequest: NonNullable<ChannelConfig['requestHandlers']>['sendMessageRequest'],
+) => channel.configState.partialNext({ requestHandlers: { sendMessageRequest } });
+
 describe('MessageComposer', () => {
   afterEach(() => {
+    chatLoggerSystem.restoreDefaults();
     vi.clearAllMocks();
   });
 
@@ -172,7 +191,7 @@ describe('MessageComposer', () => {
       const { messageComposer, mockChannel } = setup();
       expect(messageComposer).toBeDefined();
       expect(messageComposer.channel).toBe(mockChannel);
-      expect(messageComposer.config).toBeDefined();
+      expect(messageComposer.config).toStrictEqual(DEFAULT_COMPOSER_CONFIG);
       expect(messageComposer.attachmentManager).toBeDefined();
       expect(messageComposer.linkPreviewsManager).toBeDefined();
       expect(messageComposer.textComposer).toBeDefined();
@@ -182,6 +201,12 @@ describe('MessageComposer', () => {
 
     it('should initialize with custom config', () => {
       const customConfig: DeepPartial<MessageComposerConfig> = {
+        attachments: {
+          maxNumberOfFilesPerMessage: 1,
+        },
+        drafts: { enabled: true },
+        linkPreviews: { debounceURLEnrichmentMs: 20 },
+        location: { enabled: false },
         text: {
           maxLengthOnEdit: 1000,
           publishTypingEvents: false,
@@ -190,8 +215,38 @@ describe('MessageComposer', () => {
 
       const { messageComposer } = setup({ config: customConfig });
 
-      expect(messageComposer.config.text.publishTypingEvents).toBe(false);
-      expect(messageComposer.config.text?.maxLengthOnEdit).toBe(1000);
+      expect(messageComposer.config).toStrictEqual({
+        attachments: {
+          acceptedFiles: DEFAULT_COMPOSER_CONFIG.attachments.acceptedFiles,
+          customCdn: DEFAULT_COMPOSER_CONFIG.attachments.customCdn,
+          enabled: DEFAULT_COMPOSER_CONFIG.attachments.enabled,
+          fileUploadFilter: DEFAULT_COMPOSER_CONFIG.attachments.fileUploadFilter,
+          maxNumberOfFilesPerMessage:
+            customConfig.attachments!.maxNumberOfFilesPerMessage,
+          pendingUploadsEnabled:
+            DEFAULT_COMPOSER_CONFIG.attachments.pendingUploadsEnabled,
+          trackUploadProgress: DEFAULT_COMPOSER_CONFIG.attachments.trackUploadProgress,
+        },
+        commands: DEFAULT_COMPOSER_CONFIG.commands,
+        drafts: customConfig.drafts,
+        linkPreviews: {
+          debounceURLEnrichmentMs: customConfig.linkPreviews!.debounceURLEnrichmentMs,
+          enabled: DEFAULT_COMPOSER_CONFIG.linkPreviews.enabled,
+          findURLFn: DEFAULT_COMPOSER_CONFIG.linkPreviews.findURLFn,
+        },
+        location: {
+          enabled: customConfig.location!.enabled,
+          getDeviceId: DEFAULT_COMPOSER_CONFIG.location!.getDeviceId,
+          minShareDurationMs: DEFAULT_COMPOSER_CONFIG.location!.minShareDurationMs,
+        },
+        polls: DEFAULT_COMPOSER_CONFIG.polls,
+        retainCompositionOnSubmit: DEFAULT_COMPOSER_CONFIG.retainCompositionOnSubmit,
+        text: {
+          enabled: DEFAULT_COMPOSER_CONFIG.text.enabled,
+          maxLengthOnEdit: customConfig.text!.maxLengthOnEdit,
+          publishTypingEvents: customConfig.text!.publishTypingEvents,
+        },
+      });
     });
 
     it('should initialize with custom config overridden with back-end configuration', () => {
@@ -249,6 +304,120 @@ describe('MessageComposer', () => {
       });
     });
 
+    it.each([
+      // `uploads` → `attachments.enabled` and `polls` → `polls.enabled` follow the same rule as
+      // `shared_locations` above: both sides are gates, so the stricter one wins whichever side it is on
+      // and an absent server flag leaves the request standing. Pinned per field rather than trusting the
+      // shared merge, because the bug these mirror was a consumer reading the *server* flag directly and
+      // therefore seeing only half the answer — the half that says yes.
+      { channel: undefined, expected: true, requested: undefined },
+      { channel: undefined, expected: false, requested: false },
+      { channel: false, expected: false, requested: undefined },
+      { channel: false, expected: false, requested: true },
+      { channel: true, expected: true, requested: undefined },
+      { channel: true, expected: false, requested: false },
+      { channel: true, expected: true, requested: true },
+    ])(
+      'ANDs the server flag with the request: requested=$requested channel=$channel -> $expected',
+      ({ channel, expected, requested }) => {
+        const { messageComposer } = setup({
+          channelConfig: { polls: channel, uploads: channel },
+          config: { attachments: { enabled: requested }, polls: { enabled: requested } },
+        });
+
+        expect(messageComposer.config.attachments.enabled).toBe(expected);
+        expect(messageComposer.config.polls.enabled).toBe(expected);
+      },
+    );
+
+    describe('link previews follow the server, not a client double-gate', () => {
+      // The default was `false`, which meant previews stayed off even where the channel type had
+      // `url_enrichment` on — the client half vetoed a feature the server had granted. `true` means "no
+      // opinion", so the server's answer decides, like every other server-gated feature.
+      it.each([
+        { expected: true, server: true },
+        { expected: false, server: false },
+      ])('server=$server -> $expected with no client opinion', ({ expected, server }) => {
+        const { messageComposer } = setup({ channelConfig: { url_enrichment: server } });
+
+        expect(messageComposer.config.linkPreviews.enabled).toBe(expected);
+        expect(messageComposer.linkPreviewsManager.enabled).toBe(expected);
+      });
+
+      it('still lets the integrator switch them off against a permissive server', () => {
+        const { messageComposer } = setup({
+          channelConfig: { url_enrichment: true },
+          config: { linkPreviews: { enabled: false } },
+        });
+
+        expect(messageComposer.config.linkPreviews.enabled).toBe(false);
+      });
+    });
+
+    describe('storage outside Stream', () => {
+      // `uploads` is a statement about Stream's upload endpoint. An integrator storing files elsewhere is
+      // not using that endpoint, so requiring them to switch it on would make a Stream setting a
+      // precondition for storage Stream has nothing to do with.
+      const doUploadRequest = () => Promise.resolve({ file: 'https://cdn.example/f' });
+
+      it('ignores the server uploads flag when customCdn is declared', () => {
+        const { messageComposer } = setup({
+          channelConfig: { uploads: false },
+          config: { attachments: { customCdn: true, doUploadRequest } },
+        });
+
+        expect(messageComposer.config.attachments.enabled).toBe(true);
+      });
+
+      it('still applies the server uploads flag to a custom request without customCdn', () => {
+        // The distinction the `customCdn` field exists for. A custom upload function says *how* files are
+        // sent, not *where* — wrapping the request or proxying it through your own backend still ends at
+        // Stream, and inferring otherwise waived Stream's rules for those integrators.
+        const { messageComposer } = setup({
+          channelConfig: { uploads: false },
+          config: { attachments: { doUploadRequest } },
+        });
+
+        expect(messageComposer.config.attachments.enabled).toBe(false);
+      });
+
+      it('still lets the integrator turn attachments off themselves', () => {
+        // The escape hatch removes the *server's* say, not the client's — otherwise declaring a custom
+        // CDN would quietly make the feature unswitchable.
+        const { messageComposer } = setup({
+          channelConfig: { uploads: false },
+          config: { attachments: { customCdn: true, enabled: false } },
+        });
+
+        expect(messageComposer.config.attachments.enabled).toBe(false);
+      });
+
+      it('picks up customCdn declared after construction', () => {
+        // The condition is evaluated on every resolution rather than captured once.
+        const { messageComposer } = setup({ channelConfig: { uploads: false } });
+        expect(messageComposer.config.attachments.enabled).toBe(false);
+
+        messageComposer.updateConfig({ attachments: { customCdn: true } });
+
+        expect(messageComposer.config.attachments.enabled).toBe(true);
+      });
+
+      it('can be switched back to Stream storage', () => {
+        // A boolean with a `false` default is reversible where an optional URL was not: the composer
+        // retains its patches and the merge skips `undefined`, so a field whose "off" value *is*
+        // `undefined` can never be turned off again. `false` is a real value, so this works.
+        const { messageComposer } = setup({
+          channelConfig: { uploads: false },
+          config: { attachments: { customCdn: true } },
+        });
+        expect(messageComposer.config.attachments.enabled).toBe(true);
+
+        messageComposer.updateConfig({ attachments: { customCdn: false } });
+
+        expect(messageComposer.config.attachments.enabled).toBe(false);
+      });
+    });
+
     it('should initialize with message', () => {
       const message = {
         id: 'test-message-id',
@@ -272,7 +441,7 @@ describe('MessageComposer', () => {
           mentioned_users: [],
         },
         channel_cid: 'test-channel-id',
-        created_at: new Date().toISOString(),
+        created_at: nowNs(),
       };
 
       const { messageComposer } = setup({ composition: draftMessage });
@@ -299,7 +468,7 @@ describe('MessageComposer', () => {
     it('does nothing if cids do not match', () => {
       const response = {
         channel: { cid: 'messaging:other' },
-      } as unknown as ChannelAPIResponse;
+      } as unknown as ChannelStateResponseFields;
 
       composer.initStateFromChannelResponse(response);
 
@@ -314,7 +483,7 @@ describe('MessageComposer', () => {
       const response = {
         channel: { cid: composer.channel.cid },
         draft,
-      } as unknown as ChannelAPIResponse;
+      } as unknown as ChannelStateResponseFields;
 
       composer.initStateFromChannelResponse(response);
 
@@ -326,7 +495,7 @@ describe('MessageComposer', () => {
     it('clears and deletes draft if no draft in response but draftId exists in state', () => {
       const response = {
         channel: { cid: composer.channel.cid },
-      } as unknown as ChannelAPIResponse;
+      } as unknown as ChannelStateResponseFields;
       const executeQuerySafelySpy = vi
         .spyOn(composer.client.offlineDb!, 'executeQuerySafely')
         .mockImplementation(vi.fn());
@@ -352,7 +521,7 @@ describe('MessageComposer', () => {
 
       const response = {
         channel: { cid: composer.channel.cid },
-      } as unknown as ChannelAPIResponse;
+      } as unknown as ChannelStateResponseFields;
 
       composer.initStateFromChannelResponse(response);
 
@@ -371,15 +540,6 @@ describe('MessageComposer', () => {
 
       expect(MessageComposer.evaluateContextType(mockThread)).toBe('thread');
 
-      const mockReplyInLegacyThread = {
-        id: 'test-message-id',
-        legacyThreadId: 'test-thread-id',
-        text: 'Hello world',
-      };
-      expect(MessageComposer.evaluateContextType(mockReplyInLegacyThread as any)).toBe(
-        'legacy_thread',
-      );
-
       const mockMessage = {
         id: 'test-message-id',
       };
@@ -393,15 +553,6 @@ describe('MessageComposer', () => {
       const mockThread = getThread(mockChannel, mockClient, 'test-thread-id');
       expect(MessageComposer.constructTag(mockThread as any)).toBe(
         'thread_test-thread-id',
-      );
-
-      const mockLegacyThread = {
-        cid: mockChannel.cid,
-        id: 'test-message-id',
-        legacyThreadId: 'test-legacy-thread-id',
-      };
-      expect(MessageComposer.constructTag(mockLegacyThread as any)).toBe(
-        'legacy_thread_test-message-id',
       );
 
       const mockMessage = {
@@ -435,10 +586,10 @@ describe('MessageComposer', () => {
       expect(messageComposer.quotedMessage).toEqual({
         id: 'quoted-message-id',
         type: 'regular',
-        created_at: expect.any(Date),
+        created_at: expect.any(Number),
         deleted_at: null,
         pinned_at: null,
-        updated_at: expect.any(Date),
+        updated_at: expect.any(Number),
         status: 'received',
         text: 'Quoted message',
         user: { id: 'user-id', name: 'User Name' },
@@ -465,16 +616,6 @@ describe('MessageComposer', () => {
       });
       expect(threadComposer.threadId).toBe('test-thread-id');
 
-      const mockLegacyThread = {
-        cid: mockChannel.cid,
-        id: 'test-message-id',
-        legacyThreadId: 'test-legacy-thread-id',
-      };
-      const { messageComposer: legacyThreadComposer } = setup({
-        compositionContext: mockLegacyThread as any,
-      });
-      expect(legacyThreadComposer.threadId).toBe('test-legacy-thread-id');
-
       const mockMessage = {
         cid: mockChannel.cid,
         id: 'test-message-id',
@@ -484,6 +625,26 @@ describe('MessageComposer', () => {
         compositionContext: mockMessage as any,
       });
       expect(messageComposer.threadId).toBe('test-parent-id');
+    });
+
+    it('resolves an edited reply to its thread when the thread is open but not listed', () => {
+      const { mockChannel, mockClient } = setup();
+      const thread = getThread(mockChannel, mockClient, 'test-parent-id');
+      const editComposer = new MessageComposer({
+        client: mockClient,
+        compositionContext: {
+          cid: mockChannel.cid,
+          id: 'test-message-id',
+          parent_id: 'test-parent-id',
+        } as any,
+      });
+
+      expect(editComposer.defaultSubmitTarget).toBe(editComposer.channel);
+
+      thread.activate();
+
+      expect(mockClient.threads.paginator.getItem(thread.id)).toBeUndefined();
+      expect(editComposer.defaultSubmitTarget).toBe(thread);
     });
 
     it('should return the correct client', () => {
@@ -541,8 +702,8 @@ describe('MessageComposer', () => {
         id: 'id',
         type: 'regular',
         status: 'delivered',
-        created_at: new Date(),
-        updated_at: new Date(),
+        created_at: nowNs(),
+        updated_at: nowNs(),
         deleted_at: null,
         pinned_at: null,
       });
@@ -578,7 +739,7 @@ describe('MessageComposer', () => {
       expect(messageComposer.hasSendableData).toBe(false);
     });
 
-    it('counts an upload in flight as content once a middleware allows pending uploads', () => {
+    it('counts an upload in flight as content once the config allows pending uploads', () => {
       const { messageComposer } = setup();
 
       messageComposer.attachmentManager.state.partialNext({
@@ -591,58 +752,46 @@ describe('MessageComposer', () => {
       expect(messageComposer.allowsPendingUploads).toBe(false);
       expect(messageComposer.hasSendableData).toBe(false);
 
-      messageComposer.compositionMiddlewareExecutor.replace([
-        createSendWithPendingUploadsAttachmentsMiddleware(messageComposer),
-      ]);
+      messageComposer.updateConfig({ attachments: { pendingUploadsEnabled: true } });
 
-      // Installing the middleware is the whole switch - nothing else has to be told.
+      // The config is the whole switch - nothing else has to be told.
       expect(messageComposer.allowsPendingUploads).toBe(true);
       expect(messageComposer.hasSendableData).toBe(true);
     });
 
-    it('recognizes the declaration on a custom middleware, whatever its id', () => {
-      // The composer keys off `allowsPendingUploads`, not off a middleware id, so a UI SDK that
-      // ships its own attachments composition gets the matching sendability rule.
+    it('counts a failed upload as content', () => {
       const { messageComposer } = setup();
-
-      messageComposer.attachmentManager.state.partialNext({
-        attachments: [
-          { type: 'x', localMetadata: { id: 'a1', uploadState: 'uploading', file: {} } },
-        ],
-      });
-
-      messageComposer.compositionMiddlewareExecutor.use({
-        allowsPendingUploads: true,
-        id: 'custom/attachments-with-pending-uploads',
-        handlers: { compose: ({ forward }) => forward() },
-      });
-
-      expect(messageComposer.allowsPendingUploads).toBe(true);
-      expect(messageComposer.hasSendableData).toBe(true);
-    });
-
-    it('still refuses attachments that will never resolve', () => {
-      const { messageComposer } = setup();
-      messageComposer.compositionMiddlewareExecutor.replace([
-        createSendWithPendingUploadsAttachmentsMiddleware(messageComposer),
-      ]);
+      messageComposer.updateConfig({ attachments: { pendingUploadsEnabled: true } });
 
       messageComposer.attachmentManager.state.partialNext({
         attachments: [
           { type: 'x', localMetadata: { id: 'a1', uploadState: 'failed', file: {} } },
+        ],
+      });
+
+      // It rides along on the optimistic message, where `settlePendingAttachmentUploads`
+      // retries the upload.
+      expect(messageComposer.hasSendableData).toBe(true);
+    });
+
+    it('still refuses an attachment the server blocked', () => {
+      const { messageComposer } = setup();
+      messageComposer.updateConfig({ attachments: { pendingUploadsEnabled: true } });
+
+      messageComposer.attachmentManager.state.partialNext({
+        attachments: [
           { type: 'x', localMetadata: { id: 'a2', uploadState: 'blocked', file: {} } },
         ],
       });
 
-      // A message whose only attachments were rejected must not look sendable.
+      // The upload configuration refused it outright, so no retry can settle it - a message
+      // whose only attachment is blocked must not look sendable.
       expect(messageComposer.hasSendableData).toBe(false);
     });
 
-    it('goes back to the default rule when the middleware is uninstalled', () => {
+    it('goes back to the default rule when the config is turned off', () => {
       const { messageComposer } = setup();
-      messageComposer.compositionMiddlewareExecutor.replace([
-        createSendWithPendingUploadsAttachmentsMiddleware(messageComposer),
-      ]);
+      messageComposer.updateConfig({ attachments: { pendingUploadsEnabled: true } });
       messageComposer.attachmentManager.state.partialNext({
         attachments: [
           { type: 'x', localMetadata: { id: 'a1', uploadState: 'uploading', file: {} } },
@@ -650,9 +799,7 @@ describe('MessageComposer', () => {
       });
       expect(messageComposer.hasSendableData).toBe(true);
 
-      messageComposer.compositionMiddlewareExecutor.replace([
-        createAttachmentsCompositionMiddleware(messageComposer),
-      ]);
+      messageComposer.updateConfig({ attachments: { pendingUploadsEnabled: false } });
 
       expect(messageComposer.allowsPendingUploads).toBe(false);
       expect(messageComposer.hasSendableData).toBe(false);
@@ -672,7 +819,7 @@ describe('MessageComposer', () => {
         },
       });
 
-      vi.spyOn(messageComposer.channel, 'getConfig').mockReturnValue({
+      stubServerConfig(messageComposer.channel, {
         commands: [{ name: 'ban', description: 'Ban a user' }],
       });
 
@@ -704,7 +851,7 @@ describe('MessageComposer', () => {
     it('should apply the default ban command validator', () => {
       const { messageComposer } = setup();
 
-      vi.spyOn(messageComposer.channel, 'getConfig').mockReturnValue({
+      stubServerConfig(messageComposer.channel, {
         commands: [{ name: 'ban', description: 'Ban a user' }],
       });
 
@@ -728,7 +875,7 @@ describe('MessageComposer', () => {
     it('should require mentions for default moderation target commands', () => {
       const { messageComposer } = setup();
 
-      vi.spyOn(messageComposer.channel, 'getConfig').mockReturnValue({
+      stubServerConfig(messageComposer.channel, {
         commands: [
           { name: 'mute', description: 'Mute a user' },
           { name: 'unmute', description: 'Unmute a user' },
@@ -778,8 +925,8 @@ describe('MessageComposer', () => {
         id: 'id',
         type: 'regular',
         status: 'delivered',
-        created_at: new Date(),
-        updated_at: new Date(),
+        created_at: nowNs(),
+        updated_at: nowNs(),
         deleted_at: null,
         pinned_at: null,
       });
@@ -862,8 +1009,8 @@ describe('MessageComposer', () => {
           id: 'id',
           type: 'regular',
           status: 'delivered',
-          created_at: new Date(),
-          updated_at: new Date(),
+          created_at: nowNs(),
+          updated_at: nowNs(),
           deleted_at: null,
           pinned_at: null,
         });
@@ -991,7 +1138,7 @@ describe('MessageComposer', () => {
         },
       });
 
-      vi.spyOn(messageComposer.channel, 'getConfig').mockReturnValue({
+      stubServerConfig(messageComposer.channel, {
         commands: [{ name: 'custom', description: 'Custom command' }],
       });
       const customCommand = { description: 'Custom command', name: 'custom' };
@@ -1020,7 +1167,7 @@ describe('MessageComposer', () => {
         },
       });
 
-      vi.spyOn(messageComposer.channel, 'getConfig').mockReturnValue({
+      stubServerConfig(messageComposer.channel, {
         commands: [{ name: 'ban', description: 'Ban a user' }],
       });
       messageComposer.textComposer.state.partialNext({
@@ -1259,11 +1406,11 @@ describe('MessageComposer', () => {
       const baseline: LocalMessage = {
         id: 'edited-message-id',
         type: 'regular',
-        created_at: new Date(),
+        created_at: nowNs(),
         deleted_at: null,
         pinned_at: null,
         status: 'received',
-        updated_at: new Date(),
+        updated_at: nowNs(),
       };
 
       messageComposer.setEditedMessage(baseline);
@@ -1280,11 +1427,11 @@ describe('MessageComposer', () => {
       const baseline: LocalMessage = {
         id: 'edited-message-id',
         type: 'regular',
-        created_at: new Date(),
+        created_at: nowNs(),
         deleted_at: null,
         pinned_at: null,
         status: 'received',
-        updated_at: new Date(),
+        updated_at: nowNs(),
       };
 
       messageComposer.setEditedMessage(baseline);
@@ -1321,18 +1468,148 @@ describe('MessageComposer', () => {
       expect(spyClear).toHaveBeenCalled();
     });
 
+    it('composes custom message data under custom', async () => {
+      const { messageComposer } = setup();
+      messageComposer.textComposer.setText('Test message');
+      const data = { priority: 'high' };
+      messageComposer.customDataManager.setMessageData(data);
+
+      const result = await messageComposer.compose();
+
+      expect(result?.message.custom).toEqual({ priority: 'high' });
+      expect(result?.localMessage.custom).toEqual({ priority: 'high' });
+      expect(result?.message).not.toHaveProperty('priority');
+    });
+
+    describe('custom message data of a draft or an edited message', () => {
+      const draftWithCustomData: DraftResponse = {
+        channel_cid: 'messaging:test-channel-id',
+        message: {
+          id: 'draft-message-id',
+          text: 'Draft text',
+          custom: { priority: 'high' },
+        },
+        created_at: nowNs(),
+      };
+
+      const editedMessageWithCustomData: LocalMessage = {
+        id: 'edited-message-id',
+        type: 'regular',
+        text: 'Edited message',
+        attachments: [],
+        mentioned_users: [],
+        custom: { priority: 'high', reviewed: true },
+        created_at: nowNs(),
+        deleted_at: null,
+        pinned_at: null,
+        status: 'received',
+        updated_at: nowNs(),
+      };
+
+      it('restores the custom data of the draft the composer starts from', async () => {
+        const { messageComposer } = setup({ composition: draftWithCustomData });
+
+        expect(messageComposer.customDataManager.customMessageData).toEqual({
+          priority: 'high',
+        });
+        // The draft validation middleware discards a draft without a local change, which the
+        // composer's subscriptions record.
+        messageComposer.registerSubscriptions();
+        messageComposer.textComposer.setText('Changed draft text');
+        const composed = await messageComposer.composeDraft();
+        messageComposer.unregisterSubscriptions();
+        expect(composed?.draft.custom).toEqual({ priority: 'high' });
+      });
+
+      it('restores the custom data of a draft loaded into the composer', () => {
+        const { messageComposer } = setup();
+        messageComposer.customDataManager.setMessageData({ stale: true });
+
+        messageComposer.initState({ composition: draftWithCustomData });
+
+        expect(messageComposer.customDataManager.customMessageData).toEqual({
+          priority: 'high',
+        });
+      });
+
+      it('restores the custom data of the edited message', () => {
+        const { messageComposer } = setup({ composition: editedMessageWithCustomData });
+
+        expect(messageComposer.customDataManager.customMessageData).toEqual({
+          priority: 'high',
+          reviewed: true,
+        });
+      });
+
+      it('composes the restored custom data of the edited message with the composer data', async () => {
+        const { messageComposer } = setup({ composition: editedMessageWithCustomData });
+        messageComposer.customDataManager.setMessageData({ priority: 'low' });
+
+        const result = await messageComposer.compose();
+
+        expect(result?.message.custom).toEqual({ priority: 'low', reviewed: true });
+        expect(result?.localMessage.custom).toEqual({ priority: 'low', reviewed: true });
+      });
+
+      it('lets an edit remove a custom field of the edited message', async () => {
+        const { messageComposer } = setup({ composition: editedMessageWithCustomData });
+        messageComposer.customDataManager.state.partialNext({
+          message: { reviewed: true },
+        });
+
+        const result = await messageComposer.compose();
+
+        expect(result?.message.custom).toEqual({ reviewed: true });
+        expect(result?.localMessage.custom).toEqual({ reviewed: true });
+      });
+
+      it('lets an edit remove every custom field of the edited message', async () => {
+        const { messageComposer } = setup({ composition: editedMessageWithCustomData });
+        // The `message` field holds the custom data sent in the message's `custom`.
+        messageComposer.customDataManager.state.partialNext({ message: {} });
+
+        const result = await messageComposer.compose();
+
+        expect(result?.message.custom).toEqual({});
+        expect(result?.localMessage.custom).toEqual({});
+        expect(result?.message.text).toBe('Edited message');
+      });
+
+      it('sends no custom data with an edit of a message that has none', async () => {
+        const { messageComposer } = setup({
+          composition: { ...editedMessageWithCustomData, custom: undefined },
+        });
+
+        const result = await messageComposer.compose();
+
+        expect(result?.message.custom).toBeUndefined();
+        expect(result?.localMessage.custom).toBeUndefined();
+      });
+
+      it('sends no custom data with a new message that has none', async () => {
+        const { messageComposer } = setup();
+        messageComposer.textComposer.setText('Test message');
+
+        const result = await messageComposer.compose();
+
+        expect(result?.message).not.toHaveProperty('custom');
+        expect(result?.localMessage).not.toHaveProperty('custom');
+      });
+    });
+
     it('should compose message', async () => {
       const { messageComposer } = setup();
       messageComposer.textComposer.setText('Test message');
 
       const result = await messageComposer.compose();
 
-      expect(result).toEqual({
+      expect(result).toMatchObject({
         localMessage: {
           attachments: [],
-          created_at: expect.any(Date),
-          deleted_at: null,
-          error: null,
+          cid: 'messaging:test-channel-id',
+          created_at: expect.any(Number),
+          deleted_at: undefined,
+          error: undefined,
           id: 'test-uuid',
           mentioned_channel: false,
           mentioned_group_ids: [],
@@ -1340,13 +1617,13 @@ describe('MessageComposer', () => {
           mentioned_roles: [],
           mentioned_users: [],
           parent_id: undefined,
-          pinned_at: null,
-          quoted_message: null,
-          reaction_groups: null,
+          pinned_at: undefined,
+          quoted_message: undefined,
+          reaction_groups: undefined,
           status: 'sending',
           text: 'Test message',
           type: 'regular',
-          updated_at: expect.any(Date),
+          updated_at: expect.any(Number),
           user: {
             id: 'user-id',
             name: 'User Name',
@@ -1372,9 +1649,9 @@ describe('MessageComposer', () => {
       const date = new Date();
       const { messageComposer } = setup({
         composition: {
-          attachments: [{ type: 'file' }],
+          attachments: [{ type: 'file', custom: {} }],
           created_at: date,
-          deleted_at: null,
+          deleted_at: undefined,
           id: 'test-uuid',
           mentioned_users: [],
           pinned: true,
@@ -1402,12 +1679,13 @@ describe('MessageComposer', () => {
 
       const result = await messageComposer.compose();
 
-      expect(result).toEqual({
+      expect(result).toMatchObject({
         localMessage: {
-          attachments: [{ type: 'file' }],
+          attachments: [{ type: 'file', custom: {} }],
+          cid: 'messaging:test-channel-id',
           created_at: date,
-          deleted_at: null,
-          error: null,
+          deleted_at: undefined,
+          error: undefined,
           id: 'test-uuid',
           mentioned_channel: false,
           mentioned_group_ids: [],
@@ -1417,7 +1695,7 @@ describe('MessageComposer', () => {
           parent_id: undefined,
           pinned: true,
           pinned_at: date,
-          quoted_message: null,
+          quoted_message: undefined,
           reaction_counts: {
             like: 1,
           },
@@ -1455,16 +1733,15 @@ describe('MessageComposer', () => {
               sum_scores: 1,
             },
           },
-          reaction_scores: {
-            like: 1,
-          },
-          status: 'received',
           text: 'Test message',
           type: 'regular',
           user_id: 'user-id',
         },
         sendOptions: {},
       });
+      // Client-only fields stay on `localMessage`; sent, the server would store them as custom data.
+      expect(result?.message).not.toHaveProperty('status');
+      expect(result?.message).not.toHaveProperty('reaction_scores');
     });
 
     describe('with pending attachment uploads', () => {
@@ -1491,12 +1768,19 @@ describe('MessageComposer', () => {
           uploadState: 'uploading',
         },
       };
+      const failedUpload = {
+        type: 'image',
+        localMetadata: {
+          id: 'broken',
+          file: new File([], 'broken.jpg', { type: 'image/jpeg' }),
+          previewUri: 'blob:broken',
+          uploadState: 'failed',
+        },
+      };
 
       const setupWithUploads = (attachments: unknown[]) => {
         const { messageComposer } = setup();
-        messageComposer.compositionMiddlewareExecutor.replace([
-          createSendWithPendingUploadsAttachmentsMiddleware(messageComposer),
-        ]);
+        messageComposer.updateConfig({ attachments: { pendingUploadsEnabled: true } });
         // No URL in the text - the unresolved attachment must survive on its own, not because
         // the link previews middleware happened to bail out early.
         messageComposer.textComposer.setText('look at these');
@@ -1512,7 +1796,7 @@ describe('MessageComposer', () => {
         const composed = await messageComposer.compose();
 
         // The optimistic message carries both, and the unresolved one keeps the
-        // `localMetadata` whoever performs the send needs to await the upload.
+        // `localMetadata` that `settlePendingAttachmentUploads` needs to await the upload.
         expect(composed?.localMessage.attachments).toEqual([
           { type: 'image', image_url: 'https://example.com/done.jpg' },
           pendingUpload,
@@ -1523,12 +1807,28 @@ describe('MessageComposer', () => {
         ]);
       });
 
-      it('composes an optimistic message when no upload has resolved yet', async () => {
-        const messageComposer = setupWithUploads([pendingUpload]);
+      it('keeps a failed upload on the optimistic message only', async () => {
+        const messageComposer = setupWithUploads([resolvedUpload, failedUpload]);
 
         const composed = await messageComposer.compose();
 
-        expect(composed?.localMessage.attachments).toEqual([pendingUpload]);
+        // It rides along so `settlePendingAttachmentUploads` can retry it - dropping it here is
+        // how an attachment disappears with no upload, no error and no warning.
+        expect(composed?.localMessage.attachments).toEqual([
+          { type: 'image', image_url: 'https://example.com/done.jpg' },
+          failedUpload,
+        ]);
+        expect(composed?.message.attachments).toEqual([
+          { type: 'image', image_url: 'https://example.com/done.jpg' },
+        ]);
+      });
+
+      it('composes an optimistic message when no upload has resolved yet', async () => {
+        const messageComposer = setupWithUploads([pendingUpload, failedUpload]);
+
+        const composed = await messageComposer.compose();
+
+        expect(composed?.localMessage.attachments).toEqual([pendingUpload, failedUpload]);
         // Nothing resolved, so the API payload must not gain an `attachments` key - an empty
         // array reads as "remove every attachment" on an edit.
         expect(composed?.message.attachments).toBeUndefined();
@@ -1591,6 +1891,206 @@ describe('MessageComposer', () => {
         initialValue: expect.any(Object),
       });
       expect(result).toBeUndefined();
+    });
+
+    describe('sendMessage', () => {
+      it('performs optimistic update before sending the message', async () => {
+        const { messageComposer, mockChannel } = setup();
+        messageComposer.textComposer.setText('Hello');
+        const composed = await messageComposer.compose();
+        expect(composed).toBeDefined();
+        let resolveSend: (v: { message: MessageResponse }) => void = () => {};
+        stubSendRequest(
+          mockChannel,
+          () =>
+            new Promise((resolve) => {
+              resolveSend = resolve;
+            }),
+        );
+        const sendPromise = mockChannel.messageOperations.send({
+          localMessage: composed!.localMessage,
+          message: composed!.message,
+          options: composed!.sendOptions,
+        });
+        await Promise.resolve();
+        const optimistic = mockChannel.messagePaginator.getItem(
+          composed!.localMessage.id,
+        );
+        expect(optimistic?.status).toBe('sending');
+        resolveSend({ message: generateMsg({ id: composed!.localMessage.id }) });
+        await sendPromise;
+      });
+
+      it('updates the message in state after successful response if message has not arrived over WS', async () => {
+        const { messageComposer, mockChannel } = setup();
+        messageComposer.textComposer.setText('Hello');
+        const composed = await messageComposer.compose();
+        const serverMessage = generateMsg({
+          // The echo carries the channel, like a real response — the paginator matches on `{ cid }`.
+          cid: mockChannel.cid,
+          id: composed!.localMessage.id,
+          updated_at: composed!.localMessage.updated_at + msToNs(100),
+        });
+        stubSendRequest(mockChannel, async () => ({ message: serverMessage }));
+        await mockChannel.messageOperations.send({
+          localMessage: composed!.localMessage,
+          message: composed!.message,
+          options: composed!.sendOptions,
+        });
+        const after = mockChannel.messagePaginator.getItem(composed!.localMessage.id);
+        expect(after?.status).toBe('received');
+      });
+
+      it('does not update the message in state after successful response if message has arrived over WS and the update timestamp is <= existing message timestamp', async () => {
+        const { messageComposer, mockChannel } = setup();
+        messageComposer.textComposer.setText('Hello');
+        const composed = await messageComposer.compose();
+        const messageId = composed!.localMessage.id;
+        const composedUpdatedAt = composed!.localMessage.updated_at;
+        const olderServerTime = composedUpdatedAt - msToNs(5000);
+        const serverMessage = generateMsg({
+          id: messageId,
+          updated_at: olderServerTime,
+        });
+        stubSendRequest(mockChannel, async () => {
+          // The echo their names describe, actually landing — mid-flight, as it would in practice.
+          mockChannel.messagePaginator.ingestItem({
+            ...composed!.localMessage,
+            status: 'received',
+            text: 'from the websocket echo',
+            updated_at: convertDateToTimestamp(new Date(composedUpdatedAt + 5000)),
+          });
+          return { message: serverMessage };
+        });
+        await mockChannel.messageOperations.send({
+          localMessage: composed!.localMessage,
+          message: composed!.message,
+          options: composed!.sendOptions,
+        });
+        const after = mockChannel.messagePaginator.getItem(messageId);
+        // The echo is newer, so the slower response must not overwrite it.
+        expect(after?.text).toBe('from the websocket echo');
+        expect(after?.status).toBe('received');
+      });
+
+      it('does not update the message in state if it already exists on the server and in the local state as not delivered', async () => {
+        const { messageComposer, mockChannel } = setup();
+        messageComposer.textComposer.setText('Hello');
+        const composed = await messageComposer.compose();
+        const messageId = composed!.localMessage.id;
+        const composedUpdatedAt = composed!.localMessage.updated_at;
+        const olderServerTime = composedUpdatedAt - msToNs(2000);
+        stubSendRequest(mockChannel, async () => {
+          // The pre-existing copy these names describe, actually landing mid-flight.
+          mockChannel.messagePaginator.ingestItem({
+            ...composed!.localMessage,
+            status: 'received',
+            text: 'from the websocket echo',
+            updated_at: convertDateToTimestamp(new Date(composedUpdatedAt + 5000)),
+          });
+          return {
+            message: generateMsg({
+              id: messageId,
+              updated_at: olderServerTime,
+            }),
+          };
+        });
+        await mockChannel.messageOperations.send({
+          localMessage: composed!.localMessage,
+          message: composed!.message,
+          options: composed!.sendOptions,
+        });
+        const after = mockChannel.messagePaginator.getItem(messageId);
+        // Newer than the response, so the slower response must not overwrite it.
+        expect(after?.text).toBe('from the websocket echo');
+        expect(after?.status).toBe('received');
+      });
+
+      it('does not update the message in state if it already exists on the server and in the local state as not failed', async () => {
+        const { messageComposer, mockChannel } = setup();
+        messageComposer.textComposer.setText('Hello');
+        const composed = await messageComposer.compose();
+        const messageId = composed!.localMessage.id;
+        const composedUpdatedAt = composed!.localMessage.updated_at;
+        const olderServerTime = composedUpdatedAt - msToNs(1000);
+        stubSendRequest(mockChannel, async () => {
+          // The pre-existing copy these names describe, actually landing mid-flight.
+          mockChannel.messagePaginator.ingestItem({
+            ...composed!.localMessage,
+            status: 'received',
+            text: 'from the websocket echo',
+            updated_at: convertDateToTimestamp(new Date(composedUpdatedAt + 5000)),
+          });
+          return {
+            message: generateMsg({
+              id: messageId,
+              updated_at: olderServerTime,
+            }),
+          };
+        });
+        await mockChannel.messageOperations.send({
+          localMessage: composed!.localMessage,
+          message: composed!.message,
+          options: composed!.sendOptions,
+        });
+        const after = mockChannel.messagePaginator.getItem(messageId);
+        // Newer than the response, so the slower response must not overwrite it.
+        expect(after?.text).toBe('from the websocket echo');
+        expect(after?.status).toBe('received');
+      });
+
+      it('updates the message in state if it already exists on the server and in the local state with status sending', async () => {
+        const { messageComposer, mockChannel } = setup();
+        messageComposer.textComposer.setText('Hello');
+        const composed = await messageComposer.compose();
+        const messageId = composed!.localMessage.id;
+        const existingSending = {
+          ...composed!.localMessage,
+          status: 'sending' as const,
+          updated_at: convertDateToTimestamp(new Date(Date.now() - 5000)),
+        };
+        mockChannel.messagePaginator.ingestItem(existingSending);
+        const serverUpdatedAt = composed!.localMessage.updated_at + msToNs(100);
+        stubSendRequest(mockChannel, async () => ({
+          message: generateMsg({
+            cid: mockChannel.cid,
+            id: messageId,
+            updated_at: serverUpdatedAt,
+          }),
+        }));
+        await mockChannel.messageOperations.send({
+          localMessage: composed!.localMessage,
+          message: composed!.message,
+          options: composed!.sendOptions,
+        });
+        const after = mockChannel.messagePaginator.getItem(messageId);
+        expect(after?.status).toBe('received');
+        expect(after?.updated_at).toBe(serverUpdatedAt);
+      });
+
+      it('updates the message in state if it does not exist on the server and the send request failed', async () => {
+        const { messageComposer, mockChannel } = setup();
+        messageComposer.textComposer.setText('Hello');
+        const composed = await messageComposer.compose();
+        const messageId = composed!.localMessage.id;
+        const apiError = Object.assign(new Error('Network error'), {
+          code: 16,
+          response: { statusCode: 500 },
+        });
+        stubSendRequest(mockChannel, async () => {
+          throw apiError;
+        });
+        await expect(
+          mockChannel.messageOperations.send({
+            localMessage: composed!.localMessage,
+            message: composed!.message,
+            options: composed!.sendOptions,
+          }),
+        ).rejects.toThrow('Network error');
+        const after = mockChannel.messagePaginator.getItem(messageId);
+        expect(after?.status).toBe('failed');
+        expect(after?.error).toBeDefined();
+      });
     });
 
     it('should compose draft', async () => {
@@ -1694,7 +2194,7 @@ describe('MessageComposer', () => {
       await messageComposer.createDraft();
 
       expect(spyComposeDraft).toHaveBeenCalled();
-      expect(spyCreateDraft).toHaveBeenCalledWith(mockDraft);
+      expect(spyCreateDraft).toHaveBeenCalledWith({ message: mockDraft });
       expect(spyLogDraftUpdateTimestamp).toHaveBeenCalled();
       expect(messageComposer.state.getLatestValue().draftId).toBe('test-draft-id');
     });
@@ -1746,7 +2246,7 @@ describe('MessageComposer', () => {
       await messageComposer.createDraft();
 
       expect(spyComposeDraft).toHaveBeenCalled();
-      expect(spyCreateDraft).toHaveBeenCalledWith(mockDraft);
+      expect(spyCreateDraft).toHaveBeenCalledWith({ message: mockDraft });
       expect(spyLogDraftUpdateTimestamp).toHaveBeenCalled();
       expect(messageComposer.state.getLatestValue().draftId).toBe('test-draft-id');
 
@@ -1782,9 +2282,10 @@ describe('MessageComposer', () => {
       const spyUpsertDraft = vi
         .spyOn(messageComposer.client.offlineDb!, 'upsertDraft')
         .mockRejectedValueOnce(new Error('offline insert failed'));
-      const spyLogger = vi
-        .spyOn(messageComposer.client, 'logger')
-        .mockImplementation(vi.fn());
+      const spyLogger = vi.fn();
+      chatLoggerSystem.configureLoggers({
+        default: { sink: spyLogger, level: 'trace' },
+      });
 
       const spyLogDraftUpdateTimestamp = vi.spyOn(
         messageComposer,
@@ -1794,14 +2295,14 @@ describe('MessageComposer', () => {
       await messageComposer.createDraft();
 
       expect(spyComposeDraft).toHaveBeenCalled();
-      expect(spyCreateDraft).toHaveBeenCalledWith(mockDraft);
+      expect(spyCreateDraft).toHaveBeenCalledWith({ message: mockDraft });
       expect(spyLogDraftUpdateTimestamp).toHaveBeenCalled();
       expect(messageComposer.state.getLatestValue().draftId).toBe('test-draft-id');
 
       expect(spyUpsertDraft).toHaveBeenCalledTimes(1);
       expect(spyLogger).toHaveBeenCalledWith(
         'error',
-        'offlineDb:upsertDraft',
+        expect.stringContaining('Upserting the draft to the offline database failed.'),
         expect.objectContaining({
           error: expect.any(Error),
         }),
@@ -1951,16 +2452,17 @@ describe('MessageComposer', () => {
       const spyChannelDeleteDraft = vi
         .spyOn(mockChannel, 'deleteDraft')
         .mockResolvedValue({});
-      const spyLogger = vi
-        .spyOn(messageComposer.client, 'logger')
-        .mockImplementation(vi.fn());
+      const spyLogger = vi.fn();
+      chatLoggerSystem.configureLoggers({
+        default: { sink: spyLogger, level: 'trace' },
+      });
 
       await messageComposer.deleteDraft();
 
       expect(spyChannelDeleteDraft).toHaveBeenCalled();
       expect(spyLogger).toHaveBeenCalledWith(
         'error',
-        'offlineDb:deleteDraft',
+        expect.stringContaining('Deleting the draft from the offline database failed.'),
         expect.objectContaining({
           error: expect.any(Error),
         }),
@@ -2059,7 +2561,7 @@ describe('MessageComposer', () => {
         created_by_device_id: messageComposer.locationComposer.deviceId,
         latitude: 1,
         longitude: 1,
-      } as StaticLocationPayload);
+      } as SharedLocation);
       expect(messageComposer.locationComposer.state.getLatestValue()).toEqual({
         location: null,
       });
@@ -2126,6 +2628,70 @@ describe('MessageComposer', () => {
     });
   });
 
+  describe('transferTo', () => {
+    const transferSetup = () => {
+      const { mockClient, messageComposer: source } = setup();
+      const target = mockClient.channelManager.ensure({
+        id: 'other-channel-id',
+        type: 'messaging',
+      }).messageComposer;
+      return { source, target };
+    };
+
+    it('moves the composition into the target and leaves the source empty', () => {
+      const { source, target } = transferSetup();
+      const quotedMessage = generateMsg({ id: 'quoted' }) as unknown as LocalMessage;
+      source.textComposer.setText('hello');
+      source.textComposer.state.partialNext({
+        suggestions: { query: 'he', searchSource: {} as never, trigger: '@' },
+      });
+      source.linkPreviewsManager.state.next({
+        previews: new Map([['https://a.b', { og_scrape_url: 'https://a.b' } as never]]),
+      });
+      source.locationComposer.state.next({
+        location: {
+          created_by_device_id: 'device',
+          latitude: 1,
+          longitude: 2,
+          message_id: source.id,
+        },
+      });
+      source.pollComposer.state.partialNext({
+        data: { ...source.pollComposer.state.getLatestValue().data, name: 'Lunch?' },
+      });
+      source.customDataManager.setCustomData({ draftNote: 'x' } as never);
+      source.state.partialNext({ quotedMessage, showReplyInChannel: true });
+
+      source.transferTo(target);
+
+      expect(target.textComposer.text).toBe('hello');
+      expect(target.textComposer.suggestions).toBeUndefined();
+      expect([...target.linkPreviewsManager.previews.keys()]).toEqual(['https://a.b']);
+      expect(target.locationComposer.location).toEqual(
+        expect.objectContaining({ latitude: 1, message_id: target.id }),
+      );
+      expect(target.pollComposer.state.getLatestValue().data.name).toBe('Lunch?');
+      expect(target.customDataManager.customComposerData).toEqual({ draftNote: 'x' });
+      expect(target.quotedMessage).toBe(quotedMessage);
+      expect(target.showReplyInChannel).toBe(true);
+      expect(source.compositionIsEmpty).toBe(true);
+      expect(source.quotedMessage).toBeNull();
+    });
+
+    it('replaces what the target held', () => {
+      const { source, target } = transferSetup();
+      target.textComposer.setText('mine');
+      target.state.partialNext({
+        quotedMessage: generateMsg() as unknown as LocalMessage,
+      });
+
+      source.transferTo(target);
+
+      expect(target.textComposer.text).toBe('');
+      expect(target.quotedMessage).toBeNull();
+    });
+  });
+
   describe('getDraft', () => {
     const draftResponse: DraftResponse = {
       channel_cid: 'messaging:test-channel-id',
@@ -2135,7 +2701,7 @@ describe('MessageComposer', () => {
         attachments: [],
         mentioned_users: [],
       },
-      created_at: new Date().toISOString(),
+      created_at: convertDateToTimestamp(new Date().toISOString()),
     };
     it('should not create draft if edited message exists', async () => {
       const editedMessage = {
@@ -2244,7 +2810,10 @@ describe('MessageComposer', () => {
       const spyChannelGetDraft = vi.spyOn(mockChannel, 'getDraft');
       spyChannelGetDraft.mockRejectedValue(new Error('Failed to get draft'));
 
-      const spyLogger = vi.spyOn(mockClient, 'logger');
+      const spyLogger = vi.fn();
+      chatLoggerSystem.configureLoggers({
+        default: { sink: spyLogger, level: 'trace' },
+      });
 
       await messageComposer.getDraft();
 
@@ -2299,16 +2868,29 @@ describe('MessageComposer', () => {
     });
 
     describe('subscribeMessageComposerSetupStateChange', () => {
-      it('should apply modifications when setup state changes', () => {
+      it('calls setupFunction with { composer } when the client registers one', () => {
         const { messageComposer, mockClient } = setup();
-        const mockModifications = vi.fn();
+        const setupFn = vi.fn();
 
         messageComposer.registerSubscriptions();
-        mockClient._messageComposerSetupState.next({
-          setupFunction: mockModifications,
-        });
+        mockClient.config.setSetupFunction('messageComposer', setupFn);
 
-        expect(mockModifications).toHaveBeenCalledWith({ composer: messageComposer });
+        expect(setupFn).toHaveBeenCalledWith({ composer: messageComposer });
+      });
+
+      it('invokes previous tearDown before applying new setup when setup function changes', () => {
+        const { messageComposer, mockClient } = setup();
+        const tearDown1 = vi.fn();
+        const setup1 = vi.fn().mockReturnValue(tearDown1);
+        const setup2 = vi.fn();
+
+        messageComposer.registerSubscriptions();
+        mockClient.config.setSetupFunction('messageComposer', setup1);
+        expect(tearDown1).not.toHaveBeenCalled();
+
+        mockClient.config.setSetupFunction('messageComposer', setup2);
+        expect(tearDown1).toHaveBeenCalledOnce();
+        expect(setup2).toHaveBeenCalledWith({ composer: messageComposer });
       });
     });
 
@@ -2566,9 +3148,7 @@ describe('MessageComposer', () => {
         const { mockChannel, messageComposer } = setup({
           config: { linkPreviews: { enabled: true } },
         });
-        mockChannel.getConfig = vi
-          .fn()
-          .mockImplementation(() => ({ url_enrichment: true }));
+        stubServerConfig(mockChannel, { url_enrichment: true });
         const spy = vi.spyOn(messageComposer.linkPreviewsManager, 'findAndEnrichUrls');
 
         messageComposer.registerSubscriptions();
@@ -2770,5 +3350,288 @@ describe('MessageComposer', () => {
       expect(unsubscribeDraftEvents).toHaveBeenCalledTimes(1);
       expect(registerDraftEventSubscriptionsSpy).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('MessageComposer submit lifecycle', () => {
+  const withText = (messageComposer: MessageComposer, text = 'hello') => {
+    messageComposer.textComposer.state.partialNext({ text });
+  };
+
+  it('clears before awaiting the request, not after', async () => {
+    const { messageComposer, mockChannel } = setup();
+    withText(messageComposer);
+
+    let textWhileInFlight: string | undefined;
+    vi.spyOn(mockChannel.messageOperations, 'send').mockImplementation(async () => {
+      textWhileInFlight = messageComposer.textComposer.text;
+    });
+
+    await messageComposer.send();
+
+    // The request lasts a round trip; clearing at the end leaves that window for the user's next
+    // keystrokes to race the clear.
+    expect(textWhileInFlight).toBe('');
+  });
+
+  it('does not put the composition back when the send fails', async () => {
+    const { messageComposer, mockChannel } = setup();
+    withText(messageComposer);
+    vi.spyOn(mockChannel.messageOperations, 'send').mockRejectedValue(new Error('nope'));
+
+    const sent = await messageComposer.send();
+
+    // The message is already in the list marked `failed` with a retry affordance. Restoring here
+    // would leave the same content - and the same attachment upload ids - owned in two places.
+    expect(sent).toBe('failed');
+    expect(messageComposer.textComposer.text).toBe('');
+  });
+
+  it('reports a send failure through client.notifications rather than rejecting', async () => {
+    const { messageComposer, mockChannel } = setup();
+    withText(messageComposer);
+    const addError = vi.spyOn(messageComposer.client.notifications, 'addError');
+    vi.spyOn(mockChannel.messageOperations, 'send').mockRejectedValue(new Error('nope'));
+
+    await expect(messageComposer.send()).resolves.toBe('failed');
+
+    expect(addError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: expect.objectContaining({ type: 'api:message:send:failed' }),
+      }),
+    );
+  });
+
+  it('reports a send the server already has as sent', async () => {
+    const { messageComposer, mockChannel } = setup();
+    withText(messageComposer);
+    const addError = vi.spyOn(messageComposer.client.notifications, 'addError');
+    let messageId: string | undefined;
+    stubSendRequest(mockChannel, async ({ localMessage }) => {
+      messageId = localMessage.id;
+      throw Object.assign(
+        new Error(
+          `SendMessage failed with error: "a message with ID ${messageId} already exists"`,
+        ),
+        { code: 4 },
+      );
+    });
+
+    await expect(messageComposer.send()).resolves.toBe('sent');
+
+    expect(addError).not.toHaveBeenCalled();
+    expect(mockChannel.messagePaginator.getItem(messageId!)?.status).toBe('received');
+  });
+
+  it('reports a send whose server copy arrived before a timeout as sent', async () => {
+    const { messageComposer, mockChannel } = setup();
+    withText(messageComposer);
+    const addError = vi.spyOn(messageComposer.client.notifications, 'addError');
+    let messageId: string | undefined;
+    stubSendRequest(mockChannel, async ({ localMessage }) => {
+      messageId = localMessage.id;
+      // The server's `message.new` arrives before the client gives up on the request.
+      mockChannel.messagePaginator.ingestItem({ ...localMessage, status: 'received' });
+      throw new Error('timeout of 3000ms exceeded');
+    });
+
+    await expect(messageComposer.send()).resolves.toBe('sent');
+
+    expect(addError).not.toHaveBeenCalled();
+    expect(mockChannel.messagePaginator.getItem(messageId!)?.status).toBe('received');
+  });
+
+  it('returns false and sends nothing when there is nothing to compose', async () => {
+    const { messageComposer, mockChannel } = setup();
+    const send = vi
+      .spyOn(mockChannel.messageOperations, 'send')
+      .mockResolvedValue(undefined);
+
+    const sent = await messageComposer.send();
+
+    // Told apart from a failed request: nothing left the composer, so a caller must not treat this
+    // as content that now lives in the message list.
+    expect(sent).toBe('nothing-to-send');
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it('keeps drafted content and releases only the poll when submitting a poll message', async () => {
+    const { messageComposer, mockChannel } = setup({ channelConfig: { polls: true } });
+    withText(messageComposer, 'vote please');
+    messageComposer.state.partialNext({ pollId: 'poll-1' });
+    const send = vi
+      .spyOn(mockChannel.messageOperations, 'send')
+      .mockResolvedValue(undefined);
+
+    expect(messageComposer.retainsCompositionOnSubmit).toBe(true);
+
+    await messageComposer.send();
+
+    expect(send.mock.calls[0][0].message).toEqual({
+      id: expect.any(String),
+      poll_id: 'poll-1',
+    });
+    expect(messageComposer.pollId).toBeNull();
+    expect(messageComposer.textComposer.text).toBe('vote please');
+  });
+
+  it('sends the poll with the text once the poll-only middleware is removed, and clears', async () => {
+    const { messageComposer, mockChannel } = setup({ channelConfig: { polls: true } });
+    messageComposer.compositionMiddlewareExecutor.remove(
+      POLL_ONLY_COMPOSITION_MIDDLEWARE_ID,
+    );
+    withText(messageComposer, 'vote please');
+    messageComposer.state.partialNext({ pollId: 'poll-1' });
+    const send = vi
+      .spyOn(mockChannel.messageOperations, 'send')
+      .mockResolvedValue(undefined);
+
+    expect(messageComposer.retainsCompositionOnSubmit).toBe(false);
+
+    await messageComposer.send();
+
+    expect(send.mock.calls[0][0].message).toMatchObject({
+      poll_id: 'poll-1',
+      text: 'vote please',
+    });
+    expect(messageComposer.pollId).toBeNull();
+    expect(messageComposer.textComposer.text).toBe('');
+  });
+
+  it('routes an update through messageOperations.update', async () => {
+    const { messageComposer, mockChannel } = setup();
+    withText(messageComposer);
+    const update = vi
+      .spyOn(mockChannel.messageOperations, 'update')
+      .mockResolvedValue(undefined);
+
+    const updated = await messageComposer.update();
+
+    expect(updated).toBe('sent');
+    expect(update).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('MessageComposerConfig.retainCompositionOnSubmit', () => {
+  it('retains for a poll message by default', () => {
+    const { messageComposer } = setup({ channelConfig: { polls: true } });
+    expect(messageComposer.retainsCompositionOnSubmit).toBe(false);
+
+    messageComposer.state.partialNext({ pollId: 'poll-1' });
+    expect(messageComposer.retainsCompositionOnSubmit).toBe(true);
+  });
+
+  it('does not retain for a poll while the chain sends polls with the message', () => {
+    const { messageComposer } = setup({ channelConfig: { polls: true } });
+    messageComposer.compositionMiddlewareExecutor.remove(
+      POLL_ONLY_COMPOSITION_MIDDLEWARE_ID,
+    );
+
+    messageComposer.state.partialNext({ pollId: 'poll-1' });
+    expect(messageComposer.retainsCompositionOnSubmit).toBe(false);
+  });
+
+  it('leaves edit mode after updating a message that has a poll', async () => {
+    const { messageComposer } = setup({
+      channelConfig: { polls: true },
+      composition: {
+        attachments: [],
+        id: 'm1',
+        mentioned_users: [],
+        poll_id: 'poll-1',
+        text: 'please vote',
+        type: 'regular',
+        user: { id: 'user-id' },
+      } as unknown as LocalMessage,
+    });
+    vi.spyOn(messageComposer.channel.messageOperations, 'update').mockResolvedValue(
+      undefined,
+    );
+
+    expect(messageComposer.pollId).toBe('poll-1');
+    expect(messageComposer.retainsCompositionOnSubmit).toBe(false);
+
+    messageComposer.textComposer.state.partialNext({ text: 'please vote (edited)' });
+    await messageComposer.update();
+
+    expect(messageComposer.editedMessage).toBeFalsy();
+    expect(messageComposer.textComposer.text).toBe('');
+  });
+
+  it('does not retain for a thread reply that carries a poll', () => {
+    const { mockChannel, mockClient } = setup();
+    const mockThread = getThread(mockChannel, mockClient, 'test-thread-id');
+    const { messageComposer } = setup({
+      channelConfig: { polls: true },
+      compositionContext: mockThread,
+    });
+
+    messageComposer.state.partialNext({ pollId: 'poll-1' });
+    expect(messageComposer.retainsCompositionOnSubmit).toBe(false);
+  });
+
+  it('lets an integrator decide, receiving the composer', async () => {
+    const retainCompositionOnSubmit = vi.fn(
+      (composer: MessageComposer) => composer.textComposer.text === 'keep me',
+    );
+    const { messageComposer, mockChannel } = setup({
+      config: { retainCompositionOnSubmit },
+    });
+    vi.spyOn(mockChannel.messageOperations, 'send').mockResolvedValue(undefined);
+
+    messageComposer.textComposer.state.partialNext({ text: 'keep me' });
+    await messageComposer.send();
+
+    expect(retainCompositionOnSubmit).toHaveBeenCalledWith(messageComposer);
+    expect(messageComposer.textComposer.text).toBe('keep me');
+  });
+
+  it('clears when the integrator declines to retain', async () => {
+    const { messageComposer, mockChannel } = setup({
+      config: { retainCompositionOnSubmit: () => false },
+    });
+    vi.spyOn(mockChannel.messageOperations, 'send').mockResolvedValue(undefined);
+
+    messageComposer.textComposer.state.partialNext({ text: 'let me go' });
+    await messageComposer.send();
+
+    expect(messageComposer.textComposer.text).toBe('');
+  });
+});
+
+describe('MessageComposer poll release on submit', () => {
+  const sendSucceeds = (mockChannel: Channel) =>
+    vi.spyOn(mockChannel.messageOperations, 'send').mockResolvedValue(undefined);
+
+  it('detaches the poll that was submitted', () => {
+    const { messageComposer, mockChannel } = setup({ channelConfig: { polls: true } });
+    sendSucceeds(mockChannel);
+    messageComposer.state.partialNext({ pollId: 'poll-1' });
+
+    return messageComposer.send().then(() => {
+      // While `pollId` is set every composition becomes a poll-only message, so a composer left
+      // bound to a spent poll would nullify anything typed next and re-send the same poll.
+      expect(messageComposer.pollId).toBeNull();
+    });
+  });
+
+  it('always submits a poll it holds, which is what makes detaching it safe', async () => {
+    // `createMessageComposerStateCompositionMiddleware` copies a set `pollId` onto the composition
+    // in every context - thread and edit included, where the poll-only middleware forwards. So a
+    // poll that exists is always a poll that went out, and there is no case where releasing the
+    // composer discards one the submission did not carry.
+    const { mockChannel, mockClient } = setup();
+    const mockThread = getThread(mockChannel, mockClient, 'test-thread-id');
+    const { messageComposer } = setup({
+      channelConfig: { polls: true },
+      compositionContext: mockThread,
+    });
+
+    messageComposer.textComposer.state.partialNext({ text: 'a thread reply' });
+    messageComposer.state.partialNext({ pollId: 'poll-1' });
+
+    const composition = await messageComposer.compose();
+
+    expect(composition?.message?.poll_id).toBe('poll-1');
   });
 });

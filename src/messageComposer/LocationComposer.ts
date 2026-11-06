@@ -1,11 +1,7 @@
-import { StateStore } from '../store';
+import { StateStore } from '@stream-io/state-store';
 import type { MessageComposer } from './messageComposer';
-import type {
-  DraftMessage,
-  LiveLocationPayload,
-  LocalMessage,
-  StaticLocationPayload,
-} from '../types';
+import type { DraftMessage, LocalMessage, SharedLocation } from '../types';
+import { convertTimestampToDate } from '../utils/time';
 
 export type Coords = { latitude: number; longitude: number };
 
@@ -14,10 +10,13 @@ export type LocationComposerOptions = {
   message?: DraftMessage | LocalMessage;
 };
 
-export type StaticLocationPreview = StaticLocationPayload;
+export type StaticLocationPreview = SharedLocation & {
+  message_id?: string;
+};
 
-export type LiveLocationPreview = Omit<LiveLocationPayload, 'end_at'> & {
+export type LiveLocationPreview = Omit<SharedLocation, 'end_at'> & {
   durationMs?: number;
+  message_id?: string;
 };
 
 export type LocationComposerState = {
@@ -26,15 +25,29 @@ export type LocationComposerState = {
 
 export type LocationComposerSnapshot = LocationComposerState;
 
-const MIN_LIVE_LOCATION_SHARE_DURATION = 60 * 1000; // 1 minute;
-
+/**
+ * Keeps only the request-shaped fields of a message's location (plus `message_id`), so response-only
+ * fields (`channel_cid`, `user_id`, nanosecond `end_at`) never reach the next composition.
+ */
 const initState = ({
   message,
 }: {
   message?: DraftMessage | LocalMessage;
-}): LocationComposerState => ({
-  location: message?.shared_location ?? null,
-});
+}): LocationComposerState => {
+  const location = message?.shared_location;
+  if (!location) return { location: null };
+  // An absent or non-finite `end_at` leaves the location static (no `Invalid Date`).
+  const endAt = convertTimestampToDate(location.end_at);
+  return {
+    location: {
+      created_by_device_id: location.created_by_device_id,
+      latitude: location.latitude,
+      longitude: location.longitude,
+      message_id: location.message_id,
+      ...(endAt ? { end_at: endAt } : {}),
+    },
+  };
+};
 
 export class LocationComposer {
   readonly state: StateStore<LocationComposerState>;
@@ -59,26 +72,49 @@ export class LocationComposer {
     return this.state.getLatestValue().location;
   }
 
-  get validLocation(): StaticLocationPayload | LiveLocationPayload | null {
-    const { durationMs, ...location } = (this.location ?? {}) as LiveLocationPreview;
+  get validLocation(): StaticLocationPreview | null {
+    const location = (this.location ?? {}) as LiveLocationPreview &
+      Pick<StaticLocationPreview, 'end_at'>;
+    const { durationMs, end_at } = location;
     if (
       !!location?.created_by_device_id &&
       location.message_id &&
       location.latitude &&
       location.longitude &&
-      (typeof durationMs === 'undefined' ||
-        durationMs >= MIN_LIVE_LOCATION_SHARE_DURATION)
+      (typeof durationMs === 'undefined' || durationMs >= this.config.minShareDurationMs)
     ) {
+      // Field by field, so only what a `SharedLocation` request declares is sent.
       return {
-        ...location,
-        end_at: durationMs && new Date(Date.now() + durationMs).toISOString(),
-      } as StaticLocationPayload | LiveLocationPayload;
+        created_by_device_id: location.created_by_device_id,
+        latitude: location.latitude,
+        longitude: location.longitude,
+        message_id: location.message_id,
+        // A `durationMs` resolves against the clock when read. An existing `end_at` is kept as is, so
+        // editing a message does not extend (or drop) its live location's expiry.
+        ...(typeof durationMs === 'number'
+          ? { end_at: new Date(Date.now() + durationMs) }
+          : end_at
+            ? { end_at }
+            : {}),
+      };
     }
     return null;
   }
 
   initState = ({ message }: { message?: DraftMessage | LocalMessage } = {}) => {
     this.state.next(initState({ message }));
+  };
+
+  /**
+   * Takes over `source`'s location, re-keyed to this composer's message (`message_id`).
+   *
+   * @internal
+   */
+  takeOver = (source: LocationComposer) => {
+    const { location } = source.state.getLatestValue();
+    this.state.next({
+      location: location && { ...location, message_id: this.composer.id },
+    });
   };
 
   getSnapshot = (): LocationComposerSnapshot => this.state.getLatestValue();

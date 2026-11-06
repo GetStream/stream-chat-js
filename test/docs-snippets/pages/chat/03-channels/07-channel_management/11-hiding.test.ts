@@ -23,7 +23,11 @@ describe('_default/03-channels/07-channel_management/11-hiding.md', () => {
     await serverClient.upsertUsers([{ id: otherId }]);
     client = await getClientSideClient({ id: userId });
     cleanup.channels.push(`messaging:${channelId}`);
-    await client.channel('messaging', channelId, { members: [userId, otherId] }).create();
+    await client
+      .channel('messaging', channelId, {
+        members: [{ user_id: userId }, { user_id: otherId }],
+      })
+      .create();
     await sendServerMessage(serverClient, `messaging:${channelId}`, {
       text: 'before hiding',
       user_id: otherId,
@@ -50,7 +54,7 @@ describe('_default/03-channels/07-channel_management/11-hiding.md', () => {
     await channel.hide();
 
     // hides the channel until a new message is added there. This also clears the history for the user
-    await channel.hide(null, true);
+    await channel.hide({ clear_history: true });
 
     // shows a previously hidden channel
     await channel.show();
@@ -58,7 +62,12 @@ describe('_default/03-channels/07-channel_management/11-hiding.md', () => {
 
     // hiding an already hidden channel sends no second `channel.hidden` event
     await retry(() => {
-      expect(events.map((e) => [e.type, e.clear_history])).toEqual([
+      expect(
+        events.map((e) => [
+          e.type,
+          e.type === 'channel.hidden' ? e.clear_history : undefined,
+        ]),
+      ).toEqual([
         ['channel.hidden', false],
         ['channel.visible', undefined],
       ]);
@@ -67,7 +76,9 @@ describe('_default/03-channels/07-channel_management/11-hiding.md', () => {
     unsubscribe();
 
     // shown again
-    const [shown] = await client.queryChannels({ cid: `messaging:${channelId}` });
+    const [shown] = await client.queryChannelsAndHydrate({
+      filter_conditions: { cid: `messaging:${channelId}` },
+    });
     expect(shown?.cid).toBe(`messaging:${channelId}`);
     // and the history was cleared for this user (read server-side: the client's local
     // state keeps the messages it already had, since no second hidden event arrived)
@@ -82,8 +93,12 @@ describe('_default/03-channels/07-channel_management/11-hiding.md', () => {
     await channel.hide();
     const filter = { cid: `messaging:${channelId}` };
 
-    expect(await client.queryChannels(filter)).toEqual([]);
-    const hidden = await client.queryChannels({ ...filter, hidden: true });
+    expect(await client.queryChannelsAndHydrate({ filter_conditions: filter })).toEqual(
+      [],
+    );
+    const hidden = await client.queryChannelsAndHydrate({
+      filter_conditions: { ...filter, hidden: true },
+    });
     expect(hidden.map((c) => c.cid)).toEqual([`messaging:${channelId}`]);
 
     await sendServerMessage(serverClient, `messaging:${channelId}`, {
@@ -92,7 +107,9 @@ describe('_default/03-channels/07-channel_management/11-hiding.md', () => {
     });
     // unhiding on a new message is asynchronous
     await retry(async () => {
-      const [found] = await client.queryChannels(filter);
+      const [found] = await client.queryChannelsAndHydrate({
+        filter_conditions: filter,
+      });
       expect(found?.cid).toBe(`messaging:${channelId}`);
     });
     // after the cleared history, only the new message is visible to the user

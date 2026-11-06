@@ -1,173 +1,82 @@
 import sinon from 'sinon';
 import { describe, beforeEach, afterEach, it, expect, vi } from 'vitest';
 
-import { generateMsg } from './test-utils/generateMessage';
 import { generateChannel } from './test-utils/generateChannel';
 import { generateMember } from './test-utils/generateMember';
+import { generateMsg } from './test-utils/generateMessage';
 import { generateUser } from './test-utils/generateUser';
 import { getClientWithUser } from './test-utils/getClient';
-import { generateUUIDv4 as uuidv4 } from '../../src/utils';
 
 import {
-  sanitizeOutgoingAttachments,
-  getAndWatchChannel,
-  addToMessageList,
   findIndexInSortedArray,
   channelHasReadEvents,
   channelTracksReadLocally,
   formatMessage,
   generateChannelTempCid,
-  shouldConsiderArchivedChannels,
-  shouldConsiderPinnedChannels,
-  isChannelArchived,
-  isChannelPinned,
-  findLastPinnedChannelIndex,
-  findPinnedAtSortOrder,
-  extractSortValue,
-  promoteChannel,
+  generateChannelTempId,
+  localMessageToNewMessagePayload,
+  toUpdatedMessagePayload,
   uniqBy,
   runDetached,
   sleep,
+  computeOwnReactions,
+  sanitizeOutgoingAttachments,
 } from '../../src/utils';
+import { nsToMs } from '../../src/utils/time';
 
 import type {
   ChannelFilters,
-  ChannelSortBase,
-  FormatMessageResponse,
-  MessageResponse,
+  ChannelOwnCapability,
+  SortParamRequest,
+  ReactionResponse,
 } from '../../src';
 import { StreamChat, Channel } from '../../src';
+import { chatLoggerSystem } from '../../src/logger';
 
-describe('addToMessageList', () => {
-  const timestamp = new Date('2024-09-18T15:30:00.000Z').getTime();
-  // messages with each created_at 10 seconds apart
-  let messagesBefore: FormatMessageResponse[];
+describe('computeOwnReactions', () => {
+  const ME = 'me';
+  const other = 'someone-else';
+  const reaction = (type: string, userId: string): ReactionResponse =>
+    ({ type, user_id: userId }) as ReactionResponse;
 
-  const getNewFormattedMessage = ({
-    timeOffset,
-    id = uuidv4(),
-  }: {
-    timeOffset: number;
-    id?: string;
-  }) =>
-    formatMessage(
-      generateMsg({
-        id,
-        created_at: new Date(timestamp + timeOffset),
-      }) as MessageResponse,
-    );
-
-  beforeEach(() => {
-    messagesBefore = Array.from({ length: 5 }, (_, index) =>
-      formatMessage(
-        generateMsg({
-          created_at: new Date(timestamp + index * 10 * 1000),
-        }) as MessageResponse,
-      ),
-    );
+  it('adds the current user reaction, de-duped by type', () => {
+    expect(
+      computeOwnReactions({ current: [], reaction: reaction('love', ME), userId: ME }),
+    ).toEqual([reaction('love', ME)]);
   });
 
-  it('new message is inserted at the correct index', () => {
-    const newMessage = getNewFormattedMessage({ timeOffset: 25 * 1000 });
-
-    const messagesAfter = addToMessageList(messagesBefore, newMessage);
-
-    expect(messagesAfter).to.not.equal(messagesBefore);
-    expect(messagesAfter).to.have.length(6);
-    expect(messagesAfter).to.contain(newMessage);
-    expect(messagesAfter[3]).to.equal(newMessage);
-  });
-
-  it('replaces the message which created_at changed to a server response created_at', () => {
-    const newMessage = getNewFormattedMessage({
-      timeOffset: 33 * 1000,
-      id: messagesBefore[2].id,
+  it('enforceUnique replaces the current user existing reaction', () => {
+    const result = computeOwnReactions({
+      current: [reaction('like', ME)],
+      reaction: reaction('love', ME),
+      userId: ME,
+      enforceUnique: true,
     });
-
-    expect(newMessage.id).to.equal(messagesBefore[2].id);
-
-    const messagesAfter = addToMessageList(messagesBefore, newMessage, true);
-
-    expect(messagesAfter).to.not.equal(messagesBefore);
-    expect(messagesAfter).to.have.length(5);
-    expect(messagesAfter).to.contain(newMessage);
-    expect(messagesAfter[3]).to.equal(newMessage);
+    expect(result).toEqual([reaction('love', ME)]);
   });
 
-  it('adds a new message to an empty message list', () => {
-    const newMessage = getNewFormattedMessage({ timeOffset: 0 });
-
-    const emptyMessagesBefore = [];
-
-    const messagesAfter = addToMessageList(emptyMessagesBefore, newMessage);
-
-    expect(messagesAfter).to.have.length(1);
-    expect(messagesAfter).to.contain(newMessage);
+  it('removed drops the current user reaction of that type', () => {
+    expect(
+      computeOwnReactions({
+        current: [reaction('love', ME)],
+        reaction: reaction('love', ME),
+        userId: ME,
+        removed: true,
+      }),
+    ).toEqual([]);
   });
 
-  it("doesn't add a new message to an empty message list if timestampChanged & addIfDoesNotExist are false", () => {
-    const newMessage = getNewFormattedMessage({ timeOffset: 0 });
-
-    const emptyMessagesBefore = [];
-
-    const messagesAfter = addToMessageList(
-      emptyMessagesBefore,
-      newMessage,
-      false,
-      'created_at',
-      false,
-    );
-
-    expect(messagesAfter).to.have.length(0);
-  });
-
-  it("adds message to the end of the list if it's the newest one", () => {
-    const newMessage = getNewFormattedMessage({ timeOffset: 50 * 1000 });
-
-    const messagesAfter = addToMessageList(messagesBefore, newMessage);
-
-    expect(messagesAfter).to.have.length(6);
-    expect(messagesAfter).to.contain(newMessage);
-    expect(messagesAfter.at(-1)).to.equal(newMessage);
-  });
-
-  it("doesn't add a newest message to a message list if timestampChanged & addIfDoesNotExist are false", () => {
-    const newMessage = getNewFormattedMessage({ timeOffset: 50 * 1000 });
-
-    const messagesAfter = addToMessageList(
-      messagesBefore,
-      newMessage,
-      false,
-      'created_at',
-      false,
-    );
-
-    expect(messagesAfter).to.have.length(5);
-    // FIXME: it'd be nice if the function returned old
-    // unchanged array in case of no modification such as this one
-    expect(messagesAfter).to.deep.equal(messagesBefore);
-  });
-
-  it("updates an existing message that wasn't filtered due to changed timestamp (timestampChanged)", () => {
-    const newMessage = getNewFormattedMessage({
-      timeOffset: 30 * 1000,
-      id: messagesBefore[4].id,
+  // Regression: a cross-user reaction.updated (enforceUnique is passed for every reaction.updated)
+  // must NOT touch the current user's own_reactions. It previously returned [] in this case, wiping
+  // the current user's reaction highlight until a refresh.
+  it('preserves current-user own_reactions on a cross-user enforceUnique reaction.updated', () => {
+    const result = computeOwnReactions({
+      current: [reaction('love', ME)],
+      reaction: reaction('like', other),
+      userId: ME,
+      enforceUnique: true,
     });
-
-    expect(messagesBefore[4].id).to.equal(newMessage.id);
-    expect(messagesBefore[4].text).to.not.equal(newMessage.text);
-    expect(messagesBefore[4]).to.not.equal(newMessage);
-
-    const messagesAfter = addToMessageList(
-      messagesBefore,
-      newMessage,
-      false,
-      'created_at',
-      false,
-    );
-
-    expect(messagesAfter).to.have.length(5);
-    expect(messagesAfter[4]).to.equal(newMessage);
+    expect(result).toEqual([reaction('love', ME)]);
   });
 });
 
@@ -347,131 +256,20 @@ describe('findIndexInSortedArray', () => {
   });
 });
 
-describe('getAndWatchChannel', () => {
-  let client: StreamChat;
-  let sandbox: sinon.SinonSandbox;
-
-  beforeEach(async () => {
-    sandbox = sinon.createSandbox();
-
-    client = await getClientWithUser();
-
-    const mockedMembers = [
-      generateMember({ user: generateUser() }),
-      generateMember({ user: generateUser() }),
-    ];
-    const mockedChannelsQueryResponse = [
-      ...Array.from({ length: 2 }, () => generateChannel()),
-      generateChannel({ channel: { type: 'messaging' }, members: mockedMembers }),
-    ];
-    const mock = sandbox.mock(client);
-    mock
-      .expects('post')
-      .returns(Promise.resolve({ channels: mockedChannelsQueryResponse }));
-  });
-
-  afterEach(() => {
-    sandbox.restore();
-  });
-
-  it('should throw an error if neither channel nor type is provided', async () => {
-    await client.queryChannels({});
-    await expect(
-      getAndWatchChannel({ client, id: 'test-id', members: [] }),
-    ).rejects.toThrow('Channel or channel type have to be provided to query a channel.');
-  });
-
-  it('should throw an error if neither channel ID nor members array is provided', async () => {
-    await client.queryChannels({});
-    await expect(
-      getAndWatchChannel({ client, type: 'test-type', id: undefined, members: [] }),
-    ).rejects.toThrow(
-      'Channel ID or channel members array have to be provided to query a channel.',
+describe('generateChannelTempId', () => {
+  it('joins the sorted member ids after !members-', () => {
+    expect(generateChannelTempId(['zack', 'alice', 'charlie'])).to.equal(
+      '!members-alice,charlie,zack',
     );
   });
 
-  it('should return an existing channel if provided', async () => {
-    const channels = await client.queryChannels({});
-    const channel = channels[0];
-    const watchStub = sandbox.stub(channel, 'watch');
-    const result = await getAndWatchChannel({
-      channel,
-      client,
-      members: [],
-      options: {},
-    });
-
-    expect(result).to.equal(channel);
-    expect(watchStub.calledOnce).to.be.true;
+  it('skips empty ids', () => {
+    expect(generateChannelTempId(['bob', '', 'alice'])).to.equal('!members-alice,bob');
   });
 
-  it('should return the channel if only type and id are provided', async () => {
-    const channels = await client.queryChannels({});
-    const channel = channels[0];
-    const { id, type } = channel;
-    const watchStub = sandbox.stub(channel, 'watch');
-    const channelSpy = sandbox.spy(client, 'channel');
-    const result = await getAndWatchChannel({
-      client,
-      type,
-      id,
-      options: {},
-    });
-
-    expect(channelSpy.calledOnce).to.be.true;
-    // @ts-ignore
-    expect(channelSpy.calledWith(type, id)).to.be.true;
-    expect(watchStub.calledOnce).to.be.true;
-    expect(result).to.equal(channel);
-  });
-
-  it('should return the channel if only type and members are provided', async () => {
-    const channels = await client.queryChannels({});
-    const channel = channels[2];
-    const { type } = channel;
-    const members = Object.keys(channel.state.members);
-    const watchStub = sandbox.stub(channel, 'watch');
-    const channelSpy = sandbox.spy(client, 'channel');
-    const result = await getAndWatchChannel({
-      client,
-      type,
-      members,
-      options: {},
-    });
-    expect(channelSpy.calledOnce).to.be.true;
-    // @ts-ignore
-    expect(channelSpy.calledWith(type, undefined, { members })).to.be.true;
-    expect(watchStub.calledOnce).to.be.true;
-    expect(result).to.equal(channel);
-  });
-
-  it('should not call watch again if a query is already in progress', async () => {
-    const channels = await client.queryChannels({});
-    const channel = channels[0];
-    const { id, type, cid } = channel;
-    // @ts-ignore
-    const watchStub = sandbox.stub(channel, 'watch').resolves({});
-
-    const result = await Promise.all([
-      getAndWatchChannel({
-        client,
-        type,
-        id,
-        members: [],
-        options: {},
-      }),
-      getAndWatchChannel({
-        client,
-        type,
-        id,
-        members: [],
-        options: {},
-      }),
-    ]);
-
-    expect(watchStub.calledOnce).to.be.true;
-    expect(result[0]).to.equal(channel);
-    expect(result[1]).to.equal(channel);
+  it('returns undefined when there are no members', () => {
+    expect(generateChannelTempId([])).to.be.undefined;
+    expect(generateChannelTempId([''])).to.be.undefined;
   });
 });
 
@@ -479,11 +277,6 @@ describe('generateChannelTempCid', () => {
   it('should return a valid temp cid for valid input', () => {
     const result = generateChannelTempCid('messaging', ['alice', 'bob']);
     expect(result).to.equal('messaging:!members-alice,bob');
-  });
-
-  it('should return undefined if members is null', () => {
-    const result = generateChannelTempCid('messaging', null as unknown as string[]);
-    expect(result).to.be.undefined;
   });
 
   it('should return undefined if members is an empty array', () => {
@@ -495,418 +288,12 @@ describe('generateChannelTempCid', () => {
     const result = generateChannelTempCid('team', ['zack', 'alice', 'charlie']);
     expect(result).to.equal('team:!members-alice,charlie,zack');
   });
-});
 
-describe('Channel pinning and archiving utils', () => {
-  let client: StreamChat;
-  let sandbox: sinon.SinonSandbox;
-
-  beforeEach(async () => {
-    sandbox = sinon.createSandbox();
-    client = await getClientWithUser();
-  });
-
-  afterEach(() => {
-    sandbox.restore();
-  });
-
-  describe('Channel pinning', () => {
-    it('should return false if channel is null', () => {
-      expect(isChannelPinned(null as unknown as Channel)).to.be.false;
-    });
-
-    it('should return false if pinned_at is undefined', () => {
-      const channelResponse = generateChannel({ membership: {} });
-      client.hydrateActiveChannels([channelResponse]);
-      const channel = client.channel(
-        channelResponse.channel.type,
-        channelResponse.channel.id,
-      );
-      expect(isChannelPinned(channel)).to.be.false;
-    });
-
-    it('should return true if pinned_at is set', () => {
-      const channelResponse = generateChannel({
-        membership: { pinned_at: '2024-02-04T12:00:00Z' },
-      });
-      client.hydrateActiveChannels([channelResponse]);
-      const channel = client.channel(
-        channelResponse.channel.type,
-        channelResponse.channel.id,
-      );
-      expect(isChannelPinned(channel)).to.be.true;
-    });
-
-    describe('extractSortValue', () => {
-      it('should return null if sort is undefined', () => {
-        expect(extractSortValue({ atIndex: 0, targetKey: 'pinned_at', sort: undefined }))
-          .to.be.null;
-      });
-
-      it('should extract correct sort value from an array', () => {
-        const sort = [{ pinned_at: -1 }, { created_at: 1 }] as unknown as ChannelSortBase;
-        expect(extractSortValue({ atIndex: 0, targetKey: 'pinned_at', sort })).to.equal(
-          -1,
-        );
-      });
-
-      it('should extract correct sort value from an object', () => {
-        const sort = { pinned_at: 1 } as unknown as ChannelSortBase;
-        expect(extractSortValue({ atIndex: 0, targetKey: 'pinned_at', sort })).to.equal(
-          1,
-        );
-      });
-
-      it('should return null if key does not match targetKey', () => {
-        const sort = { created_at: 1 } as unknown as ChannelSortBase;
-        expect(extractSortValue({ atIndex: 0, targetKey: 'pinned_at', sort })).to.be.null;
-      });
-    });
-
-    describe('shouldConsiderPinnedChannels', () => {
-      it('should return false if sort is undefined', () => {
-        expect(shouldConsiderPinnedChannels(undefined as any)).to.be.false;
-      });
-
-      it('should return false if pinned_at is not a number', () => {
-        const sort = [{ pinned_at: 'invalid' }];
-        expect(shouldConsiderPinnedChannels(sort as any)).to.be.false;
-      });
-
-      it('should return false if pinned_at is not first in sort', () => {
-        const sort = [{ created_at: 1 }, { pinned_at: 1 }] as unknown as ChannelSortBase;
-        expect(shouldConsiderPinnedChannels(sort)).to.be.false;
-      });
-
-      it('should return true if pinned_at is 1 or -1 at index 0', () => {
-        const sort1 = [{ pinned_at: 1 }] as unknown as ChannelSortBase;
-        const sort2 = [{ pinned_at: -1 }] as unknown as ChannelSortBase;
-        expect(shouldConsiderPinnedChannels(sort1)).to.be.true;
-        expect(shouldConsiderPinnedChannels(sort2)).to.be.true;
-      });
-    });
-
-    describe('findPinnedAtSortOrder', () => {
-      it('should return null if sort is undefined', () => {
-        expect(findPinnedAtSortOrder({ sort: null as unknown as ChannelSortBase })).to.be
-          .null;
-      });
-
-      it('should return null if pinned_at is not present', () => {
-        const sort = [{ created_at: 1 }] as unknown as ChannelSortBase;
-        expect(findPinnedAtSortOrder({ sort })).to.be.null;
-      });
-
-      it('should return pinned_at if found in an object', () => {
-        const sort = { pinned_at: -1 } as unknown as ChannelSortBase;
-        expect(findPinnedAtSortOrder({ sort })).to.equal(-1);
-      });
-
-      it('should return pinned_at if found in an array', () => {
-        const sort = [{ pinned_at: 1 }] as unknown as ChannelSortBase;
-        expect(findPinnedAtSortOrder({ sort })).to.equal(1);
-      });
-    });
-
-    describe('findLastPinnedChannelIndex', () => {
-      it('should return null if no channels are provided', () => {
-        expect(findLastPinnedChannelIndex({ channels: [] })).to.be.null;
-      });
-
-      it('should return null if no channels are pinned', () => {
-        const channelsResponse = [
-          generateChannel({ membership: {} }),
-          generateChannel({ membership: {} }),
-        ];
-        client.hydrateActiveChannels(channelsResponse);
-        const channels = channelsResponse.map((c) =>
-          client.channel(c.channel.type, c.channel.id),
-        );
-        expect(findLastPinnedChannelIndex({ channels })).to.be.null;
-      });
-
-      it('should return last index of a pinned channel', () => {
-        const channelsResponse = [
-          generateChannel({ membership: { pinned_at: '2024-02-04T12:00:00Z' } }),
-          generateChannel({ membership: { pinned_at: '2024-02-04T12:01:00Z' } }),
-          generateChannel({ membership: {} }),
-        ];
-        client.hydrateActiveChannels(channelsResponse);
-        const channels = channelsResponse.map((c) =>
-          client.channel(c.channel.type, c.channel.id),
-        );
-
-        expect(findLastPinnedChannelIndex({ channels })).to.equal(1);
-      });
-    });
-  });
-
-  describe('Channel archiving', () => {
-    it('should return false if channel is null', () => {
-      expect(isChannelArchived(null as unknown as Channel)).to.be.false;
-    });
-
-    it('should return false if archived_at is undefined', () => {
-      const channelResponse = generateChannel({ membership: {} });
-      client.hydrateActiveChannels([channelResponse]);
-      const channel = client.channel(
-        channelResponse.channel.type,
-        channelResponse.channel.id,
-      );
-      expect(isChannelArchived(channel)).to.be.false;
-    });
-
-    it('should return true if archived_at is set', () => {
-      const channelResponse = generateChannel({
-        membership: { archived_at: '2024-02-04T12:00:00Z' },
-      });
-      client.hydrateActiveChannels([channelResponse]);
-      const channel = client.channel(
-        channelResponse.channel.type,
-        channelResponse.channel.id,
-      );
-      expect(isChannelArchived(channel)).to.be.true;
-    });
-
-    it('should return false if filters is null', () => {
-      expect(shouldConsiderArchivedChannels(null as unknown as ChannelFilters)).to.be
-        .false;
-    });
-
-    it('should return false if filters.archived is missing', () => {
-      const mockFilters = {};
-      expect(shouldConsiderArchivedChannels(mockFilters)).to.be.false;
-    });
-
-    it('should return false if filters.archived is not a boolean', () => {
-      const mockFilters = { archived: 'yes' } as unknown as ChannelFilters;
-      expect(shouldConsiderArchivedChannels(mockFilters)).to.be.false;
-    });
-
-    it('should return true if filters.archived is true', () => {
-      const mockFilters = { archived: true };
-      expect(shouldConsiderArchivedChannels(mockFilters)).to.be.true;
-    });
-
-    it('should return true if filters.archived is false', () => {
-      const mockFilters = { archived: false };
-      expect(shouldConsiderArchivedChannels(mockFilters)).to.be.true;
-    });
-  });
-});
-
-describe('promoteChannel', () => {
-  let client: StreamChat;
-
-  beforeEach(async () => {
-    client = await getClientWithUser();
-  });
-
-  it('should return the original list if the channel is already at the top', () => {
-    const channelsResponse = [generateChannel(), generateChannel()];
-    client.hydrateActiveChannels(channelsResponse);
-    const channels = channelsResponse.map((c) =>
-      client.channel(c.channel.type, c.channel.id),
+  it('leaves out empty member ids', () => {
+    expect(generateChannelTempCid('messaging', ['bob', '', 'alice'])).to.equal(
+      'messaging:!members-alice,bob',
     );
-    const result = promoteChannel({
-      channels,
-      channelToMove: channels[0],
-      sort: {},
-    });
-
-    expect(result).to.deep.equal(channels);
-    expect(result).to.be.equal(channels);
-  });
-
-  it('should return the original list if the channel is pinned and pinned channels should be considered', () => {
-    const channelsResponse = [
-      generateChannel({ membership: { pinned_at: '2024-02-04T12:00:00Z' } }),
-      generateChannel({ membership: { pinned_at: '2024-02-04T12:01:00Z' } }),
-    ];
-    client.hydrateActiveChannels(channelsResponse);
-    const channels = channelsResponse.map((c) =>
-      client.channel(c.channel.type, c.channel.id),
-    );
-    const channelToMove = channels[1];
-
-    const result = promoteChannel({
-      channels,
-      channelToMove,
-      sort: [{ pinned_at: 1 }],
-    });
-
-    expect(result).to.deep.equal(channels);
-    expect(result).to.be.equal(channels);
-  });
-
-  it('should move a non-pinned channel upwards if it exists in the list', () => {
-    const channelsResponse = [
-      generateChannel({ channel: { id: 'channel1' } }),
-      generateChannel({ channel: { id: 'channel2' } }),
-      generateChannel({ channel: { id: 'channel3' } }),
-    ];
-    client.hydrateActiveChannels(channelsResponse);
-    const channels = channelsResponse.map((c) =>
-      client.channel(c.channel.type, c.channel.id),
-    );
-    const channelToMove = channels[2];
-
-    const result = promoteChannel({
-      channels,
-      channelToMove,
-      sort: {},
-    });
-
-    expect(result.map((c) => c.id)).to.deep.equal(['channel3', 'channel1', 'channel2']);
-    expect(result).to.not.equal(channels);
-  });
-
-  it('should correctly move a non-pinned channel if its index is provided', () => {
-    const channelsResponse = [
-      generateChannel({ channel: { id: 'channel1' } }),
-      generateChannel({ channel: { id: 'channel2' } }),
-      generateChannel({ channel: { id: 'channel3' } }),
-    ];
-    client.hydrateActiveChannels(channelsResponse);
-    const channels = channelsResponse.map((c) =>
-      client.channel(c.channel.type, c.channel.id),
-    );
-    const channelToMove = channels[2];
-
-    const result = promoteChannel({
-      channels,
-      channelToMove,
-      sort: {},
-      channelToMoveIndexWithinChannels: 2,
-    });
-
-    expect(result.map((c) => c.id)).to.deep.equal(['channel3', 'channel1', 'channel2']);
-    expect(result).to.not.equal(channels);
-  });
-
-  it('should move a non-pinned channel upwards if it does not exist in the list', () => {
-    const channelsResponse = [
-      generateChannel({ channel: { id: 'channel1' } }),
-      generateChannel({ channel: { id: 'channel2' } }),
-      generateChannel({ channel: { id: 'channel3' } }),
-    ];
-    const newChannel = generateChannel({ channel: { id: 'channel4' } });
-    client.hydrateActiveChannels([...channelsResponse, newChannel]);
-    const channels = channelsResponse.map((c) =>
-      client.channel(c.channel.type, c.channel.id),
-    );
-    const channelToMove = client.channel(newChannel.channel.type, newChannel.channel.id);
-
-    const result = promoteChannel({
-      channels,
-      channelToMove,
-      sort: {},
-    });
-
-    expect(result.map((c) => c.id)).to.deep.equal([
-      'channel4',
-      'channel1',
-      'channel2',
-      'channel3',
-    ]);
-    expect(result).to.not.equal(channels);
-  });
-
-  it('should correctly move a non-pinned channel upwards if it does not exist and the index is provided', () => {
-    const channelsResponse = [
-      generateChannel({ channel: { id: 'channel1' } }),
-      generateChannel({ channel: { id: 'channel2' } }),
-      generateChannel({ channel: { id: 'channel3' } }),
-    ];
-    const newChannel = generateChannel({ channel: { id: 'channel4' } });
-    client.hydrateActiveChannels([...channelsResponse, newChannel]);
-    const channels = channelsResponse.map((c) =>
-      client.channel(c.channel.type, c.channel.id),
-    );
-    const channelToMove = client.channel(newChannel.channel.type, newChannel.channel.id);
-
-    const result = promoteChannel({
-      channels,
-      channelToMove,
-      sort: {},
-      channelToMoveIndexWithinChannels: -1,
-    });
-
-    expect(result.map((c) => c.id)).to.deep.equal([
-      'channel4',
-      'channel1',
-      'channel2',
-      'channel3',
-    ]);
-    expect(result).to.not.equal(channels);
-  });
-
-  it('should move the channel just below the last pinned channel if pinned channels are considered', () => {
-    const channelsResponse = [
-      generateChannel({
-        channel: { id: 'pinned1' },
-        membership: { pinned_at: '2024-02-04T12:00:00Z' },
-      }),
-      generateChannel({
-        channel: { id: 'pinned2' },
-        membership: { pinned_at: '2024-02-04T12:01:00Z' },
-      }),
-      generateChannel({ channel: { id: 'channel1' } }),
-      generateChannel({ channel: { id: 'channel2' } }),
-    ];
-    client.hydrateActiveChannels(channelsResponse);
-    const channels = channelsResponse.map((c) =>
-      client.channel(c.channel.type, c.channel.id),
-    );
-    const channelToMove = channels[3];
-
-    const result = promoteChannel({
-      channels,
-      channelToMove,
-      sort: [{ pinned_at: -1 }],
-    });
-
-    expect(result.map((c) => c.id)).to.deep.equal([
-      'pinned1',
-      'pinned2',
-      'channel2',
-      'channel1',
-    ]);
-    expect(result).to.not.equal(channels);
-  });
-
-  it('should move the channel to the top of the list if pinned channels exist but are not considered', () => {
-    const channelsResponse = [
-      generateChannel({
-        channel: { id: 'pinned1' },
-        membership: { pinned_at: '2024-02-04T12:01:00Z' },
-      }),
-      generateChannel({
-        channel: { id: 'pinned2' },
-        membership: { pinned_at: '2024-02-04T12:00:00Z' },
-      }),
-      generateChannel({ channel: { id: 'channel1' } }),
-      generateChannel({ channel: { id: 'channel2' } }),
-    ];
-    client.hydrateActiveChannels(channelsResponse);
-    const channels = channelsResponse.map((c) =>
-      client.channel(c.channel.type, c.channel.id),
-    );
-    const channelToMove = channels[2];
-
-    const result = promoteChannel({
-      channels,
-      channelToMove,
-      sort: {},
-    });
-
-    expect(result.map((c) => c.id)).to.deep.equal([
-      'channel1',
-      'pinned1',
-      'pinned2',
-      'channel2',
-    ]);
-    expect(result).to.not.equal(channels);
+    expect(generateChannelTempCid('messaging', [''])).to.be.undefined;
   });
 });
 
@@ -1096,15 +483,22 @@ describe('runDetached', () => {
   it('calls default onError when no onErrorCallback is provided', async () => {
     const error = new Error('oops');
     const callback = Promise.reject(error);
-    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const sinkSpy = vi.fn();
+    chatLoggerSystem.configureLoggers({
+      default: { sink: sinkSpy, level: 'trace' },
+    });
 
     runDetached(callback, { context: 'MyContext' });
 
     await new Promise((resolve) => setImmediate(resolve));
 
-    expect(consoleSpy).toHaveBeenCalledWith(
-      expect.stringContaining('An error has occurred in context MyContext'),
+    expect(sinkSpy).toHaveBeenCalledWith(
+      'error',
+      expect.stringContaining('An error occurred in context "MyContext"'),
+      expect.objectContaining({ error }),
     );
+
+    chatLoggerSystem.restoreDefaults();
   });
 
   it('does not fail if onSuccessCallback is missing', async () => {
@@ -1176,11 +570,10 @@ describe('sleep', () => {
 });
 
 describe('channelHasReadEvents', () => {
-  const makeChannel = (own_capabilities?: string[]) => {
+  const makeChannel = (own_capabilities?: ChannelOwnCapability[]) => {
     const client = new StreamChat('apiKey');
     client.user = { id: 'user' };
-    client.userID = 'user';
-    const channel = client.channel('messaging', 'cap-id');
+    const channel = client.channelManager.ensure({ type: 'messaging', id: 'cap-id' });
     channel.data = { own_capabilities };
     return channel;
   };
@@ -1204,23 +597,24 @@ describe('channelHasReadEvents', () => {
 
 describe('channelTracksReadLocally', () => {
   const setup = ({
-    isLocalUnreadCountEnabled,
+    localUnreadCountEnabled,
     own_capabilities,
   }: {
-    isLocalUnreadCountEnabled?: boolean;
-    own_capabilities?: string[];
+    localUnreadCountEnabled?: boolean;
+    own_capabilities?: ChannelOwnCapability[];
   }) => {
-    const client = new StreamChat('apiKey', { isLocalUnreadCountEnabled });
+    const client = new StreamChat('apiKey');
     client.user = { id: 'user' };
-    client.userID = 'user';
-    const channel = client.channel('messaging', 'cap-id');
+    // client-level, so every channel this client builds derives it
+    client.config.setConfig('channel', { readEvents: { localUnreadCountEnabled } });
+    const channel = client.channelManager.ensure({ type: 'messaging', id: 'cap-id' });
     channel.data = { own_capabilities };
     return { client, channel };
   };
 
   it('returns true when read events are disabled and local unread count is enabled', () => {
     const { channel } = setup({
-      isLocalUnreadCountEnabled: true,
+      localUnreadCountEnabled: true,
       own_capabilities: [],
     });
     expect(channelTracksReadLocally(channel)).toBe(true);
@@ -1228,7 +622,7 @@ describe('channelTracksReadLocally', () => {
 
   it('returns false when the channel has read events', () => {
     const { channel } = setup({
-      isLocalUnreadCountEnabled: true,
+      localUnreadCountEnabled: true,
       own_capabilities: ['read-events'],
     });
     expect(channelTracksReadLocally(channel)).toBe(false);
@@ -1236,7 +630,7 @@ describe('channelTracksReadLocally', () => {
 
   it('returns false when local unread count is disabled', () => {
     const { channel } = setup({
-      isLocalUnreadCountEnabled: false,
+      localUnreadCountEnabled: false,
       own_capabilities: [],
     });
     expect(channelTracksReadLocally(channel)).toBe(false);
@@ -1247,33 +641,217 @@ describe('channelTracksReadLocally', () => {
   });
 });
 
+describe('request-payload date direction', () => {
+  // Both payload builders convert wire timestamps into the `Date` objects `MessageRequest`
+  // declares. A real on-device magnitude, so a skipped conversion shows up as an `Invalid Date`.
+  const NANOS = 1786219962651957000;
+  const DATE_KEYS = [
+    'created_at',
+    'updated_at',
+    'deleted_at',
+    'pinned_at',
+    'pin_expires',
+  ];
+
+  describe('localMessageToNewMessagePayload', () => {
+    it('sends every direction-crossing date field, and drops the server-managed ones', () => {
+      const payload = localMessageToNewMessagePayload(
+        formatMessage(
+          generateMsg({
+            pinned_at: NANOS,
+            pin_expires: NANOS + 1e9,
+            message_text_updated_at: NANOS,
+          }),
+        ),
+      );
+
+      expect(payload.pinned_at).toBeInstanceOf(Date);
+      expect(payload.pin_expires).toBeInstanceOf(Date);
+      expect(payload.pinned_at?.getTime()).toBe(nsToMs(NANOS));
+      expect(payload.pin_expires?.getTime()).toBe(nsToMs(NANOS + 1e9));
+
+      expect(payload).not.toHaveProperty('message_text_updated_at');
+
+      // No date field may still be a wire number, or a string wearing a `Date` annotation.
+      for (const key of DATE_KEYS) {
+        const value = (payload as Record<string, unknown>)[key];
+        expect(typeof value).not.toBe('number');
+        expect(typeof value).not.toBe('string');
+      }
+    });
+
+    it('serializes to RFC3339, which is what actually reaches the API', () => {
+      const payload = localMessageToNewMessagePayload(
+        formatMessage(generateMsg({ pinned_at: NANOS })),
+      );
+
+      expect(JSON.parse(JSON.stringify({ pinned_at: payload.pinned_at }))).toEqual({
+        pinned_at: new Date(nsToMs(NANOS)).toISOString(),
+      });
+    });
+
+    it('drops the sub-millisecond part, which a `Date` cannot carry', () => {
+      const withSubMs = NANOS + 123000;
+      const payload = localMessageToNewMessagePayload(
+        formatMessage(generateMsg({ pinned_at: withSubMs })),
+      );
+
+      expect(payload.pinned_at).toBeInstanceOf(Date);
+      expect(payload.pinned_at?.getTime()).toBe(nsToMs(withSubMs));
+      expect(payload.pinned_at?.toISOString()).toMatch(
+        /^\d{4}-\d{2}-\d{2}T[\d:]{8}\.\d{3}Z$/,
+      );
+    });
+
+    it('narrows shared_location to the request shape and converts end_at', () => {
+      const payload = localMessageToNewMessagePayload(
+        formatMessage(
+          generateMsg({
+            shared_location: {
+              latitude: 1,
+              longitude: 2,
+              created_by_device_id: 'device',
+              end_at: NANOS,
+              created_at: NANOS,
+              updated_at: NANOS,
+              channel_cid: 'messaging:x',
+              user_id: 'u',
+            },
+          }),
+        ),
+      );
+
+      expect(payload.shared_location?.end_at).toBeInstanceOf(Date);
+      expect(payload.shared_location?.end_at?.getTime()).toBe(nsToMs(NANOS));
+      expect(payload.shared_location).not.toHaveProperty('created_at');
+      expect(payload.shared_location).not.toHaveProperty('updated_at');
+      expect(payload.shared_location).not.toHaveProperty('channel_cid');
+      expect(payload.shared_location).not.toHaveProperty('user_id');
+    });
+
+    it('omits the pin fields entirely when the message is not pinned', () => {
+      const payload = localMessageToNewMessagePayload(formatMessage(generateMsg()));
+
+      expect(payload).not.toHaveProperty('pinned_at');
+      expect(payload).not.toHaveProperty('pin_expires');
+    });
+
+    it('converts an epoch timestamp rather than treating it as absent', () => {
+      const payload = localMessageToNewMessagePayload(
+        formatMessage(generateMsg({ pinned_at: 0 })),
+      );
+
+      expect(payload.pinned_at).toBeInstanceOf(Date);
+      expect(payload.pinned_at?.getTime()).toBe(0);
+    });
+  });
+
+  describe('toUpdatedMessagePayload', () => {
+    it('strips only the fields that are not request fields at all', () => {
+      const payload = toUpdatedMessagePayload(
+        generateMsg({ pinned_at: NANOS, message_text_updated_at: NANOS }),
+      );
+
+      for (const key of [
+        'created_at',
+        'updated_at',
+        'deleted_at',
+        'message_text_updated_at',
+      ]) {
+        expect(payload).not.toHaveProperty(key);
+      }
+      expect(payload.pinned_at).toBeInstanceOf(Date);
+      expect(payload.pinned_at?.getTime()).toBe(nsToMs(NANOS));
+    });
+
+    it('SENDS pin_expires rather than stripping it — stripping clears the expiry', () => {
+      // Omitting it clears the expiry server-side.
+      const payload = toUpdatedMessagePayload(
+        generateMsg({ pinned_at: NANOS, pin_expires: NANOS + 3600e9 }),
+      );
+
+      expect(payload.pin_expires).toBeInstanceOf(Date);
+      expect(payload.pin_expires?.getTime()).toBe(nsToMs(NANOS + 3600e9));
+    });
+
+    it('SENDS shared_location, narrowed to the request shape', () => {
+      const payload = toUpdatedMessagePayload(
+        generateMsg({
+          shared_location: {
+            latitude: 1,
+            longitude: 2,
+            end_at: NANOS,
+            created_at: NANOS,
+            updated_at: NANOS,
+            channel_cid: 'messaging:x',
+            user_id: 'u',
+          },
+        }),
+      );
+
+      expect(payload.shared_location?.end_at).toBeInstanceOf(Date);
+      expect(payload.shared_location?.end_at?.getTime()).toBe(nsToMs(NANOS));
+      expect(payload.shared_location).not.toHaveProperty('created_at');
+    });
+
+    it('leaves out client-only fields, which the server would store as custom data', () => {
+      const payload = toUpdatedMessagePayload(
+        generateMsg({
+          error: { message: 'x' },
+          reaction_scores: { like: 1 },
+          status: 'received',
+        }),
+      );
+
+      for (const key of ['error', 'reaction_scores', 'status']) {
+        expect(payload).not.toHaveProperty(key);
+      }
+    });
+
+    it('reads pinned-ness nullishly, so an epoch pin still counts as pinned', () => {
+      expect(toUpdatedMessagePayload(generateMsg({ pinned_at: 0 })).pinned).toBe(true);
+      expect(toUpdatedMessagePayload(generateMsg({ pinned_at: undefined })).pinned).toBe(
+        false,
+      );
+    });
+  });
+});
+
 describe('sanitizeOutgoingAttachments', () => {
-  const setup = () => {
-    const client = getClientWithUser();
-    const logger = vi.spyOn(client, 'logger').mockImplementation(() => undefined);
-    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    return { client, logger };
-  };
+  let sink;
+
+  beforeEach(() => {
+    sink = vi.fn();
+    chatLoggerSystem.configureLoggers({ utils: { sink, level: 'trace' } });
+  });
+
+  afterEach(() => {
+    chatLoggerSystem.restoreDefaults();
+  });
+
+  const expectWarned = () =>
+    expect(sink).toHaveBeenCalledWith(
+      'warn',
+      expect.stringContaining('Dropped 1 attachment(s)'),
+      expect.objectContaining({ attachments: expect.any(Array) }),
+    );
 
   it('returns the same message when there are no attachments', () => {
-    const { client } = setup();
     const message = { text: 'hi' };
 
-    expect(sanitizeOutgoingAttachments({ client, message })).toBe(message);
+    expect(sanitizeOutgoingAttachments(message)).toBe(message);
   });
 
   it('returns the same message when no attachment carries localMetadata', () => {
-    const { client } = setup();
     const message = {
       attachments: [{ asset_url: 'https://cdn.example.com/f.pdf', type: 'file' }],
       text: 'hi',
     };
 
-    expect(sanitizeOutgoingAttachments({ client, message })).toBe(message);
+    expect(sanitizeOutgoingAttachments(message)).toBe(message);
   });
 
   it('strips localMetadata from an attachment that resolved', () => {
-    const { client, logger } = setup();
     const message = {
       attachments: [
         {
@@ -1284,17 +862,16 @@ describe('sanitizeOutgoingAttachments', () => {
       ],
     };
 
-    const result = sanitizeOutgoingAttachments({ client, message });
+    const result = sanitizeOutgoingAttachments(message);
 
     expect(result).not.toBe(message);
     expect(result.attachments).toEqual([
       { asset_url: 'https://cdn.example.com/f.pdf', type: 'file' },
     ]);
-    expect(logger).not.toHaveBeenCalled();
+    expect(sink).not.toHaveBeenCalled();
   });
 
   it('drops an attachment that never resolved, and warns', () => {
-    const { client, logger } = setup();
     const message = {
       attachments: [
         { asset_url: 'https://cdn.example.com/ok.pdf', type: 'file' },
@@ -1302,35 +879,12 @@ describe('sanitizeOutgoingAttachments', () => {
       ],
     };
 
-    const result = sanitizeOutgoingAttachments({ client, message });
+    const result = sanitizeOutgoingAttachments(message);
 
     expect(result.attachments).toEqual([
       { asset_url: 'https://cdn.example.com/ok.pdf', type: 'file' },
     ]);
-    expect(logger).toHaveBeenCalledWith(
-      'warn',
-      expect.stringContaining('Dropped 1 attachment(s)'),
-      expect.objectContaining({ attachments: expect.any(Array) }),
-    );
-  });
-
-  it('also reaches the console', () => {
-    // `client.logger` is a no-op unless the integrator configured one, and this only fires on a
-    // bug — dropping attachments with no trace at all is the worst outcome.
-    const { client } = setup();
-    const consoleWarn = vi.mocked(console.warn);
-    const message = {
-      attachments: [
-        { localMetadata: { id: 'a6', uploadState: 'uploading' }, type: 'file' },
-      ],
-    };
-
-    sanitizeOutgoingAttachments({ client, message });
-
-    expect(consoleWarn).toHaveBeenCalledWith(
-      expect.stringContaining('Dropped 1 attachment(s)'),
-      expect.objectContaining({ attachments: expect.any(Array) }),
-    );
+    expectWarned();
   });
 
   it.each([
@@ -1341,7 +895,6 @@ describe('sanitizeOutgoingAttachments', () => {
   ])('drops an attachment whose only source is %s', (_label, image_url) => {
     // These resolve only on the device that produced them. React Native keeps the picked file's
     // URI in `image_url` from selection onwards, so a presence check would call this resolved.
-    const { client, logger } = setup();
     const message = {
       attachments: [
         {
@@ -1352,19 +905,14 @@ describe('sanitizeOutgoingAttachments', () => {
       ],
     };
 
-    const result = sanitizeOutgoingAttachments({ client, message });
+    const result = sanitizeOutgoingAttachments(message);
 
     expect(result.attachments).toEqual([]);
-    expect(logger).toHaveBeenCalledWith(
-      'warn',
-      expect.stringContaining('Dropped 1 attachment(s)'),
-      expect.objectContaining({ attachments: expect.any(Array) }),
-    );
+    expectWarned();
   });
 
   it('keeps an attachment whose local URL sits next to a remote one', () => {
     // A finished upload can still carry the local preview alongside the CDN URL.
-    const { client, logger } = setup();
     const message = {
       attachments: [
         {
@@ -1376,10 +924,10 @@ describe('sanitizeOutgoingAttachments', () => {
       ],
     };
 
-    const result = sanitizeOutgoingAttachments({ client, message });
+    const result = sanitizeOutgoingAttachments(message);
 
     expect(result.attachments).toHaveLength(1);
-    expect(logger).not.toHaveBeenCalled();
+    expect(sink).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -1387,7 +935,6 @@ describe('sanitizeOutgoingAttachments', () => {
     ['og_scrape_url', { og_scrape_url: 'https://example.com' }],
     ['title_link', { title_link: 'https://example.com' }],
   ])('keeps an attachment whose only source is %s', (_label, source) => {
-    const { client, logger } = setup();
     const message = {
       attachments: [
         {
@@ -1398,9 +945,9 @@ describe('sanitizeOutgoingAttachments', () => {
       ],
     };
 
-    const result = sanitizeOutgoingAttachments({ client, message });
+    const result = sanitizeOutgoingAttachments(message);
 
     expect(result.attachments).toHaveLength(1);
-    expect(logger).not.toHaveBeenCalled();
+    expect(sink).not.toHaveBeenCalled();
   });
 });

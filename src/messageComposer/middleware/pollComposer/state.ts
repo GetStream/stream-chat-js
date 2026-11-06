@@ -6,6 +6,12 @@ import type {
   PollComposerStateChangeMiddlewareValue,
   TargetedPollOptionTextUpdate,
 } from './types';
+import type { PollComposerValidationError } from './validation';
+import {
+  isPollComposerValidationError,
+  POLL_COMPOSER_VALIDATION_CODE,
+  pollComposerValidationError,
+} from './validation';
 
 export const VALID_MAX_VOTES_VALUE_REGEX = /^([2-9]|10)$/;
 
@@ -14,14 +20,16 @@ export const MAX_POLL_OPTIONS = 100 as const;
 const textFieldIsEmpty = (text: string) => !text.trim();
 
 export type PollStateValidationOutput = Partial<
-  Omit<Record<keyof PollComposerState['data'], string>, 'options'> & {
-    options?: Record<string, string>;
+  Omit<
+    Record<keyof PollComposerState['data'], PollComposerValidationError>,
+    'options'
+  > & {
+    options?: Record<string, PollComposerValidationError>;
   }
 >;
 
 export type PollStateChangeValidator = (params: {
   data: PollComposerState['data'];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   value: any;
   currentError?: PollComposerFieldErrors[keyof PollComposerFieldErrors];
 }) => PollStateValidationOutput;
@@ -32,22 +40,36 @@ export const pollStateChangeValidators: Partial<
   enforce_unique_vote: () => ({ max_votes_allowed: undefined }),
   max_votes_allowed: ({ data, value }) => {
     if (data.enforce_unique_vote && value)
-      return { max_votes_allowed: 'Enforce unique vote is enabled' };
+      return {
+        max_votes_allowed: pollComposerValidationError(
+          POLL_COMPOSER_VALIDATION_CODE.maxVotesUniqueVoteEnforced,
+        ),
+      };
     const numericMatch = value.match(/^[0-9]+$/);
     if (!numericMatch && value) {
-      return { max_votes_allowed: 'Only numbers are allowed' };
+      return {
+        max_votes_allowed: pollComposerValidationError(
+          POLL_COMPOSER_VALIDATION_CODE.maxVotesNotNumeric,
+        ),
+      };
     }
     if (value?.length > 1 && !value.match(VALID_MAX_VOTES_VALUE_REGEX))
-      return { max_votes_allowed: 'Type a number from 2 to 10' };
+      return {
+        max_votes_allowed: pollComposerValidationError(
+          POLL_COMPOSER_VALIDATION_CODE.maxVotesOutOfRange,
+        ),
+      };
     return { max_votes_allowed: undefined };
   },
   options: ({ value: options }) => {
-    const errors: Record<string, string> = {};
+    const errors: Record<string, PollComposerValidationError> = {};
     const seenOptions = new Set<string>();
 
     options.forEach((option: { id: string; text: string }) => {
       if (seenOptions.has(option.text) && option.text.length) {
-        errors[option.id] = 'Option already exists';
+        errors[option.id] = pollComposerValidationError(
+          POLL_COMPOSER_VALIDATION_CODE.optionDuplicate,
+        );
       } else {
         seenOptions.add(option.text);
       }
@@ -63,7 +85,7 @@ export const defaultPollFieldChangeEventValidators: Partial<
   name: ({ currentError, value }) =>
     value && currentError
       ? { name: undefined }
-      : { name: typeof currentError === 'string' ? currentError : undefined },
+      : { name: isPollComposerValidationError(currentError) ? currentError : undefined },
 };
 
 export const defaultPollFieldBlurEventValidators: Partial<
@@ -71,11 +93,18 @@ export const defaultPollFieldBlurEventValidators: Partial<
 > = {
   max_votes_allowed: ({ value }) => {
     if (value && !value.match(VALID_MAX_VOTES_VALUE_REGEX))
-      return { max_votes_allowed: 'Type a number from 2 to 10' };
+      return {
+        max_votes_allowed: pollComposerValidationError(
+          POLL_COMPOSER_VALIDATION_CODE.maxVotesOutOfRange,
+        ),
+      };
     return { max_votes_allowed: undefined };
   },
   name: ({ value }) => {
-    if (textFieldIsEmpty(value)) return { name: 'Question is required' };
+    if (textFieldIsEmpty(value))
+      return {
+        name: pollComposerValidationError(POLL_COMPOSER_VALIDATION_CODE.nameRequired),
+      };
     return { name: undefined };
   },
   options: (params) => {
@@ -84,7 +113,9 @@ export const defaultPollFieldBlurEventValidators: Partial<
     params.value.forEach((option: { id: string; text: string }, index: number) => {
       const isTheLastOption = index === params.value.length - 1;
       if (textFieldIsEmpty(option.text) && !isTheLastOption) {
-        errors[option.id] = 'Option is empty';
+        errors[option.id] = pollComposerValidationError(
+          POLL_COMPOSER_VALIDATION_CODE.optionEmpty,
+        );
       }
     });
     return Object.keys(errors).length > 0 ? { options: errors } : { options: undefined };
@@ -95,7 +126,6 @@ export type PollCompositionStateProcessorOutput = Partial<PollComposerState['dat
 
 export type PollCompositionStateProcessor = (params: {
   data: PollComposerState['data'];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   value: any;
 }) => PollCompositionStateProcessorOutput;
 
@@ -124,7 +154,7 @@ export const pollCompositionStateProcessors: Partial<
     max_votes_allowed: clampMaxVotesAllowed(value),
   }),
   options: ({ value, data }) => {
-    // If it's a direct array update (like drag-drop reordering)
+    // Whole-list update (e.g. drag-drop reordering).
     if (Array.isArray(value)) {
       return {
         options: value.map((option) => ({
@@ -134,7 +164,7 @@ export const pollCompositionStateProcessors: Partial<
       };
     }
 
-    // For single option updates
+    // Single option update.
     const { index, text } = value;
     const prevOptions = data.options || [];
 

@@ -1,9 +1,7 @@
 type Dispose<K, T> = (key: K, value: T) => void;
 /**
- * A cache that stores a fixed number of values in a queue.
- * The most recently added or retrieved value is kept at the front of the queue.
- * @template K - The type of the keys.
- * @template T - The type of the values.
+ * Least-recently-used cache holding at most `size` values. `add` and `get` mark a key as most
+ * recently used. Adding to a full cache evicts the least recently used entry, calling `dispose`.
  */
 export class FixedSizeQueueCache<K, T> {
   private keys: Array<K>;
@@ -20,25 +18,22 @@ export class FixedSizeQueueCache<K, T> {
   }
 
   /**
-   * Adds a new or moves the existing reference to the front of the queue
-   * @param key
-   * @param value
+   * Inserts or updates an entry as the most recently used one.
+   *
+   * @param key - The cache key.
+   * @param value - The value to associate with `key`.
    */
   add(key: K, value: T) {
     const index = this.keys.indexOf(key);
 
     if (index > -1) {
-      this.keys.splice(this.keys.indexOf(key), 1);
+      this.keys.splice(index, 1);
     } else if (this.keys.length >= this.size) {
       const itemKey = this.keys.shift();
 
-      if (itemKey) {
-        const item = this.peek(itemKey);
-
-        if (item) {
-          this.dispose?.(itemKey, item);
-        }
-
+      // Compared with `undefined` and checked with `has`, so falsy keys and values are evicted too.
+      if (itemKey !== undefined && this.map.has(itemKey)) {
+        this.dispose?.(itemKey, this.map.get(itemKey) as T);
         this.map.delete(itemKey);
       }
     }
@@ -48,8 +43,10 @@ export class FixedSizeQueueCache<K, T> {
   }
 
   /**
-   * Retrieves the value by key.
-   * @param key
+   * Retrieves a value without marking it as recently used.
+   *
+   * @param key - The cache key.
+   * @returns The value, or `undefined` when the key is not cached.
    */
   peek(key: K) {
     const value = this.map.get(key);
@@ -58,23 +55,29 @@ export class FixedSizeQueueCache<K, T> {
   }
 
   /**
-   * Retrieves the value and moves it to the front of the queue.
-   * @param key
+   * Retrieves a value and marks it as most recently used.
+   *
+   * @param key - The cache key.
+   * @returns The value, or `undefined` when the key is not cached.
    */
   get(key: K) {
     const foundItem = this.peek(key);
+    const index = this.keys.indexOf(key);
 
-    if (foundItem && this.keys.indexOf(key) !== this.size - 1) {
-      this.keys.splice(this.keys.indexOf(key), 1);
+    if (index > -1 && index !== this.keys.length - 1) {
+      this.keys.splice(index, 1);
       this.keys.push(key);
     }
 
     return foundItem;
   }
 
-  /**
-   * Clears queue entirely and disposes of each item individually.
-   */
+  /** Every cached value, as a new array. */
+  values(): T[] {
+    return Array.from(this.map.values());
+  }
+
+  /** Empties the cache, calling `dispose` for each entry. */
   clear() {
     if (this.dispose) {
       this.map.forEach((entry, key) => this.dispose?.(key, entry));

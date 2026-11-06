@@ -342,10 +342,15 @@
 		return text;
 	};
 
+	// Wire timestamps are unix nanoseconds, as the API sends them (stream-chat v10+). An ISO string here
+	// never becomes a finite timestamp, so it would break exactly the ordering and formatting paths a
+	// burst is meant to exercise.
+	const nowNs = () => Date.now() * 1e6;
+
 	const buildHtml = (text) => `<p>${escapeHtml(text).replace(/\n/g, '<br/>')}</p>\n`;
 
 	const buildUserPool = (size) => {
-		const now = new Date().toISOString();
+		const now = nowNs();
 		const users = [];
 		for (let i = 0; i < size; i++) {
 			const id = `sim_user_${i}`;
@@ -374,7 +379,7 @@
 	};
 
 	const buildMessage = (channel, user) => {
-		const now = new Date().toISOString();
+		const now = nowNs();
 		const text = generateText();
 		return {
 			id: uuid(),
@@ -410,7 +415,7 @@
 
 	const buildMessageNewEvent = (channel, message) => ({
 		type: 'message.new',
-		created_at: new Date().toISOString(),
+		created_at: nowNs(),
 		cid: channel.cid,
 		channel_type: channel.type,
 		channel_id: channel.id,
@@ -421,7 +426,7 @@
 	});
 
 	const buildReactionNewEvent = (channel, message, user) => {
-		const now = new Date().toISOString();
+		const now = nowNs();
 		const emoji = pick(EMOJIS);
 		const reactionType = `emoji-${emoji.code}`;
 
@@ -533,7 +538,7 @@
 			simulateBurst.state.reactions = counters.reactions;
 		};
 
-		// Mirror the real receive path: src/connection.ts onmessage parses
+		// Mirror the real receive path: src/StableWSConnection.ts onmessage parses
 		// the frame locally (health-check / error shortcut), then
 		// src/client.ts handleEvent parses it again before dispatching.
 		// Both parses happen per frame in production — pay both here too.

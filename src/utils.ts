@@ -1,73 +1,61 @@
-import FormData from 'form-data';
 import type {
-  AscDesc,
   Attachment,
-  ChannelFilters,
-  ChannelQueryOptions,
-  ChannelSort,
-  ChannelSortBase,
   LocalMessage,
-  LocalMessageBase,
-  Logger,
-  Message,
-  MessagePaginationOptions,
+  MessageRequest,
   MessageResponse,
-  MessageResponseBase,
-  MessageSet,
   OwnUserBase,
   OwnUserResponse,
-  PromoteChannelParams,
-  QueryChannelAPIResponse,
   ReactionGroupResponse,
-  UpdatedMessage,
+  ReactionResponse,
   UserResponse,
 } from './types';
-import type { StreamChat } from './client';
 import type { Channel } from './channel';
 import type { AxiosRequestConfig } from 'axios';
 import { LOCAL_MESSAGE_FIELDS, RESERVED_UPDATED_MESSAGE_FIELDS } from './constants';
+import { getMemoizedFormat, memoizeFormat } from './formatMessageMemo';
+import { chatLoggerSystem } from './logger';
+import type { ScopedLogger } from './logger';
+import { nowNs, nsToDate } from './utils/time';
+
+const logger = chatLoggerSystem.getLogger('utils');
 
 /**
- * logChatPromiseExecution - utility function for logging the execution of a promise..
- *  use this when you want to run the promise and handle errors by logging a warning
+ * Runs a promise fire-and-forget and logs an error when it rejects.
  *
- * @param {Promise<T>} promise The promise you want to run and log
- * @param {string} name    A descriptive name of what the promise does for log output
- *
+ * @param promise - The promise to run.
+ * @param name - What the promise does, for the log output.
  */
 export function logChatPromiseExecution<T>(promise: Promise<T>, name: string) {
   promise.then().catch((error) => {
-    console.warn(`failed to do ${name}, ran into error: `, error);
+    logger
+      .withExtraTags('logChatPromiseExecution')
+      .error(`Failed to execute "${name}".`, { error });
   });
 }
 
-/**
- * The default no-op client logger.
- */
-export const noopLogger: Logger = () => null;
-
-const logError = <T>(logger: Logger, error: unknown, event: T) => {
-  const message = 'Unhandled error in event listener';
-  logger('error', message, { error, event });
-  if (logger === noopLogger) console.error(message, error, event);
-};
+const logListenerError = <T>(scopedLogger: ScopedLogger, error: unknown, event: T) =>
+  scopedLogger
+    .withExtraTags('invokeEventListener')
+    .error('Unhandled error in event listener', { error, event });
 
 /**
- * Invokes a single event listener in isolation, so that a faulty listener cannot
- * abort the dispatch loop or the bookkeeping that follows it.
+ * Invokes one event listener in isolation: a synchronous throw or a rejected promise (from an
+ * `async` listener) is logged and cannot abort the dispatch loop.
  */
 export const invokeEventListener = <T>(
   listener: (event: T) => unknown,
   event: T,
-  logger: Logger,
+  scopedLogger: ScopedLogger,
 ) => {
   try {
     const result = listener(event);
     if (result && typeof (result as PromiseLike<unknown>).then === 'function') {
-      Promise.resolve(result).catch((error) => logError(logger, error, event));
+      Promise.resolve(result).catch((error) =>
+        logListenerError(scopedLogger, error, event),
+      );
     }
   } catch (error) {
-    logError(logger, error, event);
+    logListenerError(scopedLogger, error, event);
   }
 };
 
@@ -86,38 +74,10 @@ export const chatCodes = {
   WS_CLOSED_SUCCESS: 1000,
 };
 
-function isReadableStream(obj: unknown): obj is NodeJS.ReadStream {
-  return (
-    obj !== null &&
-    typeof obj === 'object' &&
-    ((obj as NodeJS.ReadStream).readable ||
-      typeof (obj as NodeJS.ReadStream)._read === 'function')
-  );
-}
-
-function isBuffer(obj: unknown): obj is Buffer {
-  return (
-    obj != null &&
-    (obj as Buffer).constructor != null &&
-    // @ts-expect-error expected
-    typeof obj.constructor.isBuffer === 'function' &&
-    // @ts-expect-error expected
-    obj.constructor.isBuffer(obj)
-  );
-}
-
-function isFileWebAPI(uri: unknown): uri is File {
-  return typeof window !== 'undefined' && 'File' in window && uri instanceof File;
-}
-
 export function isOwnUser(
   user?: OwnUserResponse | UserResponse,
 ): user is OwnUserResponse {
   return (user as OwnUserResponse)?.total_unread_count !== undefined;
-}
-
-function isBlobWebAPI(uri: unknown): uri is Blob {
-  return typeof window !== 'undefined' && 'Blob' in window && uri instanceof Blob;
 }
 
 export function isOwnUserBaseProperty(property: string) {
@@ -126,83 +86,36 @@ export function isOwnUserBaseProperty(property: string) {
   } = {
     channel_mutes: true,
     devices: true,
+    invisible: true,
+    latest_hidden_channels: true,
     mutes: true,
+    privacy_settings: true,
+    push_preferences: true,
     total_unread_count: true,
+    total_unread_count_by_team: true,
     unread_channels: true,
     unread_count: true,
     unread_threads: true,
-    invisible: true,
-    privacy_settings: true,
-    roles: true,
-    push_preferences: true,
-    total_unread_count_by_team: true,
   };
 
   return ownUserBaseProperties[property as keyof OwnUserBase];
 }
 
-/**
- * channelHasReadEvents - Whether read events are enabled for the current user on a channel.
- */
+/** Whether `read-events` is among the own capabilities (true while they are not loaded). */
 export const channelHasReadEvents = (channel?: Channel) => {
   const ownCapabilities = channel?.data?.own_capabilities;
   return !(Array.isArray(ownCapabilities) && !ownCapabilities.includes('read-events'));
 };
 
-/**
- * channelTracksReadLocally - Whether a channel maintains a client local unread count.
- */
+/** Whether read events are off and the channel keeps a client-local unread count. */
 export const channelTracksReadLocally = (channel?: Channel) =>
-  !channelHasReadEvents(channel) &&
-  !!channel?.getClient().options.isLocalUnreadCountEnabled;
+  !!channel &&
+  !channel.readEventsEnabled &&
+  channel.config.readEvents.localUnreadCountEnabled;
 
-export function addFileToFormData(
-  uri: string | NodeJS.ReadableStream | Buffer | File,
-  name?: string,
-  contentType?: string,
-) {
-  const data = new FormData();
-
-  if (isReadableStream(uri) || isBuffer(uri) || isFileWebAPI(uri) || isBlobWebAPI(uri)) {
-    if (name) data.append('file', uri, name);
-    else data.append('file', uri);
-  } else {
-    data.append('file', {
-      uri,
-      name: name || (uri as string).split('/').reverse()[0],
-      contentType: contentType || undefined,
-      type: contentType || undefined,
-    });
-  }
-
-  return data;
-}
-export function normalizeQuerySort<T extends Record<string, AscDesc | undefined>>(
-  sort: T | T[],
-) {
-  const sortFields: Array<{ direction: AscDesc; field: keyof T }> = [];
-  const sortArr = Array.isArray(sort) ? sort : [sort];
-  for (const item of sortArr) {
-    const entries = Object.entries(item) as [keyof T, AscDesc][];
-    if (entries.length > 1) {
-      console.warn(
-        "client._buildSort() - multiple fields in a single sort object detected. Object's field order is not guaranteed",
-      );
-    }
-    for (const [field, direction] of entries) {
-      sortFields.push({ field, direction });
-    }
-  }
-  return sortFields;
-}
-
-/**
- * retryInterval - A retry interval which increases acc to number of failures
- *
- * @return {number} Duration to wait in milliseconds
- */
+/** A random retry delay in milliseconds that grows with `numberOfFailures`. */
 export function retryInterval(numberOfFailures: number) {
-  // try to reconnect in 0.25-25 seconds (random to spread out the load from failures)
+  // 0.25 to 25 seconds, random to spread out the load from failures
   const max = Math.min(500 + numberOfFailures * 2000, 25000);
   const min = Math.min(Math.max(250, (numberOfFailures - 1) * 2000), 25000);
   return Math.floor(Math.random() * (max - min) + min);
@@ -263,76 +176,20 @@ function getRandomBytes(length: number): Uint8Array {
   return bytes;
 }
 
-export function convertErrorToJson(err: Error) {
-  const jsonObj = {} as Record<string, unknown>;
-
-  if (!err) return jsonObj;
-
-  try {
-    Object.getOwnPropertyNames(err).forEach((key) => {
-      jsonObj[key] = Object.getOwnPropertyDescriptor(err, key);
-    });
-  } catch (_) {
-    return {
-      error: 'failed to serialize the error',
-    };
-  }
-
-  return jsonObj;
-}
-
-/**
- * isOnline safely return the navigator.online value for browser env
- * if navigator is not in global object, it always return true
- */
-export function isOnline() {
-  const nav =
-    typeof navigator !== 'undefined'
-      ? navigator
-      : typeof window !== 'undefined' && window.navigator
-        ? window.navigator
-        : undefined;
-
-  if (!nav) {
-    console.warn(
-      'isOnline failed to access window.navigator and assume browser is online',
-    );
-    return true;
-  }
-
-  // RN navigator has undefined for onLine
-  if (typeof nav.onLine !== 'boolean') {
-    return true;
-  }
-
-  return nav.onLine;
-}
-
-/**
- * listenForConnectionChanges - Adds an event listener fired on browser going online or offline
- */
-export function addConnectionEventListeners(cb: (e: Event) => void) {
-  if (typeof window !== 'undefined' && window.addEventListener) {
-    window.addEventListener('offline', cb);
-    window.addEventListener('online', cb);
-  }
-}
-
-export function removeConnectionEventListeners(cb: (e: Event) => void) {
-  if (typeof window !== 'undefined' && window.removeEventListener) {
-    window.removeEventListener('offline', cb);
-    window.removeEventListener('online', cb);
-  }
-}
+const isScalarParam = (value: unknown) =>
+  typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean';
 
 export const axiosParamsSerializer: AxiosRequestConfig['paramsSerializer'] = (params) => {
   const newParams = [];
   for (const k in params) {
-    // Stream backend doesn't treat "undefined" value same as value not being present.
-    // So, we need to skip the undefined values.
+    // The backend does not treat an "undefined" value as absent, so skip it.
     if (params[k] === undefined) continue;
 
-    if (Array.isArray(params[k]) || typeof params[k] === 'object') {
+    // Scalar arrays are comma-separated (`ids=a,b`), as the API parses list params; a JSON array
+    // there silently matches nothing.
+    if (Array.isArray(params[k]) && params[k].every(isScalarParam)) {
+      newParams.push(`${k}=${encodeURIComponent(params[k].join(','))}`);
+    } else if (Array.isArray(params[k]) || typeof params[k] === 'object') {
       newParams.push(`${k}=${encodeURIComponent(JSON.stringify(params[k]))}`);
     } else {
       newParams.push(`${k}=${encodeURIComponent(params[k])}`);
@@ -343,94 +200,214 @@ export const axiosParamsSerializer: AxiosRequestConfig['paramsSerializer'] = (pa
 };
 
 /**
- * Takes the message object, parses the dates, sets `__html`
- * and sets the status to `received` if missing; returns a new LocalMessage object.
+ * Adds the SDK-specific fields (`status`, `error`) to a message. Memoized per source object: callers
+ * share the result, so do not mutate it.
  *
- * @param {LocalMessage} message `LocalMessage` object
+ * @param message - The message from the API, or a local one.
+ * @returns The `LocalMessage`.
  */
-export function formatMessage(
-  message: MessageResponse | MessageResponseBase | LocalMessage,
-): LocalMessage {
+export function formatMessage(message: MessageResponse | LocalMessage): LocalMessage {
+  // Memoized per source object: every consumer gets the same `LocalMessage`.
+  const memoized = getMemoizedFormat(message);
+  if (memoized) return memoized;
+
   const toLocalMessageBase = (
-    msg: MessageResponse | MessageResponseBase | LocalMessage | null | undefined,
-  ): LocalMessageBase | null => {
+    msg: MessageResponse | LocalMessage | null | undefined,
+  ): LocalMessage | null => {
     if (!msg) return null;
     return {
       ...msg,
-      created_at: msg.created_at ? new Date(msg.created_at) : new Date(),
-      deleted_at: msg.deleted_at ? new Date(msg.deleted_at) : null,
-      pinned_at: msg.pinned_at ? new Date(msg.pinned_at) : null,
+      // Timestamps stay unix nanoseconds. A locally composed message has no `created_at` /
+      // `updated_at` until the server answers.
+      created_at: msg.created_at ?? nowNs(),
+      deleted_at: msg.deleted_at ?? undefined,
+      pinned_at: msg.pinned_at ?? undefined,
       reaction_groups: maybeGetReactionGroupsFallback(
         msg.reaction_groups,
         msg.reaction_counts,
         msg.reaction_scores,
       ),
-      status: msg.status || 'received',
-      updated_at: msg.updated_at ? new Date(msg.updated_at) : new Date(),
+      status: (msg as LocalMessage).status || 'received',
+      updated_at: msg.updated_at ?? nowNs(),
     };
   };
 
-  return {
+  const formatted = {
     ...toLocalMessageBase(message),
-    error: (message as LocalMessage).error ?? null,
-    quoted_message: toLocalMessageBase((message as MessageResponse).quoted_message),
+    error: (message as LocalMessage).error ?? undefined,
+    quoted_message:
+      toLocalMessageBase((message as MessageResponse).quoted_message) ?? undefined,
   } as LocalMessage;
+
+  memoizeFormat(message, formatted);
+  return formatted;
 }
 
 /**
- * @private
+ * Computes the current user's `own_reactions` after one reaction change, from the `current` copy. A
+ * WS reaction event carries `own_reactions: []` (or stale), so it cannot be trusted. Used by
+ * `applyReactionLocally` and `reflectReactionEvent`.
  *
- * Takes a LocalMessage, parses the dates back to strings,
- * and converts the message back to a MessageResponse.
+ * - `removed`: drop the current user's reaction of this type.
+ * - `enforceUnique`: replace any own reaction with the incoming one (`reaction.updated`).
+ * - otherwise: add the reaction, de-duped by type.
  *
- * @param {MessageResponse} message `MessageResponse` object
+ * A reaction by another user never changes `own_reactions`.
  */
-export function unformatMessage(message: LocalMessage): MessageResponse {
-  const toMessageResponseBase = (
-    msg: LocalMessage | null | undefined,
-  ): MessageResponseBase | null => {
-    if (!msg) return null;
-    const newDateString = new Date().toISOString();
-    return {
-      ...msg,
-      created_at: message.created_at ? message.created_at.toISOString() : newDateString,
-      deleted_at: message.deleted_at ? message.deleted_at.toISOString() : undefined,
-      pinned_at: message.pinned_at ? message.pinned_at.toISOString() : undefined,
-      updated_at: message.updated_at ? message.updated_at.toISOString() : newDateString,
-    };
+export function computeOwnReactions({
+  current,
+  enforceUnique = false,
+  reaction,
+  removed = false,
+  userId,
+}: {
+  current: ReactionResponse[];
+  reaction: ReactionResponse;
+  enforceUnique?: boolean;
+  removed?: boolean;
+  userId?: string;
+}): ReactionResponse[] {
+  const withoutType = current.filter(
+    (r) => r.user_id !== reaction.user_id || r.type !== reaction.type,
+  );
+  if (removed) return withoutType;
+  if (userId !== reaction.user_id) return withoutType;
+  return enforceUnique ? [reaction] : [...withoutType, reaction];
+}
+
+/**
+ * Returns a copy of `message` with `reaction` folded into its `reaction_groups` /
+ * `latest_reactions`. `own_reactions` is left to {@link computeOwnReactions}.
+ */
+export function messageWithReactionAdded(
+  message: LocalMessage,
+  reaction: ReactionResponse,
+  enforceUnique: boolean,
+): LocalMessage {
+  const score = reaction.score ?? 1;
+  const reactionGroups: Record<string, ReactionGroupResponse> = {
+    ...(message.reaction_groups ?? {}),
   };
 
+  // With `enforceUnique`, first back the current user's existing reactions out of the groups.
+  if (enforceUnique) {
+    for (const ownReaction of message.own_reactions ?? []) {
+      const group = reactionGroups[ownReaction.type];
+      if (!group) continue;
+      const next = {
+        ...group,
+        count: group.count - 1,
+        sum_scores: group.sum_scores - (ownReaction.score ?? 1),
+      };
+      if (next.count < 1) delete reactionGroups[ownReaction.type];
+      else reactionGroups[ownReaction.type] = next;
+    }
+  }
+
+  const existingGroup = reactionGroups[reaction.type];
+  reactionGroups[reaction.type] = existingGroup
+    ? {
+        ...existingGroup,
+        count: existingGroup.count + 1,
+        last_reaction_at: reaction.created_at,
+        sum_scores: existingGroup.sum_scores + score,
+      }
+    : {
+        count: 1,
+        first_reaction_at: reaction.created_at,
+        last_reaction_at: reaction.created_at,
+        latest_reactions_by: [],
+        sum_scores: score,
+      };
+
+  const latestReactions = enforceUnique
+    ? [
+        ...(message.latest_reactions ?? []).filter((r) => r.user_id !== reaction.user_id),
+        reaction,
+      ]
+    : [...(message.latest_reactions ?? []), reaction];
+
   return {
-    ...toMessageResponseBase(message),
-    quoted_message: toMessageResponseBase((message as LocalMessage).quoted_message),
-  } as MessageResponse;
+    ...message,
+    latest_reactions: latestReactions,
+    reaction_groups: reactionGroups,
+  };
 }
 
 /**
- * Whether a URL points at something the API and other devices can actually fetch.
+ * Returns a copy of `message` with the current user's reaction of `reaction.type` backed out of its
+ * `reaction_groups` / `latest_reactions`. Does not touch `own_reactions`.
  */
+export function messageWithReactionRemoved(
+  message: LocalMessage,
+  reaction: ReactionResponse,
+): LocalMessage {
+  const reactionGroups: Record<string, ReactionGroupResponse> = {
+    ...(message.reaction_groups ?? {}),
+  };
+  const reactionToRemove = message.own_reactions?.find((r) => r.type === reaction.type);
+
+  if (reactionToRemove && reactionGroups[reactionToRemove.type]) {
+    const group = reactionGroups[reactionToRemove.type];
+    const next = {
+      ...group,
+      count: group.count - 1,
+      sum_scores: group.sum_scores - (reactionToRemove.score ?? 1),
+    };
+    if (next.count < 1) delete reactionGroups[reactionToRemove.type];
+    else reactionGroups[reactionToRemove.type] = next;
+  }
+
+  return {
+    ...message,
+    latest_reactions: message.latest_reactions?.filter(
+      (r) => !(r.user_id === reaction.user_id && r.type === reaction.type),
+    ),
+    reaction_groups: reactionGroups,
+  };
+}
+
+/**
+ * Converts wire timestamps into the `Date` objects `MessageRequest` declares (sub-millisecond
+ * precision is lost). `shared_location` is copied field by field so only what `SharedLocation`
+ * declares reaches the API.
+ */
+const toRequestDateFields = ({
+  pinned_at,
+  pin_expires,
+  shared_location,
+}: Pick<Partial<MessageResponse>, 'pinned_at' | 'pin_expires' | 'shared_location'>): Pick<
+  MessageRequest,
+  'pinned_at' | 'pin_expires' | 'shared_location'
+> => ({
+  ...(pinned_at != null ? { pinned_at: nsToDate(pinned_at) } : {}),
+  ...(pin_expires != null ? { pin_expires: nsToDate(pin_expires) } : {}),
+  ...(shared_location
+    ? {
+        shared_location: {
+          latitude: shared_location.latitude,
+          longitude: shared_location.longitude,
+          created_by_device_id: shared_location.created_by_device_id,
+          ...(shared_location.end_at != null
+            ? { end_at: nsToDate(shared_location.end_at) }
+            : {}),
+        },
+      }
+    : {}),
+});
+
+/** Whether a URL is HTTP(S), so the API and other devices can fetch it. */
 const isRemoteUrl = (url?: string) => !!url && /^https?:\/\//i.test(url.trim());
 
 /**
- * Strips composer-internal state from a message's attachments, and drops any whose upload never
- * resolved.
- *
- * `localMetadata` is how `AttachmentManager` tracks an upload (its id, the `File`, the local
- * preview); it must never reach the API. An attachment that still carries it and has no remote
- * URL was never settled — which is what happens when
- * `createSendWithPendingUploadsAttachmentsMiddleware` is installed by a UI SDK that does not
- * implement the rest of the flow (awaiting those uploads before sending). Sending it would store
- * an attachment pointing at nothing, so it is dropped and logged instead.
- *
- * Returns the same message object when there was nothing to change.
+ * Strips `localMetadata` (`AttachmentManager`'s upload state, never sent to the API) from a
+ * message's attachments. Of those that carried it, drops with a warning the ones with no remote URL:
+ * their upload never settled, so something bypassed the send path that awaits uploads. Returns the
+ * same message object when nothing changed.
  */
-export const sanitizeOutgoingAttachments = <T extends { attachments?: Attachment[] }>({
-  client,
-  message,
-}: {
-  client: StreamChat;
-  message: T;
-}): T => {
+export const sanitizeOutgoingAttachments = <T extends { attachments?: Attachment[] }>(
+  message: T,
+): T => {
   const attachments = message.attachments;
   if (!attachments?.length) return message;
 
@@ -449,8 +426,7 @@ export const sanitizeOutgoingAttachments = <T extends { attachments?: Attachment
 
     changed = true;
 
-    // Any of these pointing at a remote URL means the attachment resolved to something the API
-    // can store and other devices can load.
+    // A remote URL in any of these means the upload resolved.
     const hasRemoteSource =
       isRemoteUrl(rest.asset_url) ||
       isRemoteUrl(rest.image_url) ||
@@ -467,54 +443,60 @@ export const sanitizeOutgoingAttachments = <T extends { attachments?: Attachment
   }, []);
 
   if (unresolved.length) {
-    const text = `Dropped ${unresolved.length} attachment(s) whose upload never completed. Composing with pending uploads requires awaiting them before sending.`;
-    const extraData = { attachments: unresolved, message, tags: ['attachments'] };
-
-    client.logger('warn', text, extraData);
-    console.warn(text, extraData);
+    logger
+      .withExtraTags('sanitizeOutgoingAttachments', 'attachments')
+      .warn(
+        `Dropped ${unresolved.length} attachment(s) whose upload never completed. Composing with pending uploads requires awaiting them before sending.`,
+        { attachments: unresolved, message },
+      );
   }
 
   return changed ? { ...message, attachments: sanitized } : message;
 };
 
-export const localMessageToNewMessagePayload = (localMessage: LocalMessage): Message => {
-  /* eslint-disable @typescript-eslint/no-unused-vars */
+export const localMessageToNewMessagePayload = (
+  localMessage: LocalMessage,
+): MessageRequest => {
   const {
-    // Remove all timestamp fields and client-specific fields.
-    // Field pinned_at can therefore be earlier than created_at as new message payload can hold it.
-    created_at,
-    updated_at,
-    deleted_at,
-    // Client-specific fields
-    error,
-    status,
-    // Reaction related fields
-    latest_reactions,
-    own_reactions,
-    reaction_counts,
-    reaction_scores,
-    reply_count,
-    // Message text related fields that shouldn't be in update
-    command,
-    html,
-    i18n,
-    mentioned_groups,
-    quoted_message,
+    // Timestamp and client-specific fields are removed, so `pinned_at` can precede `created_at`.
+    created_at: _created_at,
+    updated_at: _updated_at,
+    deleted_at: _deleted_at,
+    message_text_updated_at: _message_text_updated_at,
+    pinned_at,
+    pin_expires,
+    shared_location,
+    error: _error,
+    status: _status,
+    latest_reactions: _latest_reactions,
+    own_reactions: _own_reactions,
+    reaction_counts: _reaction_counts,
+    reaction_scores: _reaction_scores,
+    reply_count: _reply_count,
+    // Text-related fields that are not sent as-is (`mentioned_users` goes out as IDs)
+    command: _command,
+    html: _html,
+    i18n: _i18n,
+    mentioned_groups: _mentioned_groups,
+    quoted_message: _quoted_message,
     mentioned_users,
-    // Message content related fields
     ...messageFields
   } = localMessage;
 
+  const requestDates = toRequestDateFields({ pinned_at, pin_expires, shared_location });
+
+  // `messageFields` carries LocalMessage-only fields (cid, pinned, shadowed, ...) that
+  // `MessageRequest` omits; the server ignores them.
   return {
-    ...messageFields,
-    pinned_at: messageFields.pinned_at?.toISOString(),
+    ...(messageFields as MessageRequest),
     mentioned_users: mentioned_users?.map((user) => user.id),
+    ...requestDates,
   };
 };
 
 export const toUpdatedMessagePayload = (
   message: LocalMessage | Partial<MessageResponse>,
-): UpdatedMessage => {
+): MessageRequest => {
   const reservedKeys = {
     ...RESERVED_UPDATED_MESSAGE_FIELDS,
     ...LOCAL_MESSAGE_FIELDS,
@@ -524,14 +506,19 @@ export const toUpdatedMessagePayload = (
     Object.entries(message).filter(
       ([key]) => !reservedKeys[key as keyof typeof reservedKeys],
     ),
-  ) as UpdatedMessage;
+  ) as MessageRequest;
 
   return {
     ...messageFields,
-    pinned: !!message.pinned_at,
+    pinned: message.pinned_at != null,
     mentioned_users: message.mentioned_users?.map((user) =>
       typeof user === 'string' ? user : user.id,
     ),
+    ...toRequestDateFields({
+      pinned_at: message.pinned_at,
+      pin_expires: message.pin_expires,
+      shared_location: message.shared_location,
+    }),
   };
 };
 
@@ -540,15 +527,15 @@ export const toDeletedMessage = ({
   deletedAt,
   hardDelete = false,
 }: {
-  message: LocalMessage | LocalMessageBase;
+  message: LocalMessage;
   deletedAt: LocalMessage['deleted_at'];
   hardDelete: boolean;
 }) => {
   if (hardDelete) {
     /**
-     * In case of hard delete, we need to strip down all text, html, attachments and all the custom properties on message
-     * The hard-deleted message is kept in the UI until the messages are re-queried
-     * FIXME: we are returning an object that does not match LocalMessage | LocalMessageBase
+     * On hard delete, strip text, html, attachments and custom properties. The message stays in the
+     * UI until messages are re-queried.
+     * FIXME: we are returning an object that does not match LocalMessage
      */
     return {
       attachments: [],
@@ -577,39 +564,6 @@ export const toDeletedMessage = ({
   }
 };
 
-export const deleteUserMessages = ({
-  messages,
-  user,
-  hardDelete = false,
-  deletedAt,
-}: {
-  messages: Array<LocalMessage>;
-  user: UserResponse;
-  hardDelete: boolean;
-  deletedAt: LocalMessage['deleted_at'];
-}) => {
-  for (let i = 0; i < messages.length; i++) {
-    const message = messages[i];
-    if (message.user?.id === user.id) {
-      messages[i] =
-        message.type === 'deleted'
-          ? message
-          : (toDeletedMessage({ message, hardDelete, deletedAt }) as LocalMessage);
-    }
-
-    if (messages[i].quoted_message && message.quoted_message?.user?.id === user.id) {
-      messages[i].quoted_message =
-        message.quoted_message.type === 'deleted'
-          ? message.quoted_message
-          : (toDeletedMessage({
-              message: messages[i].quoted_message as LocalMessageBase,
-              hardDelete,
-              deletedAt,
-            }) as LocalMessage);
-    }
-  }
-};
-
 export const findIndexInSortedArray = <T, L>({
   needle,
   sortedArray,
@@ -620,9 +574,8 @@ export const findIndexInSortedArray = <T, L>({
   needle: T;
   sortedArray: readonly T[];
   /**
-   * In an array of objects (like messages), pick a unique property identifying
-   * an element. It will be used to find a direct match for the needle element
-   * in case compare values are not unique.
+   * Picks a unique property identifying an element, used to find a direct match for the needle when
+   * compare values are not unique.
    *
    * @example
    * ```ts
@@ -631,23 +584,15 @@ export const findIndexInSortedArray = <T, L>({
    */
   selectKey?: (arrayElement: T) => string;
   /**
-   * In an array of objects (like messages), pick a specific
-   * property to compare the needle value to.
+   * Picks the property to compare the needle to.
    *
    * @example
    * ```ts
-   * selectValueToCompare: (message) => message.created_at.getTime()
+   * selectValueToCompare: (message) => message.created_at
    * ```
    */
   selectValueToCompare?: (arrayElement: T) => L | T;
-  /**
-   * @default ascending
-   * @description
-   * ```md
-   * ascending  - [1,2,3,4,5...]
-   * descending - [...5,4,3,2,1]
-   * ```
-   */
+  /** @default 'ascending' */
   sortDirection?: 'ascending' | 'descending';
 }) => {
   if (!sortedArray.length) return 0;
@@ -677,9 +622,8 @@ export const findIndexInSortedArray = <T, L>({
     }
   }
 
-  // In case there are several array elements with the same comparable value, search around the insertion
-  // point to possibly find an element with the same key. If found, prefer it.
-  // This, for example, prevents duplication of messages with the same creation date.
+  // With several elements of the same comparable value, search around the insertion point for one
+  // with the same key and prefer it (prevents duplicating messages with the same creation date).
   if (selectKey) {
     const needleKey = selectKey(needle);
     const step = sortDirection === 'ascending' ? -1 : +1;
@@ -699,77 +643,11 @@ export const findIndexInSortedArray = <T, L>({
   return left;
 };
 
-export function addToMessageList<T extends LocalMessage>(
-  messages: readonly T[],
-  newMessage: T,
-  timestampChanged = false,
-  sortBy: 'pinned_at' | 'created_at' = 'created_at',
-  addIfDoesNotExist = true,
-) {
-  const addMessageToList = addIfDoesNotExist || timestampChanged;
-  let newMessages = [...messages];
-
-  // if created_at has changed, message should be filtered and re-inserted in correct order
-  // slow op but usually this only happens for a message inserted to state before actual response with correct timestamp
-  if (timestampChanged) {
-    newMessages = newMessages.filter(
-      (message) => !(message.id && newMessage.id === message.id),
-    );
-  }
-
-  // for empty list just concat and return unless it's an update or deletion
-  if (newMessages.length === 0 && addMessageToList) {
-    return newMessages.concat(newMessage);
-  } else if (newMessages.length === 0) {
-    return newMessages;
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-  const messageTime = newMessage[sortBy]!.getTime();
-  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-  const messageIsNewest = newMessages.at(-1)![sortBy]!.getTime() < messageTime;
-
-  // if message is newer than last item in the list concat and return unless it's an update or deletion
-  if (messageIsNewest && addMessageToList) {
-    return newMessages.concat(newMessage);
-  } else if (messageIsNewest) {
-    return newMessages;
-  }
-
-  // find the closest index to push the new message
-  const insertionIndex = findIndexInSortedArray({
-    needle: newMessage,
-    sortedArray: newMessages,
-    sortDirection: 'ascending',
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    selectValueToCompare: (m) => m[sortBy]!.getTime(),
-    selectKey: (m) => m.id,
-  });
-
-  // message already exists and not filtered with timestampChanged, update and return
-  if (
-    !timestampChanged &&
-    newMessage.id &&
-    newMessages[insertionIndex] &&
-    newMessage.id === newMessages[insertionIndex].id
-  ) {
-    newMessages[insertionIndex] = newMessage;
-    return newMessages;
-  }
-
-  // do not add updated or deleted messages to the list if they already exist or come with a timestamp change
-  if (addMessageToList) {
-    newMessages.splice(insertionIndex, 0, newMessage);
-  }
-
-  return newMessages;
-}
-
 function maybeGetReactionGroupsFallback(
   groups: { [key: string]: ReactionGroupResponse } | null | undefined,
   counts: { [key: string]: number } | null | undefined,
   scores: { [key: string]: number } | null | undefined,
-): { [key: string]: ReactionGroupResponse } | null {
+): { [key: string]: ReactionGroupResponse } | undefined {
   if (groups) {
     return groups;
   }
@@ -778,56 +656,44 @@ function maybeGetReactionGroupsFallback(
     const fallback: { [key: string]: ReactionGroupResponse } = {};
 
     for (const type of Object.keys(counts)) {
+      // Best effort: `first_reaction_at`, `last_reaction_at` and `latest_reactions_by` cannot be
+      // derived.
       fallback[type] = {
         count: counts[type],
         sum_scores: scores[type],
-      };
+      } as ReactionGroupResponse;
     }
 
     return fallback;
   }
 
-  return null;
+  return undefined;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export interface DebouncedFunc<T extends (...args: any[]) => any> {
   /**
-   * Call the original function, but applying the debounce rules.
-   *
-   * If the debounced function can be run immediately, this calls it and returns its return
-   * value.
-   *
-   * Otherwise, it returns the return value of the last invocation, or undefined if the debounced
-   * function was not invoked yet.
+   * Calls the function under the debounce rules. Returns its value when it runs immediately, else
+   * the last invocation's value (`undefined` before the first).
    */
   (...args: Parameters<T>): ReturnType<T> | undefined;
 
-  /**
-   * Throw away any pending invocation of the debounced function.
-   */
   cancel(): void;
 
   /**
-   * If there is a pending invocation of the debounced function, invoke it immediately and return
-   * its return value.
-   *
-   * Otherwise, return the value from the last invocation, or undefined if the debounced function
-   * was never invoked.
+   * Runs the pending invocation immediately and returns its value; otherwise returns the last
+   * invocation's value (`undefined` if never invoked).
    */
   flush(): ReturnType<T> | undefined;
 }
 
-// works exactly the same as lodash.debounce, except that the timeout can also be
-// a function of the call arguments, resolved on every call (e.g. to debounce short,
-// low-selectivity search queries harder than long ones)
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// Like lodash.debounce, except `timeout` can be a function of the call arguments, resolved on every
+// call.
 export const debounce = <T extends (...args: any[]) => any>(
   fn: T,
   timeout: number | ((...args: Parameters<T>) => number) = 0,
   { leading = false, trailing = true }: { leading?: boolean; trailing?: boolean } = {},
 ): DebouncedFunc<T> => {
-  let runningTimeout: null | NodeJS.Timeout = null;
+  let runningTimeout: null | ReturnType<typeof setTimeout> = null;
   let argsForTrailingExecution: Parameters<T> | null = null;
   let lastResult: ReturnType<T> | undefined;
 
@@ -869,39 +735,12 @@ export const debounce = <T extends (...args: any[]) => any>(
   return debouncedFn;
 };
 
-// works exactly the same as lodash.throttle
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const throttle = <T extends (...args: any[]) => any>(
-  fn: T,
-  timeout = 200,
-  { leading = true, trailing = false }: { leading?: boolean; trailing?: boolean } = {},
-) => {
-  let runningTimeout: null | NodeJS.Timeout = null;
-  let storedArgs: Parameters<T> | null = null;
-
-  return (...args: Parameters<T>) => {
-    if (runningTimeout) {
-      if (trailing) storedArgs = args;
-      return;
-    }
-
-    if (leading) fn(...args);
-
-    const timeoutHandler = () => {
-      if (storedArgs) {
-        fn(...storedArgs);
-        storedArgs = null;
-        runningTimeout = setTimeout(timeoutHandler, timeout);
-
-        return;
-      }
-
-      runningTimeout = null;
-    };
-
-    runningTimeout = setTimeout(timeoutHandler, timeout);
-  };
-};
+export { throttle } from './utils/throttling/throttle';
+export type {
+  Throttled,
+  ThrottleOptions,
+  ThrottledCallback,
+} from './utils/throttling/throttle';
 
 const get = <T>(obj: T, path: string): unknown =>
   path.split('.').reduce<unknown>((acc, key) => {
@@ -911,7 +750,7 @@ const get = <T>(obj: T, path: string): unknown =>
     return undefined;
   }, obj);
 
-// works exactly the same as lodash.uniqBy
+// Like lodash.uniqBy.
 export const uniqBy = <T>(
   array: T[] | unknown,
   iteratee: ((item: T) => unknown) | keyof T,
@@ -928,554 +767,40 @@ export const uniqBy = <T>(
   });
 };
 
-type MessagePaginationUpdatedParams = {
-  parentSet: MessageSet;
-  requestedPageSize: number;
-  returnedPage: MessageResponse[];
-  filteredReturnedPage: MessageResponse[];
-  logger?: Logger;
-  messagePaginationOptions?: MessagePaginationOptions;
-};
-
-export function binarySearchByDateEqualOrNearestGreater(
-  array: {
-    created_at?: string;
-  }[],
-  targetDate: Date,
-): number {
-  let left = 0;
-  let right = array.length - 1;
-
-  while (left <= right) {
-    const mid = Math.floor((left + right) / 2);
-    const midCreatedAt = array[mid].created_at;
-    if (!midCreatedAt) {
-      left += 1;
-      continue;
-    }
-    const midDate = new Date(midCreatedAt);
-
-    if (midDate.getTime() === targetDate.getTime()) {
-      return mid;
-    } else if (midDate.getTime() < targetDate.getTime()) {
-      left = mid + 1;
-    } else {
-      right = mid - 1;
-    }
-  }
-
-  return left;
-}
-
-const messagePaginationCreatedAtAround = ({
-  parentSet,
-  requestedPageSize,
-  returnedPage,
-  filteredReturnedPage,
-  messagePaginationOptions,
-}: MessagePaginationUpdatedParams) => {
-  const newPagination = { ...parentSet.pagination };
-  if (!messagePaginationOptions?.created_at_around) return newPagination;
-  let hasPrev;
-  let hasNext;
-  let updateHasPrev;
-  let updateHasNext;
-  const createdAtAroundDate = new Date(messagePaginationOptions.created_at_around);
-  const [firstPageMsg, lastPageMsg] = [returnedPage[0], returnedPage.slice(-1)[0]];
-
-  // expect ASC order (from oldest to newest)
-  const wholePageHasNewerMessages =
-    !!firstPageMsg?.created_at && new Date(firstPageMsg.created_at) > createdAtAroundDate;
-  const wholePageHasOlderMessages =
-    !!lastPageMsg?.created_at && new Date(lastPageMsg.created_at) < createdAtAroundDate;
-
-  const requestedPageSizeNotMet =
-    requestedPageSize > parentSet.messages.length &&
-    requestedPageSize > returnedPage.length;
-  const noMoreMessages =
-    (requestedPageSize > parentSet.messages.length ||
-      parentSet.messages.length >= returnedPage.length) &&
-    requestedPageSize > returnedPage.length;
-
-  if (wholePageHasNewerMessages) {
-    hasPrev = false;
-    updateHasPrev = true;
-    if (requestedPageSizeNotMet) {
-      hasNext = false;
-      updateHasNext = true;
-    }
-  } else if (wholePageHasOlderMessages) {
-    hasNext = false;
-    updateHasNext = true;
-    if (requestedPageSizeNotMet) {
-      hasPrev = false;
-      updateHasPrev = true;
-    }
-  } else if (noMoreMessages) {
-    hasNext = hasPrev = false;
-    updateHasPrev = updateHasNext = true;
-  } else {
-    const [firstFilteredPageMsg, lastFilteredPageMsg] = [
-      filteredReturnedPage[0],
-      filteredReturnedPage.slice(-1)[0],
-    ];
-    const [firstPageMsgIsFirstInSet, lastPageMsgIsLastInSet] = [
-      firstFilteredPageMsg?.id && firstFilteredPageMsg.id === parentSet.messages[0]?.id,
-      lastFilteredPageMsg?.id &&
-        lastFilteredPageMsg.id === parentSet.messages.slice(-1)[0]?.id,
-    ];
-    updateHasPrev = firstPageMsgIsFirstInSet;
-    updateHasNext = lastPageMsgIsLastInSet;
-    const midPointByCount = Math.floor(returnedPage.length / 2);
-    const midPointByCreationDate = binarySearchByDateEqualOrNearestGreater(
-      returnedPage,
-      createdAtAroundDate,
-    );
-
-    if (midPointByCreationDate !== -1) {
-      hasPrev = midPointByCount <= midPointByCreationDate;
-      hasNext = midPointByCount >= midPointByCreationDate;
-    }
-  }
-
-  if (updateHasPrev && typeof hasPrev !== 'undefined') newPagination.hasPrev = hasPrev;
-  if (updateHasNext && typeof hasNext !== 'undefined') newPagination.hasNext = hasNext;
-
-  return newPagination;
-};
-
-const messagePaginationIdAround = ({
-  parentSet,
-  requestedPageSize,
-  returnedPage,
-  filteredReturnedPage,
-  messagePaginationOptions,
-}: MessagePaginationUpdatedParams) => {
-  const newPagination = { ...parentSet.pagination };
-  const { id_around } = messagePaginationOptions || {};
-  if (!id_around) return newPagination;
-  let hasPrev;
-  let hasNext;
-
-  const [firstFilteredPageMsg, lastFilteredPageMsg] = [
-    filteredReturnedPage[0],
-    filteredReturnedPage.slice(-1)[0],
-  ];
-  const [firstPageMsgIsFirstInSet, lastPageMsgIsLastInSet] = [
-    firstFilteredPageMsg?.id === parentSet.messages[0]?.id,
-    lastFilteredPageMsg?.id === parentSet.messages.slice(-1)[0]?.id,
-  ];
-  let updateHasPrev = firstPageMsgIsFirstInSet;
-  let updateHasNext = lastPageMsgIsLastInSet;
-
-  const midPoint = Math.floor(returnedPage.length / 2);
-  const noMoreMessages =
-    (requestedPageSize > parentSet.messages.length ||
-      parentSet.messages.length >= returnedPage.length) &&
-    requestedPageSize > returnedPage.length;
-
-  if (noMoreMessages) {
-    hasNext = hasPrev = false;
-    updateHasPrev = updateHasNext = true;
-  } else if (!returnedPage[midPoint]) {
-    return newPagination;
-  } else if (returnedPage[midPoint].id === id_around) {
-    hasPrev = hasNext = true;
-  } else {
-    let targetMsg;
-    const halves = [returnedPage.slice(0, midPoint), returnedPage.slice(midPoint)];
-    hasPrev = hasNext = true;
-    for (let i = 0; i < halves.length; i++) {
-      targetMsg = halves[i].find((message) => message.id === id_around);
-      if (targetMsg && i === 0) {
-        hasPrev = false;
-      }
-      if (targetMsg && i === 1) {
-        hasNext = false;
-      }
-    }
-  }
-
-  if (updateHasPrev && typeof hasPrev !== 'undefined') newPagination.hasPrev = hasPrev;
-  if (updateHasNext && typeof hasNext !== 'undefined') newPagination.hasNext = hasNext;
-
-  return newPagination;
-};
-
-const messagePaginationLinear = ({
-  parentSet,
-  requestedPageSize,
-  returnedPage,
-  filteredReturnedPage,
-  messagePaginationOptions,
-}: MessagePaginationUpdatedParams) => {
-  const newPagination = { ...parentSet.pagination };
-
-  let hasPrev;
-  let hasNext;
-
-  const [firstFilteredPageMsg, lastFilteredPageMsg] = [
-    filteredReturnedPage[0],
-    filteredReturnedPage.slice(-1)[0],
-  ];
-  const [firstPageMsgIsFirstInSet, lastPageMsgIsLastInSet] = [
-    firstFilteredPageMsg?.id && firstFilteredPageMsg.id === parentSet.messages[0]?.id,
-    lastFilteredPageMsg?.id &&
-      lastFilteredPageMsg.id === parentSet.messages.slice(-1)[0]?.id,
-  ];
-
-  const queriedNextMessages =
-    messagePaginationOptions &&
-    (messagePaginationOptions.created_at_after_or_equal ||
-      messagePaginationOptions.created_at_after ||
-      messagePaginationOptions.id_gt ||
-      messagePaginationOptions.id_gte);
-
-  const queriedPrevMessages =
-    typeof messagePaginationOptions === 'undefined'
-      ? true
-      : messagePaginationOptions.created_at_before_or_equal ||
-        messagePaginationOptions.created_at_before ||
-        messagePaginationOptions.id_lt ||
-        messagePaginationOptions.id_lte ||
-        messagePaginationOptions.offset;
-
-  const containsUnrecognizedOptionsOnly =
-    !queriedNextMessages &&
-    !queriedPrevMessages &&
-    !messagePaginationOptions?.id_around &&
-    !messagePaginationOptions?.created_at_around;
-
-  const hasMore = returnedPage.length >= requestedPageSize;
-
-  if (typeof queriedPrevMessages !== 'undefined' || containsUnrecognizedOptionsOnly) {
-    hasPrev = hasMore;
-  }
-  if (typeof queriedNextMessages !== 'undefined') {
-    hasNext = hasMore;
-  }
-  const returnedPageIsEmpty = returnedPage.length === 0;
-
-  if ((firstPageMsgIsFirstInSet || returnedPageIsEmpty) && typeof hasPrev !== 'undefined')
-    newPagination.hasPrev = hasPrev;
-  if ((lastPageMsgIsLastInSet || returnedPageIsEmpty) && typeof hasNext !== 'undefined')
-    newPagination.hasNext = hasNext;
-
-  return newPagination;
-};
-
-export const hasMessagePaginationCursor = (options?: MessagePaginationOptions) =>
-  !!(
-    options?.id_lt ||
-    options?.id_lte ||
-    options?.id_gt ||
-    options?.id_gte ||
-    options?.id_around ||
-    options?.created_at_before ||
-    options?.created_at_before_or_equal ||
-    options?.created_at_after ||
-    options?.created_at_after_or_equal ||
-    options?.created_at_around ||
-    options?.offset
-  );
-
-export const messageSetPagination = (params: MessagePaginationUpdatedParams) => {
-  // an empty page asked for says nothing about what else exists
-  if (params.requestedPageSize === 0 && params.parentSet.messages.length > 0) {
-    return params.parentSet.pagination;
-  }
-
-  if (
-    params.parentSet.messages.length +
-      (params.returnedPage.length - params.filteredReturnedPage.length) <
-    params.returnedPage.length
-  ) {
-    params.logger?.(
-      'error',
-      'Corrupted message set state: parent set size < returned page size',
-    );
-    return params.parentSet.pagination;
-  }
-
-  if (params.messagePaginationOptions?.created_at_around) {
-    return messagePaginationCreatedAtAround(params);
-  } else if (params.messagePaginationOptions?.id_around) {
-    return messagePaginationIdAround(params);
-  } else {
-    return messagePaginationLinear(params);
-  }
-};
+/**
+ * Reads the user ID of a member.
+ *
+ * @param member - A user ID, a member request or a member response.
+ * @returns The user ID, or `''` if there is none.
+ */
+export const getMemberUserId = (
+  member: string | { user_id?: string; user?: { id?: string } },
+) => (typeof member === 'string' ? member : member.user_id || member.user?.id || '');
 
 /**
- * A utility object used to prevent duplicate invocation of channel.watch() to be triggered when
- * 'notification.message_new' and 'notification.added_to_channel' events arrive at the same time.
+ * The temporary ID of a channel created from members without an ID, until the server answers:
+ * `!members-` plus the sorted member IDs joined by `,`, so it is order-independent. `undefined`
+ * when there are no members.
  */
-const WATCH_QUERY_IN_PROGRESS_FOR_CHANNEL: Record<
-  string,
-  Promise<QueryChannelAPIResponse> | undefined
-> = {};
-
-type GetChannelParams = {
-  client: StreamChat;
-  channel?: Channel;
-  id?: string;
-  members?: string[];
-  options?: ChannelQueryOptions;
-  type?: string;
-};
-/**
- * Calls channel.watch() if it was not already recently called. Waits for watch promise to resolve even if it was invoked previously.
- * If the channel is not passed as a property, it will get it either by its channel.cid or by its members list and do the same.
- * @param client
- * @param members
- * @param options
- * @param type
- * @param id
- * @param channel
- */
-export const getAndWatchChannel = async ({
-  channel,
-  client,
-  id,
-  members,
-  options,
-  type,
-}: GetChannelParams) => {
-  if (!channel && !type) {
-    throw new Error('Channel or channel type have to be provided to query a channel.');
-  }
-
-  // unfortunately typescript is not able to infer that if (!channel && !type) === false, then channel or type has to be truthy
-  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-  const channelToWatch = channel || client.channel(type!, id, { members });
-
-  // need to keep as with call to channel.watch the id can be changed from undefined to an actual ID generated server-side
-  const originalCid = channelToWatch.id
-    ? channelToWatch.cid
-    : members && members.length
-      ? generateChannelTempCid(channelToWatch.type, members)
-      : undefined;
-
-  if (!originalCid) {
-    throw new Error(
-      'Channel ID or channel members array have to be provided to query a channel.',
-    );
-  }
-
-  const queryPromise = WATCH_QUERY_IN_PROGRESS_FOR_CHANNEL[originalCid];
-
-  if (queryPromise) {
-    await queryPromise;
-  } else {
-    try {
-      WATCH_QUERY_IN_PROGRESS_FOR_CHANNEL[originalCid] = channelToWatch.watch(options);
-      await WATCH_QUERY_IN_PROGRESS_FOR_CHANNEL[originalCid];
-    } finally {
-      delete WATCH_QUERY_IN_PROGRESS_FOR_CHANNEL[originalCid];
-    }
-  }
-
-  return channelToWatch;
-};
-
-/**
- * Generates a temporary channel.cid for channels created without ID, as they need to be referenced
- * by an identifier until the back-end generates the final ID. The cid is generated by its member IDs
- * which are sorted and can be recreated the same every time given the same arguments.
- * @param channelType
- * @param members
- */
-export const generateChannelTempCid = (channelType: string, members: string[]) => {
-  if (!members) return;
-  const membersStr = [...members].sort().join(',');
+export const generateChannelTempId = (memberIds: string[]) => {
+  const membersStr = [...memberIds].filter(Boolean).sort().join(',');
   if (!membersStr) return;
-  return `${channelType}:!members-${membersStr}`;
+  return `!members-${membersStr}`;
 };
 
 /**
- * Checks if a channel is pinned or not. Will return true only if channel.state.membership.pinned_at exists.
- * @param channel
+ * The temporary cid of a channel created from members without an ID: its
+ * {@link generateChannelTempId} under its type, so the channel is stored once under it until the
+ * server assigns the real cid. `undefined` when there are no members.
  */
-export const isChannelPinned = (channel: Channel) => {
-  if (!channel) return false;
-
-  const member = channel.state.membership;
-
-  return !!member?.pinned_at;
+export const generateChannelTempCid = (channelType: string, memberIds: string[]) => {
+  const tempId = generateChannelTempId(memberIds);
+  if (!tempId) return;
+  return `${channelType}:${tempId}`;
 };
-
-/**
- * Checks if a channel is archived or not. Will return true only if channel.state.membership.archived_at exists.
- * @param channel
- */
-export const isChannelArchived = (channel: Channel) => {
-  if (!channel) return false;
-
-  const member = channel.state.membership;
-
-  return !!member?.archived_at;
-};
-
-/**
- * A utility that tells us whether we should consider archived channels or not based
- * on filters. Will return true only if filters.archived exists and is a boolean value.
- * @param filters
- */
-export const shouldConsiderArchivedChannels = (filters: ChannelFilters) => {
-  if (!filters) return false;
-
-  return typeof filters.archived === 'boolean';
-};
-
-/**
- * Extracts the value of the sort parameter at a given index, for a targeted key. Can
- * handle both array and object versions of sort. Will return null if the index/key
- * combination does not exist.
- * @param atIndex - the index at which we'll examine the sort value, if it's an array one
- * @param sort - the sort value - both array and object notations are accepted
- * @param targetKey - the target key which needs to exist for the sort at a certain index
- */
-export const extractSortValue = ({
-  atIndex,
-  sort,
-  targetKey,
-}: {
-  atIndex: number;
-  targetKey: keyof ChannelSortBase;
-  sort?: ChannelSort;
-}) => {
-  if (!sort) return null;
-  let option: null | ChannelSortBase = null;
-
-  if (Array.isArray(sort)) {
-    option = sort[atIndex] ?? null;
-  } else {
-    let index = 0;
-    for (const key in sort) {
-      if (index !== atIndex) {
-        index++;
-        continue;
-      }
-
-      if (key !== targetKey) {
-        return null;
-      }
-
-      option = sort;
-
-      break;
-    }
-  }
-
-  return option?.[targetKey] ?? null;
-};
-
-/**
- * Returns true only if `{ pinned_at: -1 }` or `{ pinned_at: 1 }` option is first within the `sort` array.
- */
-export const shouldConsiderPinnedChannels = (sort: ChannelSort) => {
-  const value = findPinnedAtSortOrder({ sort });
-
-  if (typeof value !== 'number') return false;
-
-  return Math.abs(value) === 1;
-};
-
-/**
- * Checks whether the sort value of type object contains a pinned_at value or if
- * an array sort value type has the first value be an object containing pinned_at.
- * @param sort
- */
-export const findPinnedAtSortOrder = ({ sort }: { sort: ChannelSort }) =>
-  extractSortValue({
-    atIndex: 0,
-    sort,
-    targetKey: 'pinned_at',
-  });
-
-/**
- * Finds the index of the last consecutively pinned channel, starting from the start of the
- * array. Will not consider any pinned channels after the contiguous subsequence at the
- * start of the array.
- * @param channels
- */
-export const findLastPinnedChannelIndex = ({ channels }: { channels: Channel[] }) => {
-  let lastPinnedChannelIndex: number | null = null;
-
-  for (const channel of channels) {
-    if (!isChannelPinned(channel)) break;
-
-    if (typeof lastPinnedChannelIndex === 'number') {
-      lastPinnedChannelIndex++;
-    } else {
-      lastPinnedChannelIndex = 0;
-    }
-  }
-
-  return lastPinnedChannelIndex;
-};
-
-/**
- * A utility used to move a channel towards the beginning of a list of channels (promote it to a higher position). It
- * considers pinned channels in the process if needed and makes sure to only update the list reference if the list
- * should actually change. It will try to move the channel as high as it can within the list.
- * @param channels - the list of channels we want to modify
- * @param channelToMove - the channel we want to promote
- * @param channelToMoveIndexWithinChannels - optionally, the index of the channel we want to move if we know it (will skip a manual check)
- * @param sort - the sort value used to check for pinned channels
- */
-export const promoteChannel = ({
-  channels,
-  channelToMove,
-  channelToMoveIndexWithinChannels,
-  sort,
-}: PromoteChannelParams) => {
-  // get index of channel to move up
-  const targetChannelIndex =
-    channelToMoveIndexWithinChannels ??
-    channels.findIndex((channel) => channel.cid === channelToMove.cid);
-
-  const targetChannelExistsWithinList = targetChannelIndex >= 0;
-  const targetChannelAlreadyAtTheTop = targetChannelIndex === 0;
-
-  // pinned channels should not move within the list based on recent activity, channels which
-  // receive messages and are not pinned should move upwards but only under the last pinned channel
-  // in the list
-  const considerPinnedChannels = shouldConsiderPinnedChannels(sort);
-  const isTargetChannelPinned = isChannelPinned(channelToMove);
-
-  if (targetChannelAlreadyAtTheTop || (considerPinnedChannels && isTargetChannelPinned)) {
-    return channels;
-  }
-
-  const newChannels = [...channels];
-
-  // target channel index is known, remove it from the list
-  if (targetChannelExistsWithinList) {
-    newChannels.splice(targetChannelIndex, 1);
-  }
-
-  // as position of pinned channels has to stay unchanged, we need to
-  // find last pinned channel in the list to move the target channel after
-  let lastPinnedChannelIndex: number | null = null;
-  if (considerPinnedChannels) {
-    lastPinnedChannelIndex = findLastPinnedChannelIndex({ channels: newChannels });
-  }
-
-  // re-insert it at the new place (to specific index if pinned channels are considered)
-  newChannels.splice(
-    typeof lastPinnedChannelIndex === 'number' ? lastPinnedChannelIndex + 1 : 0,
-    0,
-    channelToMove,
-  );
-
-  return newChannels;
-};
-
-export const isDate = (value: unknown): value is Date => !!(value as Date).getTime;
 
 export const isLocalMessage = (message: unknown): message is LocalMessage =>
-  isDate((message as LocalMessage).created_at);
+  typeof (message as LocalMessage | undefined)?.status === 'string';
 
 export const runDetached = <T>(
   callback: Promise<void | T>,
@@ -1485,9 +810,11 @@ export const runDetached = <T>(
     onErrorCallback?: (error: Error) => void | Promise<void>;
   },
 ) => {
-  const { context, onSuccessCallback = () => undefined, onErrorCallback } = options ?? {};
+  const { context, onSuccessCallback, onErrorCallback } = options ?? {};
   const defaultOnError = (error: Error) => {
-    console.log(`An error has occurred in context ${context}: ${error}`);
+    logger
+      .withExtraTags('runDetached')
+      .error(`An error occurred in context "${context}".`, { error });
   };
   const onError = onErrorCallback ?? defaultOnError;
 
@@ -1500,12 +827,24 @@ export const runDetached = <T>(
   promise.catch(onError);
 };
 
+/** Whether the message is a thread reply not shown in the channel: only its thread lists it. */
+export const isThreadOnlyReply = (
+  message: Pick<LocalMessage | MessageResponse, 'parent_id' | 'show_in_channel'>,
+) => !!message.parent_id && !message.show_in_channel;
+
 export const isBlockedMessage = (message: LocalMessage) =>
-  message.type === 'error' &&
-  (message.moderation_details?.action === 'MESSAGE_RESPONSE_ACTION_REMOVE' ||
-    message.moderation?.action === 'remove');
+  message.type === 'error' && message.moderation?.action === 'remove';
 
 export const isBouncedMessage = (message: LocalMessage) =>
-  message.type === 'error' &&
-  (message?.moderation_details?.action === 'MESSAGE_RESPONSE_ACTION_BOUNCE' ||
-    message?.moderation?.action === 'bounce');
+  message.type === 'error' && message?.moderation?.action === 'bounce';
+
+export const getEnv = (envKey: string) => {
+  if (
+    typeof process !== 'undefined' &&
+    (Object.hasOwn(process, 'env') || 'env' in process)
+  ) {
+    return process.env[envKey];
+  }
+
+  return undefined;
+};

@@ -26,13 +26,14 @@ const setupHandlerParams = (initialState: AttachmentPreUploadMiddlewareState) =>
 // Mock dependencies
 vi.mock('../../../../../src/utils', () => ({
   generateUUIDv4: vi.fn().mockReturnValue('test-uuid'),
+  getEnv: vi.fn(),
 }));
 
 const setup = () => {
   const client = getClientWithUser({ id: 'user-id' });
   const composer = new MessageComposer({
     client,
-    compositionContext: client.channel('type', 'id'),
+    compositionContext: client.channelManager.ensure({ type: 'type', id: 'id' }),
   });
   return { composer, middleware: createUploadConfigCheckMiddleware(composer) };
 };

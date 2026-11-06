@@ -5,16 +5,18 @@ import { generateUUIDv4 as uuidv4 } from '../../src/utils';
 
 import sinon from 'sinon';
 import {
-  EventTypes,
+  EventType,
   FormatMessageResponse,
   MessageResponse,
   Poll,
   PollManager,
   PollResponse,
   StreamChat,
+  UserResponse,
 } from '../../src';
 
-import { describe, beforeEach, afterEach, it, expect } from 'vitest';
+import { describe, beforeEach, afterEach, it, expect, vi } from 'vitest';
+import { convertDateToTimestamp } from './test-utils/time';
 
 const TEST_USER_ID = 'observer';
 
@@ -30,9 +32,9 @@ const generatePollMessage = (
   const user1 = {
     id: 'admin',
     role: 'admin',
-    created_at: '2022-03-08T09:46:56.840739Z',
-    updated_at: '2024-09-13T13:53:32.883409Z',
-    last_active: '2024-10-23T08:14:23.299448386Z',
+    created_at: convertDateToTimestamp('2022-03-08T09:46:56.840739Z'),
+    updated_at: convertDateToTimestamp('2024-09-13T13:53:32.883409Z'),
+    last_active: convertDateToTimestamp('2024-10-23T08:14:23.299448386Z'),
     banned: false,
     online: true,
     mutes: null,
@@ -46,8 +48,8 @@ const generatePollMessage = (
       option_id: '85610252-7d50-429c-8183-51a7eba46246',
       user_id: user1.id,
       user: user1,
-      created_at: '2024-10-22T15:58:27.756166Z',
-      updated_at: '2024-10-22T15:58:27.756166Z',
+      created_at: convertDateToTimestamp('2024-10-22T15:58:27.756166Z'),
+      updated_at: convertDateToTimestamp('2024-10-22T15:58:27.756166Z'),
     },
     {
       poll_id: pollId,
@@ -55,17 +57,17 @@ const generatePollMessage = (
       option_id: 'dc22dcd6-4fc8-4c92-92c2-bfd63245724c',
       user_id: user1.id,
       user: user1,
-      created_at: '2024-10-22T15:58:25.886491Z',
-      updated_at: '2024-10-22T15:58:25.886491Z',
+      created_at: convertDateToTimestamp('2024-10-22T15:58:25.886491Z'),
+      updated_at: convertDateToTimestamp('2024-10-22T15:58:25.886491Z'),
     },
   ];
 
   const user2 = {
     id: 'SmithAnne',
     role: 'user',
-    created_at: '2022-01-27T08:28:28.412254Z',
-    updated_at: '2024-09-26T10:12:23.427141Z',
-    last_active: '2024-10-23T08:01:43.157632831Z',
+    created_at: convertDateToTimestamp('2022-01-27T08:28:28.412254Z'),
+    updated_at: convertDateToTimestamp('2024-09-26T10:12:23.427141Z'),
+    last_active: convertDateToTimestamp('2024-10-23T08:01:43.157632831Z'),
     banned: false,
     online: true,
     nickname: 'Ann',
@@ -80,8 +82,8 @@ const generatePollMessage = (
       option_id: '7312e983-b042-4596-b5ce-f9e82deb363f',
       user_id: user2.id,
       user: user2,
-      created_at: '2024-10-22T16:00:50.2493Z',
-      updated_at: '2024-10-22T16:00:50.2493Z',
+      created_at: convertDateToTimestamp('2024-10-22T16:00:50.2493Z'),
+      updated_at: convertDateToTimestamp('2024-10-22T16:00:50.2493Z'),
     },
     {
       poll_id: pollId,
@@ -89,8 +91,8 @@ const generatePollMessage = (
       option_id: 'ba933470-c0da-4b6f-a4d2-d2176ac0d4a8',
       user_id: user2.id,
       user: user2,
-      created_at: '2024-10-22T16:00:54.410474Z',
-      updated_at: '2024-10-22T16:00:54.410474Z',
+      created_at: convertDateToTimestamp('2024-10-22T16:00:54.410474Z'),
+      updated_at: convertDateToTimestamp('2024-10-22T16:00:54.410474Z'),
     },
   ];
 
@@ -102,8 +104,8 @@ const generatePollMessage = (
     answer_text: 'comment1',
     user_id: user1.id,
     user: user1,
-    created_at: '2024-10-23T13:12:57.944913Z',
-    updated_at: '2024-10-23T13:12:57.944913Z',
+    created_at: convertDateToTimestamp('2024-10-23T13:12:57.944913Z'),
+    updated_at: convertDateToTimestamp('2024-10-23T13:12:57.944913Z'),
   };
 
   const pollResponse = {
@@ -149,8 +151,8 @@ const generatePollMessage = (
     own_votes: [...user1Votes, user1Answer],
     created_by_id: user1.id,
     created_by: user1,
-    created_at: '2024-10-22T15:28:20.580523Z',
-    updated_at: '2024-10-22T15:28:20.580523Z',
+    created_at: convertDateToTimestamp('2024-10-22T15:28:20.580523Z'),
+    updated_at: convertDateToTimestamp('2024-10-22T15:28:20.580523Z'),
     ...extraData,
   };
 
@@ -203,12 +205,11 @@ describe('PollManager', () => {
           generateChannel({ channel: { id: uuidv4() }, messages }),
         );
       }
-      const mock = sinon.mock(client);
       const spy = sinon.spy(client.polls, 'hydratePollCache');
-      mock
-        .expects('post')
-        .returns(Promise.resolve({ channels: mockedChannelsQueryResponse }));
-      await client.queryChannels({});
+      sinon
+        .stub(client, 'queryChannels')
+        .resolves({ channels: mockedChannelsQueryResponse });
+      await client.queryChannelsAndHydrate({});
       expect(client.polls.data.size).to.equal(pollMessages.length);
       expect(spy.callCount).to.be.equal(5);
       for (let i = 0; i < 5; i++) {
@@ -229,7 +230,10 @@ describe('PollManager', () => {
           messages: prevMessages,
         });
         channels.push(channelResponse);
-        client.channel(channelResponse.channel.type, channelResponse.channel.id);
+        client.channelManager.ensure({
+          type: channelResponse.channel.type,
+          id: channelResponse.channel.id,
+        });
         client.polls.hydratePollCache(prevMessages, true);
       }
 
@@ -241,11 +245,10 @@ describe('PollManager', () => {
         const channelResponse = { ...channels[ci], messages };
         mockedChannelsQueryResponse.push(channelResponse);
       }
-      const mock = sinon.mock(client);
-      mock
-        .expects('post')
-        .returns(Promise.resolve({ channels: mockedChannelsQueryResponse }));
-      await client.queryChannels({});
+      sinon
+        .stub(client, 'queryChannels')
+        .resolves({ channels: mockedChannelsQueryResponse });
+      await client.queryChannelsAndHydrate({});
       expect(client.polls.data.size).to.equal(pollMessages.length);
       expect(spy.callCount).to.be.equal(10);
       for (let i = 0; i < 5; i++) {
@@ -261,15 +264,14 @@ describe('PollManager', () => {
     });
 
     it('populates pollCache on channel.query invocation', async () => {
-      const channel = client.channel('messaging', uuidv4());
+      const channel = client.channelManager.ensure({ type: 'messaging', id: uuidv4() });
       const { messages, pollMessages } = generateRandomMessagesWithPolls(5, ``);
       const mockedChannelQueryResponse = {
         ...mockChannelQueryResponse,
         messages,
       };
-      const mock = sinon.mock(client);
       const spy = sinon.spy(client.polls, 'hydratePollCache');
-      mock.expects('post').returns(Promise.resolve(mockedChannelQueryResponse));
+      sinon.stub(channel, 'getOrCreate').resolves(mockedChannelQueryResponse);
       await channel.query();
       expect(client.polls.data.size).to.equal(pollMessages.length);
       expect(spy.calledOnce).to.be.true;
@@ -277,18 +279,19 @@ describe('PollManager', () => {
     });
 
     it('populates pollCache with only new messages on channel.query invocation', async () => {
-      const channel = client.channel('messaging', mockChannelQueryResponse.channel.id);
+      const channel = client.channelManager.ensure({
+        type: 'messaging',
+        id: mockChannelQueryResponse.channel.id,
+      });
       const { messages: prevMessages, pollMessages: prevPollMessages } =
         generateRandomMessagesWithPolls(5, `_prev`);
-      channel.state.addMessagesSorted(prevMessages);
       const { messages, pollMessages } = generateRandomMessagesWithPolls(5, ``);
       const mockedChannelQueryResponse = {
         ...mockChannelQueryResponse,
         messages,
       };
-      const mock = sinon.mock(client);
       const spy = sinon.spy(client.polls, 'hydratePollCache');
-      mock.expects('post').returns(Promise.resolve(mockedChannelQueryResponse));
+      sinon.stub(channel, 'getOrCreate').resolves(mockedChannelQueryResponse);
       client.polls.hydratePollCache(prevMessages);
       await channel.query();
       expect(client.polls.data.size).to.equal(
@@ -300,7 +303,7 @@ describe('PollManager', () => {
       expect(spy.calledWith([...prevMessages, ...messages], true)).to.be.false;
     });
 
-    it('populates pollCache on client.hydrateActiveChannels', async () => {
+    it('populates pollCache on client.hydrateChannels', async () => {
       const mockedChannelsQueryResponse = [];
 
       let pollMessages: MessageResponse[] = [];
@@ -314,33 +317,13 @@ describe('PollManager', () => {
         });
       }
 
-      client.hydrateActiveChannels(mockedChannelsQueryResponse);
+      client.hydrateChannels(mockedChannelsQueryResponse);
 
       expect(client.polls.data.size).to.equal(pollMessages.length);
       // Map.prototype.keys() preserves the insertion order so we can do this
       expect(Array.from(client.polls.data.keys())).to.deep.equal(
         pollMessages.map((m) => m.poll_id),
       );
-    });
-
-    it('prevents pollCache population if caching is disabled', async () => {
-      client._cacheEnabled = () => false;
-      const mockedChannelsQueryResponse = [];
-
-      let pollMessages: MessageResponse[] = [];
-      for (let ci = 0; ci < 2; ci++) {
-        const { messages, pollMessages: onlyPollMessages } =
-          generateRandomMessagesWithPolls(5, `_${ci}`);
-        pollMessages = pollMessages.concat(onlyPollMessages);
-        mockedChannelsQueryResponse.push({
-          ...mockChannelQueryResponse,
-          messages,
-        });
-      }
-
-      client.hydrateActiveChannels(mockedChannelsQueryResponse);
-
-      expect(client.polls.data.size).to.equal(0);
     });
 
     it('populates pollCache when the message.new event is fired', () => {
@@ -459,6 +442,91 @@ describe('PollManager', () => {
       pollManager.hydratePollCache([pollMessage1, pollMessage2]);
     });
 
+    it('puts an updated user into the votes, answers and creator of every poll, in one update', () => {
+      const poll = pollManager.fromState(pollId1) as Poll;
+      const before = poll.data;
+      const otherVoterVotes = Object.values(before.latest_votes_by_option)
+        .flat()
+        .filter((vote) => vote.user?.id !== 'admin');
+      const published: unknown[] = [];
+      const unsubscribe = poll.state.subscribe((state) => published.push(state));
+      published.length = 0;
+      const renamed = { ...(before.created_by as UserResponse), name: 'Renamed Admin' };
+
+      client.dispatchEvent({ type: 'user.updated', user: renamed });
+      unsubscribe();
+
+      const after = poll.data;
+      const votesOf = (userId: string) =>
+        Object.values(after.latest_votes_by_option)
+          .flat()
+          .filter((vote) => vote.user?.id === userId);
+      expect(published).toHaveLength(1);
+      expect(votesOf('admin').length).toBeGreaterThan(0);
+      expect(votesOf('admin').every((vote) => vote.user === renamed)).toBe(true);
+      expect(after.latest_answers.every((answer) => answer.user === renamed)).toBe(true);
+      expect(
+        Object.values(after.ownVotesByOptionId).every((v) => v.user === renamed),
+      ).toBe(true);
+      expect(after.ownAnswer?.user).toBe(renamed);
+      expect(after.created_by).toBe(renamed);
+      // other voters keep their vote objects
+      expect(otherVoterVotes.length).toBeGreaterThan(0);
+      for (const vote of otherVoterVotes) {
+        expect(Object.values(after.latest_votes_by_option).flat()).toContain(vote);
+      }
+      expect((pollManager.fromState(pollId2) as Poll).data.created_by?.name).toBe(
+        'Renamed Admin',
+      );
+    });
+
+    it('keeps the vote array of an option the updated user has not voted for', () => {
+      const poll = pollManager.fromState(pollId1) as Poll;
+      const before = poll.data.latest_votes_by_option;
+      const untouched = Object.entries(before).filter(([, votes]) =>
+        votes.every((vote) => vote.user?.id !== 'admin'),
+      );
+      const renamed = {
+        ...(poll.data.created_by as UserResponse),
+        name: 'Renamed Admin',
+      };
+
+      client.dispatchEvent({ type: 'user.updated', user: renamed });
+
+      expect(untouched.length).toBeGreaterThan(0);
+      for (const [optionId, votes] of untouched) {
+        expect(poll.data.latest_votes_by_option[optionId]).toBe(votes);
+      }
+    });
+
+    it('writes the poll with the updated user to the offline DB', () => {
+      const poll = pollManager.fromState(pollId1) as Poll;
+      const upsertOfflineDb = vi.spyOn(
+        poll as unknown as { upsertOfflineDb: () => void },
+        'upsertOfflineDb',
+      );
+      const renamed = {
+        ...(poll.data.created_by as UserResponse),
+        name: 'Renamed Admin',
+      };
+
+      client.dispatchEvent({ type: 'user.updated', user: renamed });
+
+      expect(upsertOfflineDb).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not publish for a user the poll does not contain', () => {
+      const poll = pollManager.fromState(pollId1) as Poll;
+      const published: unknown[] = [];
+      const unsubscribe = poll.state.subscribe((state) => published.push(state));
+      published.length = 0;
+
+      client.dispatchEvent({ type: 'user.updated', user: { id: 'stranger', name: 'X' } });
+      unsubscribe();
+
+      expect(published).toHaveLength(0);
+    });
+
     it('should not register subscription handlers twice', () => {
       pollManager.registerSubscriptions();
 
@@ -557,7 +625,7 @@ describe('PollManager', () => {
         const updatedPoll = pollMessage1.poll as PollResponse;
 
         client.dispatchEvent({
-          type: eventType as EventTypes,
+          type: eventType as EventType,
           poll: updatedPoll,
         });
 
@@ -591,7 +659,7 @@ describe('PollManager', () => {
         .resolves({ poll: pollMessage1.poll as PollResponse, duration: '10' });
     });
     it('should return a Poll instance on queryPolls', async () => {
-      const { polls } = await pollManager.queryPolls({}, {}, {});
+      const { polls } = await pollManager.queryPolls();
 
       expect(polls).to.have.lengthOf(2);
       polls.forEach((poll) => {
@@ -600,7 +668,7 @@ describe('PollManager', () => {
       expect(stubbedQueryPolls.calledOnce).to.be.true;
     });
     it('should properly populate the pollCache on queryPolls', async () => {
-      const { polls } = await pollManager.queryPolls({}, {}, {});
+      const { polls } = await pollManager.queryPolls();
 
       expect(pollManager.data.size).to.equal(2);
       expect(pollManager.fromState(pollId1)).to.not.be.undefined;
@@ -620,7 +688,7 @@ describe('PollManager', () => {
 
       const previousPollFromCache = pollManager.fromState(pollId1);
 
-      const { polls } = await pollManager.queryPolls({}, {}, {});
+      const { polls } = await pollManager.queryPolls();
 
       const pollFromQuery = polls[0];
 

@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PollComposer } from '../../../src/messageComposer/pollComposer';
-import { StateStore } from '../../../src/store';
-import { VotingVisibility } from '../../../src/types';
+import { StateStore } from '@stream-io/state-store';
 
 // Mock dependencies
 vi.mock('../../../src/utils', () => ({
   generateUUIDv4: vi.fn().mockReturnValue('test-uuid'),
+  getEnv: vi.fn(),
 }));
 
 vi.mock('../../../src/messageComposer/middleware/pollComposer', () => ({
@@ -23,7 +23,7 @@ vi.mock('../../../src/messageComposer/middleware/pollComposer', () => ({
             name: 'Test Poll',
             options: [{ text: 'Option 1' }, { text: 'Option 2' }],
             user_id: 'user-id',
-            voting_visibility: VotingVisibility.public,
+            voting_visibility: 'public',
           },
           errors: {},
         },
@@ -46,7 +46,7 @@ vi.mock('../../../src/messageComposer/middleware/pollComposer', () => ({
               name: 'Test Poll',
               options: [{ id: 'option-id', text: 'Option 1' }],
               user_id: 'user-id',
-              voting_visibility: VotingVisibility.public,
+              voting_visibility: 'public',
             },
             errors: {},
           },
@@ -93,8 +93,7 @@ describe('PollComposer', () => {
       expect(initialState.data.max_votes_allowed).toBe('');
       expect(initialState.data.name).toBe('');
       expect(initialState.data.options).toEqual([{ id: 'test-uuid', text: '' }]);
-      expect(initialState.data.user_id).toBe('user-id');
-      expect(initialState.data.voting_visibility).toBe(VotingVisibility.public);
+      expect(initialState.data.voting_visibility).toBe('public');
       expect(initialState.errors).toEqual({});
     });
   });
@@ -112,8 +111,7 @@ describe('PollComposer', () => {
           max_votes_allowed: '',
           name: '',
           options: [{ id: 'option-id', text: '' }],
-          user_id: 'user-id',
-          voting_visibility: VotingVisibility.anonymous,
+          voting_visibility: 'anonymous',
         },
         errors: {},
       });
@@ -126,8 +124,7 @@ describe('PollComposer', () => {
       expect(pollComposer.max_votes_allowed).toBe('');
       expect(pollComposer.name).toBe('');
       expect(pollComposer.options).toEqual([{ id: 'option-id', text: '' }]);
-      expect(pollComposer.user_id).toBe('user-id');
-      expect(pollComposer.voting_visibility).toBe(VotingVisibility.anonymous);
+      expect(pollComposer.voting_visibility).toBe('anonymous');
     });
   });
 
@@ -139,8 +136,7 @@ describe('PollComposer', () => {
           name: 'Test Poll',
           max_votes_allowed: '',
           id: 'test-id',
-          user_id: 'user-id',
-          voting_visibility: VotingVisibility.public,
+          voting_visibility: 'public',
         },
         errors: {},
       });
@@ -155,8 +151,7 @@ describe('PollComposer', () => {
           name: '',
           max_votes_allowed: '',
           id: 'test-id',
-          user_id: 'user-id',
-          voting_visibility: VotingVisibility.public,
+          voting_visibility: 'public',
         },
         errors: {},
       });
@@ -171,8 +166,7 @@ describe('PollComposer', () => {
           name: 'Test Poll',
           max_votes_allowed: '1', // Less than 2
           id: 'test-id',
-          user_id: 'user-id',
-          voting_visibility: VotingVisibility.public,
+          voting_visibility: 'public',
         },
         errors: {},
       });
@@ -187,8 +181,7 @@ describe('PollComposer', () => {
           name: 'Test Poll',
           max_votes_allowed: '',
           id: 'test-id',
-          user_id: 'user-id',
-          voting_visibility: VotingVisibility.public,
+          voting_visibility: 'public',
         },
         errors: { name: 'Name is required' },
       });
@@ -203,8 +196,7 @@ describe('PollComposer', () => {
           name: 'Test Poll',
           max_votes_allowed: '',
           id: 'test-id',
-          user_id: 'user-id',
-          voting_visibility: VotingVisibility.public,
+          voting_visibility: 'public',
         },
         errors: {},
       });
@@ -218,8 +210,7 @@ describe('PollComposer', () => {
           name: 'Test Poll',
           max_votes_allowed: '',
           id: 'test-id',
-          user_id: 'user-id',
-          voting_visibility: VotingVisibility.public,
+          voting_visibility: 'public',
         },
         errors: { name: undefined, options: undefined },
       });
@@ -241,8 +232,7 @@ describe('PollComposer', () => {
           max_votes_allowed: '5',
           name: 'Different Name',
           options: [{ id: 'different-option-id', text: 'Different Option' }],
-          user_id: 'different-user-id',
-          voting_visibility: VotingVisibility.anonymous,
+          voting_visibility: 'anonymous',
         },
         errors: { name: 'Error' },
       });
@@ -260,8 +250,7 @@ describe('PollComposer', () => {
       expect(currentState.data.max_votes_allowed).toBe('');
       expect(currentState.data.name).toBe('');
       expect(currentState.data.options).toEqual([{ id: 'test-uuid', text: '' }]);
-      expect(currentState.data.user_id).toBe('user-id');
-      expect(currentState.data.voting_visibility).toBe(VotingVisibility.public);
+      expect(currentState.data.voting_visibility).toBe('public');
       expect(currentState.errors).toEqual({});
     });
   });
@@ -271,11 +260,29 @@ describe('PollComposer', () => {
       const updateData = { name: 'Test Poll' };
       const spy = vi.spyOn(pollComposer.stateMiddlewareExecutor, 'execute');
 
-      await pollComposer.updateFields(updateData);
+      await pollComposer.updateFields({ data: updateData });
 
       expect(spy).toHaveBeenCalledWith({
         eventName: 'handleFieldChange',
         initialValue: expect.any(Object),
+      });
+    });
+
+    it('passes the data and injected errors to the middleware', async () => {
+      const spy = vi.spyOn(pollComposer.stateMiddlewareExecutor, 'execute');
+      const injectedFieldErrors = { max_votes_allowed: 'Too many' };
+
+      await pollComposer.updateFields({
+        data: { max_votes_allowed: '20' },
+        injectedFieldErrors,
+      });
+
+      expect(spy).toHaveBeenCalledWith({
+        eventName: 'handleFieldChange',
+        initialValue: expect.objectContaining({
+          injectedFieldErrors,
+          targetFields: { max_votes_allowed: '20' },
+        }),
       });
     });
 
@@ -292,7 +299,7 @@ describe('PollComposer', () => {
         status: 'discard',
       });
 
-      await pollComposer.updateFields(updateData);
+      await pollComposer.updateFields({ data: updateData });
 
       // Check that the state wasn't updated
       expect(pollComposer.state.getLatestValue()).toEqual(originalState);

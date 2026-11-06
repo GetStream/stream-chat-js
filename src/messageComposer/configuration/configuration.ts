@@ -5,33 +5,39 @@ import type {
   LinkPreviewsManagerConfig,
   LocationComposerConfig,
   MessageComposerConfig,
+  PollComposerConfig,
   TextComposerConfig,
 } from './types';
 import { generateUUIDv4 } from '../../utils';
+import { deepFreezeConfig } from '../../configuration/utils/deepFreezeConfig';
 import { DEFAULT_COMMANDS_CONFIG } from './commands.configuration';
+import { POLL_ONLY_COMPOSITION_MIDDLEWARE_ID } from '../middleware/messageComposer/pollOnly';
 
 export const DEFAULT_LINK_PREVIEW_MANAGER_CONFIG: LinkPreviewsManagerConfig = {
   debounceURLEnrichmentMs: 1500,
-  enabled: false,
+  enabled: true,
   findURLFn: (text: string): string[] =>
     find(text, 'url', { defaultProtocol: 'https' }).reduce<string[]>((acc, link) => {
       try {
         const url = new URL(link.href);
-        // Check for valid hostname with at least one dot and valid TLD
+        // Hostname needs at least one dot and a valid TLD.
         if (link.isLink && /^[a-zA-Z0-9-.]+\.[a-zA-Z]{2,}$/.test(url.hostname)) {
           acc.push(link.href);
         }
       } catch {
-        // Invalid URL, skip it
+        // Invalid URL: skipped.
       }
       return acc;
     }, []),
 };
 
 export const DEFAULT_ATTACHMENT_MANAGER_CONFIG: AttachmentManagerConfig = {
-  acceptedFiles: [], // an empty array means all files are accepted
+  acceptedFiles: [],
+  customCdn: false,
+  enabled: true,
   fileUploadFilter: () => true,
   maxNumberOfFilesPerMessage: API_MAX_FILES_ALLOWED_PER_MESSAGE,
+  pendingUploadsEnabled: false,
   trackUploadProgress: true,
 };
 
@@ -40,16 +46,34 @@ export const DEFAULT_TEXT_COMPOSER_CONFIG: TextComposerConfig = {
   publishTypingEvents: true,
 };
 
+export const DEFAULT_POLL_COMPOSER_CONFIG: PollComposerConfig = {
+  enabled: true,
+};
+
 export const DEFAULT_LOCATION_COMPOSER_CONFIG: LocationComposerConfig = {
   enabled: true,
   getDeviceId: () => generateUUIDv4(),
+  minShareDurationMs: 60 * 1000,
 };
 
-export const DEFAULT_COMPOSER_CONFIG: MessageComposerConfig = {
+/**
+ * Deep-frozen: composers share these subtrees by reference through `composer.config`. See
+ * {@link deepFreezeConfig}.
+ */
+export const DEFAULT_COMPOSER_CONFIG: MessageComposerConfig = deepFreezeConfig({
   attachments: DEFAULT_ATTACHMENT_MANAGER_CONFIG,
   commands: DEFAULT_COMMANDS_CONFIG,
   drafts: { enabled: false },
   linkPreviews: DEFAULT_LINK_PREVIEW_MANAGER_CONFIG,
   location: DEFAULT_LOCATION_COMPOSER_CONFIG,
+  polls: DEFAULT_POLL_COMPOSER_CONFIG,
+  // Matches when the poll-only middleware sends the poll alone: never for an edit or a thread reply.
+  retainCompositionOnSubmit: (composer) =>
+    !!composer.pollId &&
+    !composer.editedMessage &&
+    !composer.threadId &&
+    composer.compositionMiddlewareExecutor.installedMiddleware.some(
+      ({ id }) => id === POLL_ONLY_COMPOSITION_MIDDLEWARE_ID,
+    ),
   text: DEFAULT_TEXT_COMPOSER_CONFIG,
-};
+});

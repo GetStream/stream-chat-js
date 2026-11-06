@@ -7,11 +7,14 @@ import {
 } from '../../../src/messageComposer/messageComposer';
 import { textIsEmpty } from '../../../src/messageComposer/textComposer';
 import { createCommandStringExtractionMiddleware } from '../../../src/messageComposer/middleware/textComposer/commandStringExtraction';
-import { DraftResponse, LocalMessage } from '../../../src/types';
+import { Command, DraftResponse, LocalMessage } from '../../../src/types';
 import { logChatPromiseExecution } from '../../../src/utils';
 import { TextComposerConfig } from '../../../src/messageComposer/configuration';
 import { LinkPreviewStatus } from '../../../src/messageComposer/linkPreviewsManager';
 import type { LocalAttachment } from '../../../src/messageComposer/types';
+import { getClientWithUser } from '../test-utils/getClient';
+import { stubServerConfig } from '../test-utils/stubServerConfig';
+import { convertDateToTimestamp } from '../test-utils/time';
 
 const textComposerMiddlewareExecuteOutput = {
   state: {
@@ -46,6 +49,7 @@ vi.mock('../../../src/utils', async (importOriginal) => ({
   isLocalMessage: vi.fn().mockReturnValue(true),
   formatMessage: vi.fn().mockImplementation((msg) => msg),
   throttle: vi.fn().mockImplementation((fn) => fn),
+  getEnv: vi.fn(),
 }));
 
 const setup = ({
@@ -61,10 +65,14 @@ const setup = ({
   vi.clearAllMocks();
 
   // Setup mocks
-  const mockClient = new StreamChat('apiKey', 'apiSecret');
+  const mockClient = getClientWithUser({ id: 'user' });
+
   mockClient.queryUsers = vi.fn().mockResolvedValue({ users: [] });
 
-  const mockChannel = mockClient.channel('channelType', 'channelId');
+  const mockChannel = mockClient.channelManager.ensure({
+    type: 'channelType',
+    id: 'channelId',
+  });
   mockChannel.keystroke = vi.fn().mockResolvedValue({});
   mockChannel.getClient = vi.fn().mockReturnValue(mockClient);
 
@@ -105,6 +113,27 @@ describe('TextComposer', () => {
     });
   });
 
+  describe('activeCommandIsContent', () => {
+    it('is false without an active command', () => {
+      const { messageComposer } = setup();
+      expect(messageComposer.textComposer.activeCommandIsContent).toBe(false);
+    });
+
+    it.each([
+      ['', true],
+      [undefined, true],
+      ['[text]', false],
+    ])('for a command with args %j is %s', (args, expected) => {
+      const { messageComposer } = setup();
+      messageComposer.textComposer.setCommand({
+        args,
+        description: 'A command',
+        name: 'custom',
+      } as Command);
+      expect(messageComposer.textComposer.activeCommandIsContent).toBe(expected);
+    });
+  });
+
   describe('constructor', () => {
     it('should initialize with default config', () => {
       const { messageComposer } = setup();
@@ -112,8 +141,8 @@ describe('TextComposer', () => {
         command: null,
         mentionedUsers: [],
         mentions: [],
-        text: '',
         selection: { start: 0, end: 0 },
+        text: '',
       });
     });
 
@@ -124,8 +153,8 @@ describe('TextComposer', () => {
         command: null,
         mentionedUsers: [],
         mentions: [],
-        text: defaultValue,
         selection: { start: defaultValue.length, end: defaultValue.length },
+        text: defaultValue,
       });
     });
 
@@ -135,11 +164,11 @@ describe('TextComposer', () => {
         type: 'regular',
         text: 'Hello world',
         mentioned_users: [{ id: 'user-1' }, { id: 'user-2', name: 'User 2' }],
-        created_at: new Date(),
+        created_at: convertDateToTimestamp(new Date()),
         deleted_at: null,
         pinned_at: null,
         status: 'pending',
-        updated_at: new Date(),
+        updated_at: convertDateToTimestamp(new Date()),
       };
 
       const {
@@ -165,10 +194,10 @@ describe('TextComposer', () => {
         mentioned_channel: true,
         mentioned_groups: [
           {
-            created_at: '2026-05-28T00:00:00.000Z',
+            created_at: convertDateToTimestamp('2026-05-28T00:00:00.000Z'),
             id: 'backend-team',
             name: 'Backend Team',
-            updated_at: '2026-05-28T00:00:00.000Z',
+            updated_at: convertDateToTimestamp('2026-05-28T00:00:00.000Z'),
           },
         ],
         mentioned_here: true,
@@ -193,11 +222,11 @@ describe('TextComposer', () => {
         id: 'test-message',
         type: 'regular',
         text: 'Hello world',
-        created_at: new Date(),
+        created_at: convertDateToTimestamp(new Date()),
         deleted_at: null,
         pinned_at: null,
         status: 'pending',
-        updated_at: new Date(),
+        updated_at: convertDateToTimestamp(new Date()),
       };
 
       const {
@@ -259,18 +288,18 @@ describe('TextComposer', () => {
         type: 'regular',
         text: 'Hello world',
         mentioned_users: [{ id: 'user-1' }, { id: 'user-2', name: 'User 2' }],
-        created_at: new Date(),
+        created_at: convertDateToTimestamp(new Date()),
         deleted_at: null,
         pinned_at: null,
         status: 'pending',
-        updated_at: new Date(),
+        updated_at: convertDateToTimestamp(new Date()),
       };
       const initialState = {
         command: null,
         mentionedUsers: [],
         mentions: [],
-        text: '',
         selection: { start: 0, end: 0 },
+        text: '',
       };
       const {
         messageComposer: { textComposer },
@@ -285,11 +314,11 @@ describe('TextComposer', () => {
         type: 'regular',
         text: 'Hello world',
         mentioned_users: [{ id: 'user-1' }],
-        created_at: new Date(),
+        created_at: convertDateToTimestamp(new Date()),
         deleted_at: null,
         pinned_at: null,
         status: 'pending',
-        updated_at: new Date(),
+        updated_at: convertDateToTimestamp(new Date()),
       };
       const {
         messageComposer: { textComposer },
@@ -550,7 +579,7 @@ describe('TextComposer', () => {
         messageComposer: { textComposer },
         mockChannel,
       } = setup();
-      mockChannel.getConfig = vi.fn().mockReturnValue({
+      stubServerConfig(mockChannel, {
         commands: [{ name: 'ban', description: 'Ban a user' }],
       });
       messageComposer.attachmentManager.state.partialNext({ attachments: [attachment] });
@@ -611,7 +640,7 @@ describe('TextComposer', () => {
         messageComposer: { textComposer },
         mockChannel,
       } = setup();
-      mockChannel.getConfig = vi.fn().mockReturnValue({
+      stubServerConfig(mockChannel, {
         commands: [{ name: 'ban', description: 'Ban a user' }],
       });
       messageComposer.attachmentManager.state.partialNext({ attachments: [attachment] });
@@ -661,7 +690,7 @@ describe('TextComposer', () => {
         messageComposer: { textComposer },
         mockChannel,
       } = setup();
-      mockChannel.getConfig = vi.fn().mockReturnValue({
+      stubServerConfig(mockChannel, {
         commands: [{ name: 'ban', description: 'Ban a user' }],
       });
       textComposer.setText('Hello world');

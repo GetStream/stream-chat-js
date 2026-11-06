@@ -1,5 +1,6 @@
 import type { MessageComposer } from '../../messageComposer';
-import type { CommandResponse, UserResponse } from '../../../types';
+import { CORE_NOTIFICATION_TYPE } from '../../../notifications';
+import type { Command, UserResponse } from '../../../types';
 import type { CommandSendability } from '../../configuration';
 import type { CommandSearchSource } from './commands';
 
@@ -11,15 +12,22 @@ export const getRawCommandName = (text?: string) =>
   text?.match(/^\/(\S+)(?:\s.*)?$/)?.[1];
 
 export const getCompleteCommandInString = (text: string) => {
-  // starts with "/" followed by 1+ non-whitespace chars followed by 1+ white-space chars
-  // the command name is extracted into a separate group
+  // `/name` followed by whitespace; captures the name.
   const match = text.match(/^\/(\S+)\s+.*/);
   const commandName = match && match[1];
   return commandName;
 };
 
+// Command names match regardless of case, as `getCommandByName` activates them: `/GIPHY` is `giphy`.
 export const stripCommandFromText = (text: string, commandName: string) =>
-  text.replace(new RegExp(`^${escapeCommandRegExp(`/${commandName}`)}\\s*`), '');
+  text.replace(new RegExp(`^${escapeCommandRegExp(`/${commandName}`)}\\s*`, 'i'), '');
+
+/** Whether `text` starts with `/commandName` as a whole word, e.g. `/giphy cats` for `giphy`. */
+export const textStartsWithCommand = (text: string, commandName: string) =>
+  new RegExp(`^${escapeCommandRegExp(`/${commandName}`)}(\\s|$)`, 'i').test(text);
+
+/** Whether `command` takes no arguments, so it is a message on its own, e.g. `/shrug`. */
+export const commandTakesNoArguments = (command: Command) => !command.args?.trim();
 
 export const stripMentionTokens = (
   text: string,
@@ -49,7 +57,7 @@ export const getMentionedUsersInText = (text: string, mentionedUsers: UserRespon
 export const getCommandByName = (
   searchSource: CommandSearchSource,
   commandName?: string,
-): CommandResponse | undefined => {
+): Command | undefined => {
   if (!commandName) return;
 
   const normalizedCommandName = commandName.toLowerCase();
@@ -58,10 +66,7 @@ export const getCommandByName = (
     .items.find((command) => command.name?.toLowerCase() === normalizedCommandName);
 };
 
-export const notifyCommandDisabled = (
-  composer: MessageComposer,
-  command: CommandResponse,
-) => {
+export const notifyCommandDisabled = (composer: MessageComposer, command: Command) => {
   const disabledReason = composer.getCommandDisabledReason(command);
   if (!disabledReason) return;
 
@@ -75,7 +80,7 @@ export const notifyCommandDisabled = (
       context: { command, composer },
     },
     options: {
-      type: 'validation:command:disabled',
+      type: CORE_NOTIFICATION_TYPE.commandDisabled,
       metadata: {
         command: command.name,
         reason: disabledReason,
@@ -102,7 +107,7 @@ export const notifyCommandNotReady = ({
       context: { command: sendability.command, composer },
     },
     options: {
-      type: 'validation:command:not-ready',
+      type: CORE_NOTIFICATION_TYPE.commandNotReady,
       metadata: {
         command: sendability.command.name,
         ...(sendability.reason ? { reason: sendability.reason } : {}),

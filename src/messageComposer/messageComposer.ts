@@ -1,34 +1,46 @@
+import { CORE_NOTIFICATION_TYPE } from '../notifications';
+import type { CoreNotificationType } from '../notifications';
 import { AttachmentManager } from './attachmentManager';
-import { isFinishedUpload, isPendingUpload } from './attachmentIdentity';
+import { isResolvableUpload, isSendableAttachment } from './attachmentIdentity';
 import { CustomDataManager } from './CustomDataManager';
 import { LinkPreviewsManager } from './linkPreviewsManager';
 import { LocationComposer } from './LocationComposer';
 import { MessageComposerEffectHandlers } from './MessageComposerEffectHandlers';
 import { PollComposer } from './pollComposer';
 import { TextComposer } from './textComposer';
-import { applyCommandValidatorOverride, DEFAULT_COMPOSER_CONFIG } from './configuration';
+import { DEFAULT_COMPOSER_CONFIG } from './configuration';
 import type { MessageComposerMiddlewareValue } from './middleware';
 import {
   MessageComposerMiddlewareExecutor,
   MessageDraftComposerMiddlewareExecutor,
 } from './middleware';
-import type { Unsubscribe } from '../store';
-import { StateStore } from '../store';
-import { formatMessage, generateUUIDv4, isLocalMessage, unformatMessage } from '../utils';
-import { mergeWith } from '../utils/mergeWith';
+import type { Unsubscribe } from '@stream-io/state-store';
+import { StateStore } from '@stream-io/state-store';
+import { formatMessage, generateUUIDv4, isLocalMessage } from '../utils';
+import { nowNs } from '../utils/time';
+import { ConfigController } from '../configuration/ConfigController';
+import { deepFreezeConfig } from '../configuration/utils/deepFreezeConfig';
+import { mergeServerRestrictions } from '../configuration/utils/serverAuthority';
+import type {
+  ServerRestrictions,
+  ServerUpperBounds,
+} from '../configuration/utils/serverAuthority';
 import { Channel } from '../channel';
 import { Thread } from '../thread';
 import type {
-  ChannelAPIResponse,
-  CommandResponse,
+  Attachment,
+  ChannelStateResponseFields,
+  Command,
   DraftMessage,
   DraftResponse,
-  EventTypes,
+  EventType,
   LocalMessage,
-  LocalMessageBase,
   MessageResponse,
-  MessageResponseBase,
+  TimestampNS,
+  UserResponse,
 } from '../types';
+import { chatLoggerSystem } from '../logger';
+import { applyInstanceConfiguration } from '../configuration/utils/applyInstanceConfiguration';
 import { WithSubscriptions } from '../utils/WithSubscriptions';
 import type { StreamChat } from '../client';
 import type { CommandSendability, MessageComposerConfig } from './configuration/types';
@@ -44,7 +56,6 @@ import type { LocationComposerSnapshot } from './LocationComposer';
 import type { PollComposerSnapshot } from './pollComposer';
 import type { TextComposerSnapshot } from './textComposer';
 import type { DeepPartial } from '../types.utility';
-import type { MergeWithCustomizer } from '../utils/mergeWith/mergeWithCore';
 import {
   getMentionedUsersInText,
   stripCommandFromText,
@@ -52,7 +63,11 @@ import {
 
 type UnregisterSubscriptions = Unsubscribe;
 
-export type LastComposerChange = { draftUpdate: number | null; stateUpdate: number };
+/** Unix nanoseconds, directly comparable with server `created_at` / `updated_at`. */
+export type LastComposerChange = {
+  draftUpdate: TimestampNS | null;
+  stateUpdate: TimestampNS;
+};
 
 export type EditingAuditState = {
   lastChange: LastComposerChange;
@@ -83,27 +98,33 @@ export type MessageComposerSnapshot = {
   textComposer: TextComposerSnapshot;
 };
 
-export type LocalMessageWithLegacyThreadId = LocalMessage & { legacyThreadId?: string };
-export type CompositionContext = Channel | Thread | LocalMessageWithLegacyThreadId;
+export type CompositionContext = Channel | Thread | LocalMessage;
+
+/**
+ * Outcome of `send()` and `update()`:
+ * - `sent`: the message or edit went out.
+ * - `nothing-to-send`: nothing to compose, or a middleware discarded the composition (reported through
+ *   `client.notifications`). **The composer keeps its contents.**
+ * - `failed`: the request failed. **The composer is released**; the content is in the message list
+ *   marked `failed`, where the user retries it.
+ */
+export type MessageComposerSubmitResult = 'sent' | 'nothing-to-send' | 'failed';
 
 export type MessageComposerState = {
   id: string;
   draftId: string | null;
   pollId: string | null;
-  quotedMessage: LocalMessageBase | null;
+  quotedMessage: LocalMessage | null;
   showReplyInChannel: boolean;
-  /**
-   * Baseline snapshot of the message being edited (if any).
-   * This is intentionally immutable with respect to the editing session and can be used for restore/cancel.
-   */
+  /** Baseline of the message being edited, unchanged during the session (for restore or cancel). */
   editedMessage: LocalMessage | null;
 };
 
 export type MessageComposerOptions = {
   client: StreamChat;
-  // composer can belong to a channel, thread, legacy thread or a local message (edited message)
+  // A channel, a thread, or a local message (edit flow).
   compositionContext: CompositionContext;
-  // initial state like draft message or edited message
+  // Initial state: a draft or the message being edited.
   composition?: DraftResponse | MessageResponse | LocalMessage;
   config?: DeepPartial<MessageComposerConfig>;
 };
@@ -115,11 +136,11 @@ const initEditingAuditState = (
   composition?: DraftResponse | MessageResponse | LocalMessage,
 ): EditingAuditState => {
   let draftUpdate = null;
-  let stateUpdate = new Date().getTime();
+  let stateUpdate = nowNs();
   if (compositionIsDraftResponse(composition)) {
-    stateUpdate = draftUpdate = new Date(composition.created_at).getTime();
+    stateUpdate = draftUpdate = composition.created_at;
   } else if (composition && isLocalMessage(composition)) {
-    stateUpdate = new Date(composition.updated_at).getTime();
+    stateUpdate = composition.updated_at;
   }
   return {
     lastChange: {
@@ -149,7 +170,7 @@ const initState = (
     : formatMessage(composition);
   let message;
   let draftId = null;
-  let id = MessageComposer.generateId(); // do not use draft id for messsage id
+  let id = MessageComposer.generateId(); // a draft ID is not the message ID
   if (compositionIsDraftResponse(composition)) {
     message = composition.message;
     draftId = composition.message.id;
@@ -162,19 +183,23 @@ const initState = (
     draftId,
     id,
     pollId: message.poll_id ?? null,
-    quotedMessage: quotedMessage
-      ? formatMessage(quotedMessage as MessageResponseBase)
-      : null,
+    quotedMessage: quotedMessage ? formatMessage(quotedMessage) : null,
     showReplyInChannel: false,
     editedMessage,
   };
 };
 
+const logger = chatLoggerSystem.getLogger('message-composer');
+const offlineDbLogger = chatLoggerSystem.getLogger('offline-db');
+
 export class MessageComposer extends WithSubscriptions {
   readonly channel: Channel;
   readonly state: StateStore<MessageComposerState>;
   readonly editingAuditState: StateStore<EditingAuditState>;
-  readonly configState: StateStore<MessageComposerConfig>;
+
+  get configState(): StateStore<MessageComposerConfig> {
+    return this.configController.state;
+  }
   readonly compositionContext: CompositionContext;
   readonly compositionMiddlewareExecutor: MessageComposerMiddlewareExecutor;
   readonly draftCompositionMiddlewareExecutor: MessageDraftComposerMiddlewareExecutor;
@@ -187,6 +212,10 @@ export class MessageComposer extends WithSubscriptions {
   customDataManager: CustomDataManager;
   private snapshots: MessageComposerSnapshot[] = [];
   private effectHandlers: MessageComposerEffectHandlers;
+  private readonly configController: ConfigController<
+    MessageComposerConfig,
+    DeepPartial<MessageComposerConfig>
+  >;
   // todo: mediaRecorder: MediaRecorderController;
 
   constructor({
@@ -199,57 +228,38 @@ export class MessageComposer extends WithSubscriptions {
 
     this.compositionContext = compositionContext;
 
-    // channel is easily inferable from the context
     if (compositionContext instanceof Channel) {
       this.channel = compositionContext;
     } else if (compositionContext instanceof Thread) {
       this.channel = compositionContext.channel;
     } else if (compositionContext.cid) {
       const [type, id] = compositionContext.cid.split(':');
-      this.channel = client.channel(type, id);
+      this.channel = client.channelManager.ensure({ type, id });
     } else {
       throw new Error(
         'MessageComposer requires composition context pointing to channel (channel or context.cid)',
       );
     }
 
-    /**
-     * Customizes config merges for the composer constructor.
-     *
-     * It catches two scalar override cases that should not use the default deep merge:
-     * - client-disabled `enabled` flags stay disabled even if the channel config tries to re-enable them
-     * - scalar channel-config values replace client defaults for matching config keys
-     *
-     * All other values fall back to the normal `mergeWith` behavior.
-     */
-    const mergeMessageComposerConfigCustomizer: MergeWithCustomizer<
+    this.configController = new ConfigController<
+      MessageComposerConfig,
       DeepPartial<MessageComposerConfig>
-    > = (originalVal, channelConfigVal, key) =>
-      typeof originalVal === 'object'
-        ? undefined
-        : originalVal === false && key === 'enabled' // prevent enabling features that are disabled client-side
-          ? false
-          : ['string', 'number', 'bigint', 'boolean', 'symbol'].includes(
-                // prevent enabling features that are disabled server-side
-                typeof channelConfigVal,
-              )
-            ? channelConfigVal // scalar values get overridden by server-side config
-            : originalVal;
-
-    this.configState = new StateStore<MessageComposerConfig>(
-      applyCommandValidatorOverride(
-        mergeWith(
-          mergeWith(DEFAULT_COMPOSER_CONFIG, config ?? {}),
-          {
-            location: {
-              enabled: this.channel.getConfig()?.shared_locations,
-            },
-          },
-          mergeMessageComposerConfigCustomizer,
-        ),
-        config,
-      ),
-    );
+    >({
+      defaults: DEFAULT_COMPOSER_CONFIG,
+      constructorOptions: config as Partial<MessageComposerConfig> | undefined,
+      initialSlice: this.declarativeConfig as Partial<MessageComposerConfig> | undefined,
+      mergeSlice: 'deep',
+      // A stored `false` cannot say whether the client or the server turned a feature off.
+      retainPatches: true,
+      applyAuthority: (requested) =>
+        deepFreezeConfig(
+          mergeServerRestrictions(
+            requested,
+            this.serverRestrictionsFor(requested),
+            this.serverUpperBounds,
+          ),
+        ) as MessageComposerConfig,
+    });
 
     let message: LocalMessage | DraftMessage | undefined = undefined;
     if (compositionIsDraftResponse(composition)) {
@@ -288,10 +298,6 @@ export class MessageComposer extends WithSubscriptions {
       return 'thread';
     }
 
-    if (typeof compositionContext.legacyThreadId === 'string') {
-      return 'legacy_thread';
-    }
-
     return 'message';
   }
 
@@ -303,7 +309,7 @@ export class MessageComposer extends WithSubscriptions {
 
   static generateId = generateUUIDv4;
 
-  get config(): MessageComposerConfig {
+  get config(): Readonly<MessageComposerConfig> {
     return this.configState.getLatestValue();
   }
 
@@ -345,11 +351,6 @@ export class MessageComposer extends WithSubscriptions {
       return this.compositionContext.id;
     }
 
-    if (typeof this.compositionContext.legacyThreadId === 'string') {
-      return this.compositionContext.legacyThreadId;
-    }
-
-    // check if the message is a reply, get parentMessageId
     if (typeof this.compositionContext.parent_id === 'string') {
       return this.compositionContext.parent_id;
     }
@@ -386,7 +387,7 @@ export class MessageComposer extends WithSubscriptions {
   }
 
   getCommandDisabledReason = (
-    command: CommandResponse,
+    command: Command,
   ): CommandSuggestionDisabledReason | undefined => {
     if (this.editedMessage) return 'editing';
 
@@ -400,11 +401,10 @@ export class MessageComposer extends WithSubscriptions {
     return undefined;
   };
 
-  isCommandDisabled = (command: CommandResponse) =>
-    !!this.getCommandDisabledReason(command);
+  isCommandDisabled = (command: Command) => !!this.getCommandDisabledReason(command);
 
   validateCommandSendability = (
-    command: CommandResponse,
+    command: Command,
     text = this.textComposer.text,
   ): CommandSendability => {
     const currentMentionedUsers = this.textComposer.mentionedUsers;
@@ -433,39 +433,46 @@ export class MessageComposer extends WithSubscriptions {
     return !currentCommand || this.validateCommandSendability(currentCommand).ready;
   }
 
-  /**
-   * Whether the installed composition middleware composes messages whose uploads are still in
-   * flight — see `MessageCompositionMiddleware.allowsPendingUploads`.
-   *
-   * Derived from the chain rather than from config, so there is exactly one switch: the UI SDK
-   * that implements the rest of the flow installs the middleware, and everything that has to
-   * follow from that (starting with {@link hasSendableData}) follows on its own.
-   *
-   * **Temporary API.** In v10 sending with pending uploads becomes part of the composer
-   * configuration (`MessageComposerConfig`, set through `updateConfig`), and this getter,
-   * together with the middleware declaration it reads, is replaced by that config field.
-   */
+  /** See {@link AttachmentManagerConfig.pendingUploadsEnabled}. */
   get allowsPendingUploads() {
-    return this.compositionMiddlewareExecutor.installedMiddleware.some(
-      (middleware) => middleware.allowsPendingUploads,
-    );
+    return this.attachmentManager.config.pendingUploadsEnabled;
+  }
+
+  /**
+   * The thread when this composer belongs to one, else the channel. An edit composer finds its thread
+   * only if `client.threads` has it registered (listed or active).
+   */
+  get defaultSubmitTarget(): Channel | Thread {
+    if (this.compositionContext instanceof Thread) return this.compositionContext;
+
+    const { threadId } = this;
+    return (threadId && this.client.threads.get(threadId)) || this.channel;
+  }
+
+  /**
+   * See {@link MessageComposerConfig.retainCompositionOnSubmit}. The attachments composition step reads
+   * it too, so retained content is not also sent on the message.
+   */
+  get retainsCompositionOnSubmit() {
+    return this.config.retainCompositionOnSubmit(this);
   }
 
   get hasSendableData() {
     if (!this.isCommandSendable) return false;
 
     if (this.allowsPendingUploads) {
-      // An upload in flight is no longer a blocker, and a pending attachment counts as content
-      // in its own right — otherwise an attachment-only message could never be sent before its
-      // upload finished, which is the point of the flow. `failed` and `blocked` attachments
-      // still do not count: a message whose only attachment was rejected must not look sendable.
-      const hasSendableAttachment = this.attachmentManager.attachments.some(
-        (attachment) => isFinishedUpload(attachment) || isPendingUpload(attachment),
+      // Uploads in flight do not block: besides finished uploads and attachments with nothing to
+      // upload, uploads that can still resolve count as content (awaited or retried on send).
+      // `blocked` ones do not.
+      const hasAttachmentContent = this.attachmentManager.attachments.some(
+        (attachment) =>
+          isSendableAttachment(attachment) || isResolvableUpload(attachment),
       );
 
       return !!(
         !this.textComposer.textIsEmpty ||
-        hasSendableAttachment ||
+        this.textComposer.activeCommandIsContent ||
+        hasAttachmentContent ||
         this.pollId ||
         this.locationComposer.validLocation
       );
@@ -474,7 +481,8 @@ export class MessageComposer extends WithSubscriptions {
     return !!(
       (!this.attachmentManager.uploadsInProgressCount &&
         (!this.textComposer.textIsEmpty ||
-          this.attachmentManager.successfulUploadsCount > 0)) ||
+          this.textComposer.activeCommandIsContent ||
+          this.attachmentManager.attachments.some(isSendableAttachment))) ||
       this.pollId ||
       !!this.locationComposer.validLocation
     );
@@ -487,6 +495,7 @@ export class MessageComposer extends WithSubscriptions {
   get contentIsEmpty() {
     return (
       this.textComposer.textIsEmpty &&
+      !this.textComposer.activeCommandIsContent &&
       !this.attachmentManager.attachments.length &&
       !this.pollId &&
       !this.locationComposer.validLocation
@@ -497,10 +506,10 @@ export class MessageComposer extends WithSubscriptions {
     const initiatedWithoutDraft = this.lastChange.draftUpdate === null;
     const composingMessageFromScratch = initiatedWithoutDraft && !this.editedMessage;
 
-    // does not mean that the original edited message is different from the current state
+    // Does not imply the edited message differs from the current state.
     const editedMessageWasUpdated =
-      !!this.editedMessage?.updated_at &&
-      new Date(this.editedMessage.updated_at).getTime() < this.lastChange.stateUpdate;
+      this.editedMessage?.updated_at != null &&
+      this.editedMessage.updated_at < this.lastChange.stateUpdate;
 
     const draftWasChanged =
       !!this.lastChange.draftUpdate &&
@@ -509,11 +518,76 @@ export class MessageComposer extends WithSubscriptions {
     return editedMessageWasUpdated || draftWasChanged || composingMessageFromScratch;
   }
 
+  /** The patch is retained, so it survives later re-resolutions (e.g. a server change). */
   updateConfig(config: DeepPartial<MessageComposerConfig>) {
-    this.configState.partialNext(
-      applyCommandValidatorOverride(mergeWith(this.config, config), config),
-    );
+    this.configController.patch(config as Partial<MessageComposerConfig>);
   }
+
+  /** The config as requested, before server restrictions (`docs/instance-configuration.md` §3). */
+  get requestedConfig(): Readonly<MessageComposerConfig> {
+    return this.configController.requested;
+  }
+
+  /** The declarative slice for this composer, re-read live so a change is picked up. */
+  private get declarativeConfig(): DeepPartial<MessageComposerConfig> {
+    return (this.client.config.getConfig('messageComposer') ??
+      {}) as DeepPartial<MessageComposerConfig>;
+  }
+
+  /**
+   * Server-side gates from the channel config, re-read on every call. Each is a boolean that
+   * `mergeServerRestrictions` ANDs with the request. `commands` is absent (the server sends a list,
+   * not a gate).
+   */
+  private serverRestrictionsFor(
+    requested: MessageComposerConfig,
+  ): ServerRestrictions<MessageComposerConfig> {
+    const channelConfig = this.channel.serverConfig;
+
+    return {
+      // `uploads` governs Stream's upload endpoint, so it does not apply with `customCdn`. `undefined`
+      // leaves the request standing.
+      attachments: {
+        enabled: requested.attachments.customCdn ? undefined : channelConfig?.uploads,
+      },
+      linkPreviews: { enabled: channelConfig?.url_enrichment },
+      location: { enabled: channelConfig?.shared_locations },
+      polls: { enabled: channelConfig?.polls },
+    };
+  }
+
+  /** `max_message_length` caps both length limits: a smaller requested value wins, unset inherits it. */
+  private get serverUpperBounds(): ServerUpperBounds<MessageComposerConfig> {
+    const maxMessageLength = this.channel.serverConfig?.max_message_length;
+
+    return {
+      text: { maxLengthOnEdit: maxMessageLength, maxLengthOnSend: maxMessageLength },
+    };
+  }
+
+  // The controller skips the publish when the resolved config is deep-equal to the last one.
+  private publishConfig = () => {
+    this.configController.rederive(this.declarativeConfig);
+  };
+
+  /**
+   * Rebuilds the configuration from its inputs and **discards every {@link updateConfig} patch**,
+   * including those from sub-composer setters. To re-resolve and keep them, use
+   * {@link applyServerRestrictions}.
+   */
+  initializeConfig = () => {
+    this.configController.initialize(this.declarativeConfig);
+  };
+
+  /**
+   * Re-resolves the configuration against the channel's current server-side restrictions, keeping
+   * `updateConfig` patches. `Channel.query` calls it for composers without registered subscriptions.
+   *
+   * @internal
+   */
+  applyServerRestrictions = () => {
+    this.publishConfig();
+  };
 
   refreshId = () => {
     this.state.partialNext({ id: MessageComposer.generateId() });
@@ -540,8 +614,8 @@ export class MessageComposer extends WithSubscriptions {
     this.state.next(initState(composition));
   };
 
-  initStateFromChannelResponse = (channelApiResponse: ChannelAPIResponse) => {
-    if (this.channel.cid !== channelApiResponse.channel.cid) {
+  initStateFromChannelResponse = (channelApiResponse: ChannelStateResponseFields) => {
+    if (this.channel.cid !== channelApiResponse.channel?.cid) {
       return;
     }
     if (channelApiResponse.draft) {
@@ -552,7 +626,7 @@ export class MessageComposer extends WithSubscriptions {
         (db) =>
           db.deleteDraft({
             cid: this.channel.cid,
-            parent_id: undefined, // makes sure that we don't delete thread drafts while upserting channels
+            parent_id: undefined, // keeps thread drafts when upserting channels
           }),
         { method: 'deleteDraft' },
       );
@@ -585,6 +659,24 @@ export class MessageComposer extends WithSubscriptions {
     this.textComposer.restoreSnapshot(snapshot.textComposer);
   };
 
+  /**
+   * Moves this composition into `target`, replacing what `target` held, and clears this composer.
+   * Running uploads continue into `target` (see {@link AttachmentManager.takeOver}). Nothing is sent.
+   *
+   * @internal
+   */
+  transferTo = (target: MessageComposer) => {
+    target.textComposer.takeOver(this.textComposer);
+    target.attachmentManager.takeOver(this.attachmentManager);
+    target.linkPreviewsManager.takeOver(this.linkPreviewsManager);
+    target.locationComposer.takeOver(this.locationComposer);
+    target.pollComposer.takeOver(this.pollComposer);
+    target.customDataManager.takeOver(this.customDataManager);
+    const { pollId, quotedMessage, showReplyInChannel } = this.state.getLatestValue();
+    target.state.partialNext({ pollId, quotedMessage, showReplyInChannel });
+    this.clear();
+  };
+
   captureSnapshot = (snapshot = this.getSnapshot()) => {
     if (this.snapshots.length) return;
     this.snapshots.push(snapshot);
@@ -605,13 +697,13 @@ export class MessageComposer extends WithSubscriptions {
 
   private logStateUpdateTimestamp() {
     this.editingAuditState.partialNext({
-      lastChange: { ...this.lastChange, stateUpdate: new Date().getTime() },
+      lastChange: { ...this.lastChange, stateUpdate: nowNs() },
     });
   }
 
   private logDraftUpdateTimestamp() {
     if (!this.config.drafts.enabled) return;
-    const timestamp = new Date().getTime();
+    const timestamp = nowNs();
     this.editingAuditState.partialNext({
       lastChange: { draftUpdate: timestamp, stateUpdate: timestamp },
     });
@@ -630,6 +722,7 @@ export class MessageComposer extends WithSubscriptions {
   public registerSubscriptions = (): UnregisterSubscriptions => {
     if (!this.hasSubscriptions) {
       this.addUnsubscribeFunction(this.subscribeMessageComposerSetupStateChange());
+      this.addUnsubscribeFunction(this.subscribeChannelConfigChanged());
       this.addUnsubscribeFunction(this.subscribeMessageUpdated());
       this.addUnsubscribeFunction(this.subscribeMessageDeleted());
 
@@ -650,12 +743,12 @@ export class MessageComposer extends WithSubscriptions {
 
   private subscribeMessageUpdated = () => {
     // todo: test the impact of 'reaction.new', 'reaction.deleted', 'reaction.updated'
-    const eventTypes: EventTypes[] = [
+    const eventTypes = [
       'message.updated',
       'reaction.new',
       'reaction.deleted', // todo: do we need to subscribe to this especially when the whole state is overriden?
       'reaction.updated', // todo: do we need to subscribe to this especially when the whole state is overriden?
-    ];
+    ] satisfies EventType[];
 
     const unsubscribeFunctions = eventTypes.map(
       (eventType) =>
@@ -673,23 +766,23 @@ export class MessageComposer extends WithSubscriptions {
     return () => unsubscribeFunctions.forEach((unsubscribe) => unsubscribe());
   };
 
-  private subscribeMessageComposerSetupStateChange = () => {
-    let tearDown: (() => void) | null = null;
-    const unsubscribe = this.client._messageComposerSetupState.subscribeWithSelector(
-      ({ setupFunction: setup }) => ({
-        setup,
-      }),
-      ({ setup }) => {
-        tearDown?.();
-        tearDown = setup?.({ composer: this }) ?? null;
-      },
-    );
+  private subscribeMessageComposerSetupStateChange = () =>
+    applyInstanceConfiguration({
+      args: { composer: this },
+      config: this.client.config,
+      key: 'messageComposer',
+      // Re-resolve: copying the slice through `updateConfig` would make it an imperative patch.
+      applyConfig: () => this.publishConfig(),
+      reinitializeConfig: this.initializeConfig,
+    });
 
-    return () => {
-      tearDown?.();
-      unsubscribe();
-    };
-  };
+  // The channel's server config lands on `query`/`watch`, possibly after construction: re-resolve then.
+  // Selected by cid: the config is per channel.
+  private subscribeChannelConfigChanged = () =>
+    this.client.channelServerConfigsStore.subscribeWithSelector(
+      ({ configs }) => ({ channelConfig: configs[this.channel.cid] }),
+      () => this.applyServerRestrictions(),
+    );
 
   private subscribeMessageDeleted = () =>
     this.client.on('message.deleted', (event) => {
@@ -735,11 +828,13 @@ export class MessageComposer extends WithSubscriptions {
       this.clear();
     }).unsubscribe;
 
+  // The command is selected too: an active command that takes no arguments is content, so clearing
+  // one can empty the composition without changing the text.
   private subscribeTextComposerStateChanged = () =>
     this.textComposer.state.subscribeWithSelector(
-      ({ text }) => [text] as const,
+      ({ command, text }) => [text, command] as const,
       ([currentText], previousSelection) => {
-        // do not handle on initial subscription
+        // Skip the initial subscription call.
         if (typeof previousSelection === 'undefined') return;
 
         this.logStateUpdateTimestamp();
@@ -887,7 +982,7 @@ export class MessageComposer extends WithSubscriptions {
   };
 
   compose = async (): Promise<MessageComposerMiddlewareValue['state'] | undefined> => {
-    const created_at = this.editedMessage?.created_at ?? new Date();
+    const created_at = this.editedMessage?.created_at ?? nowNs();
 
     const text = '';
     const result = await this.compositionMiddlewareExecutor.execute({
@@ -899,20 +994,21 @@ export class MessageComposer extends WithSubscriptions {
           type: 'regular',
         },
         localMessage: {
-          attachments: [],
-          created_at, // only assigned to localMessage as this is used for optimistic update
-          deleted_at: null,
+          attachments: [] as Attachment[],
+          cid: this.channel.cid, // needed to match local paginator filters
+          created_at, // only on `localMessage`, for the optimistic update
+          deleted_at: undefined,
           error: undefined,
           id: this.id,
-          mentioned_users: [],
+          mentioned_users: [] as UserResponse[],
           parent_id: this.threadId ?? undefined,
-          pinned_at: this.editedMessage?.pinned_at || null,
-          reaction_groups: null,
+          pinned_at: this.editedMessage?.pinned_at ?? undefined,
+          reaction_groups: undefined,
           status: this.editedMessage ? this.editedMessage.status : 'sending',
           text,
           type: 'regular',
           updated_at: created_at,
-        },
+        } as LocalMessage,
         sendOptions: {},
       },
     });
@@ -926,7 +1022,12 @@ export class MessageComposer extends WithSubscriptions {
     const { state, status } = await this.draftCompositionMiddlewareExecutor.execute({
       eventName: 'compose',
       initialValue: {
-        draft: { id: this.id, parent_id: this.threadId ?? undefined, text: '' },
+        draft: {
+          id: this.id,
+          parent_id: this.threadId ?? undefined,
+          text: '',
+          custom: {},
+        },
       },
     });
     if (status === 'discard') return;
@@ -935,9 +1036,10 @@ export class MessageComposer extends WithSubscriptions {
   };
 
   createDraft = async () => {
-    // server-side drafts are not stored on message level but on thread and channel level
-    // therefore we don't need to create a draft if the message is edited
-    if (this.editedMessage || !this.config.drafts.enabled) return;
+    // Server drafts live on the thread or channel, not on a message, so none for an edit. Nor for a
+    // provisional channel (no ID yet).
+    if (this.editedMessage || !this.config.drafts.enabled || this.channel.isProvisional)
+      return;
     const composition = await this.composeDraft();
     if (!composition) return;
     const { draft } = composition;
@@ -946,27 +1048,30 @@ export class MessageComposer extends WithSubscriptions {
       try {
         const optimisticDraftResponse = {
           channel_cid: this.channel.cid,
-          created_at: new Date().toISOString(),
+          created_at: nowNs(),
           message: draft as DraftMessage,
           parent_id: draft.parent_id,
-          quoted_message: this.quotedMessage
-            ? unformatMessage(this.quotedMessage)
-            : undefined,
+          quoted_message: this.quotedMessage ?? undefined,
         };
         await this.client.offlineDb.upsertDraft({ draft: optimisticDraftResponse });
       } catch (error) {
-        this.client.logger('error', `offlineDb:upsertDraft`, {
-          tags: ['channel', 'offlineDb'],
-          error,
-        });
+        offlineDbLogger
+          .withExtraTags('createDraft', this.channel.cid)
+          .error('Upserting the draft to the offline database failed.', { error });
       }
     }
     this.logDraftUpdateTimestamp();
-    await this.channel.createDraft(draft);
+    await this.channel.createDraft({ message: draft });
   };
 
   deleteDraft = async () => {
-    if (this.editedMessage || !this.config.drafts.enabled || !this.draftId) return;
+    if (
+      this.editedMessage ||
+      !this.config.drafts.enabled ||
+      !this.draftId ||
+      this.channel.isProvisional
+    )
+      return;
     this.state.partialNext({ draftId: null }); // todo: should we clear the whole state?
     const parentId = this.threadId ?? undefined;
     if (this.client.offlineDb) {
@@ -976,10 +1081,9 @@ export class MessageComposer extends WithSubscriptions {
           parent_id: parentId,
         });
       } catch (error) {
-        this.client.logger('error', `offlineDb:deleteDraft`, {
-          tags: ['channel', 'offlineDb'],
-          error,
-        });
+        offlineDbLogger
+          .withExtraTags('deleteDraft', this.channel.cid)
+          .error('Deleting the draft from the offline database failed.', { error });
       }
     }
     this.logDraftUpdateTimestamp();
@@ -987,11 +1091,11 @@ export class MessageComposer extends WithSubscriptions {
   };
 
   getDraft = async () => {
-    if (this.editedMessage || !this.config.drafts.enabled || !this.client.userID) return;
+    if (this.editedMessage || !this.config.drafts.enabled || !this.client.userId) return;
 
     const draftFromOfflineDB = await this.client.offlineDb?.getDraft({
       cid: this.channel.cid,
-      userId: this.client.userID,
+      userId: this.client.userId,
       parent_id: this.threadId ?? undefined,
     });
 
@@ -1018,10 +1122,9 @@ export class MessageComposer extends WithSubscriptions {
 
       this.initState({ composition: draft });
     } catch (error) {
-      this.client.logger('error', `messageComposer:getDraft`, {
-        tags: ['channel', 'messageComposer'],
-        error,
-      });
+      logger
+        .withExtraTags('getDraft', this.channel.cid)
+        .error('Retrieving the draft from the server failed.', { error });
     }
   };
 
@@ -1039,7 +1142,7 @@ export class MessageComposer extends WithSubscriptions {
           context: { composer: this },
         },
         options: {
-          type: 'api:poll:create:failed',
+          type: CORE_NOTIFICATION_TYPE.pollCreateFailed,
           metadata: {
             reason: (error as Error).message,
           },
@@ -1047,6 +1150,97 @@ export class MessageComposer extends WithSubscriptions {
         },
       });
       throw error;
+    }
+  };
+
+  /** Clears the composer, or only detaches the poll when `retainsCompositionOnSubmit`. */
+  private releaseSubmittedComposition = () => {
+    if (this.retainsCompositionOnSubmit) {
+      this.state.partialNext({
+        id: MessageComposer.generateId(),
+        // Always detached: a set `pollId` is copied onto every composition, so it just went out. Left
+        // set, `createPollOnlyCompositionMiddleware` would turn the next message into the same poll.
+        pollId: null,
+      });
+      return;
+    }
+
+    this.clear();
+  };
+
+  private reportSubmitFailure = (
+    type: CoreNotificationType,
+    message: string,
+    error: unknown,
+  ) => {
+    this.client.notifications.addError({
+      message,
+      origin: {
+        emitter: 'MessageComposer',
+        context: { composer: this },
+      },
+      options: {
+        type,
+        metadata: { reason: (error as Error).message },
+        originalError: error instanceof Error ? error : undefined,
+      },
+    });
+  };
+
+  /**
+   * Composes and sends the message. Never rejects: see {@link MessageComposerSubmitResult}. A failure is
+   * reported through `client.notifications`.
+   */
+  send = async (): Promise<MessageComposerSubmitResult> => {
+    const composition = await this.compose();
+    if (!composition?.message) return 'nothing-to-send';
+
+    const { localMessage, message, sendOptions } = composition;
+
+    // Released before the request, so the user's next keystrokes cannot race the clear.
+    this.releaseSubmittedComposition();
+
+    try {
+      await this.defaultSubmitTarget.messageOperations.send({
+        localMessage,
+        message,
+        options: sendOptions,
+      });
+      return 'sent';
+    } catch (error) {
+      // Nothing is restored: the failed message in the list owns the content and its upload IDs.
+      this.reportSubmitFailure(
+        CORE_NOTIFICATION_TYPE.messageSendFailed,
+        'Send message request failed',
+        error,
+      );
+      return 'failed';
+    }
+  };
+
+  /** Composes and saves the edit, on the same terms as {@link send}. */
+  update = async (): Promise<MessageComposerSubmitResult> => {
+    const composition = await this.compose();
+    if (!composition?.message) return 'nothing-to-send';
+
+    const { localMessage, sendOptions } = composition;
+
+    this.releaseSubmittedComposition();
+
+    try {
+      await this.defaultSubmitTarget.messageOperations.update({
+        localMessage,
+        options: sendOptions,
+      });
+      return 'sent';
+    } catch (error) {
+      // As in `send`: nothing is restored.
+      this.reportSubmitFailure(
+        CORE_NOTIFICATION_TYPE.messageUpdateFailed,
+        'Edit message request failed',
+        error,
+      );
+      return 'failed';
     }
   };
 
@@ -1065,7 +1259,7 @@ export class MessageComposer extends WithSubscriptions {
           context: { composer: this },
         },
         options: {
-          type: 'api:location:create:failed',
+          type: CORE_NOTIFICATION_TYPE.locationCreateFailed,
           metadata: {
             reason: (error as Error).message,
           },

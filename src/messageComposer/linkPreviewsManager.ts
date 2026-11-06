@@ -1,4 +1,4 @@
-import { StateStore } from '../store';
+import { StateStore } from '@stream-io/state-store';
 import type { DebouncedFunc } from '../utils';
 import { debounce } from '../utils';
 import { mergeWithDiff } from '../utils/mergeWith';
@@ -11,20 +11,20 @@ export type LinkPreview = OGAttachment & {
 };
 
 export interface ILinkPreviewsManager {
-  /** Function cancels all scheduled or in-progress URL enrichment queries. */
+  /** Cancels all scheduled or in-progress URL enrichment queries. */
   cancelURLEnrichment: () => void;
-  /** Function that triggers the search for URLs and their enrichment. */
+  /** Searches the text for URLs and enriches them. */
   findAndEnrichUrls?: DebouncedFunc<(text: string) => void>;
 }
 
 export enum LinkPreviewStatus {
-  /** Link preview has been dismissed using **/
+  /** Link preview has been dismissed (`dismissPreview`). */
   DISMISSED = 'dismissed',
-  /** Link preview could not be loaded, the enrichment request has failed. **/
+  /** Link preview could not be loaded, the enrichment request has failed. */
   FAILED = 'failed',
-  /** Link preview has been successfully loaded. **/
+  /** Link preview has been successfully loaded. */
   LOADED = 'loaded',
-  /** The enrichment query is in progress for a given link. **/
+  /** The enrichment query is in progress for a given link. */
   LOADING = 'loading',
   /** The preview reference enrichment has not begun. Default status if not set. */
   PENDING = 'pending',
@@ -68,11 +68,6 @@ const initState = ({
     : {
         previews: new Map<LinkURL, LinkPreview>(),
       };
-
-/*
-docs:
-You can customize  function to identify URLs in a string and request OG data by overriding findURLFn?: (text: string) => string[];
- */
 
 export class LinkPreviewsManager implements ILinkPreviewsManager {
   findAndEnrichUrls: DebouncedFunc<(text: string) => void>;
@@ -156,18 +151,12 @@ export class LinkPreviewsManager implements ILinkPreviewsManager {
   }
 
   get enabled() {
-    /**
-     * We have to check whether the message will be enriched server side (url_enrichment).
-     * If not, then it does not make sense to do previews in composer.
-     */
-    return (
-      !!this.channel.getConfig()?.url_enrichment &&
-      this.composer.config.linkPreviews.enabled
-    );
+    return this.composer.config.linkPreviews.enabled;
   }
 
   set enabled(enabled: LinkPreviewsManagerConfig['enabled']) {
-    if (enabled === this.enabled) return;
+    // No same-value early return: the getter reads the effective value, and a request the server
+    // masks must still be recorded.
     this.composer.updateConfig({ linkPreviews: { enabled } });
   }
 
@@ -190,6 +179,15 @@ export class LinkPreviewsManager implements ILinkPreviewsManager {
   initState = ({ message }: { message?: DraftMessage | LocalMessage } = {}) => {
     this.cancelURLEnrichment();
     this.state.next(initState({ message: this.enabled ? message : undefined }));
+  };
+
+  /**
+   * Takes over `source`'s link previews.
+   *
+   * @internal
+   */
+  takeOver = (source: LinkPreviewsManager) => {
+    this.state.next({ previews: new Map(source.state.getLatestValue().previews) });
   };
 
   getSnapshot = (): LinkPreviewsManagerSnapshot => this.state.getLatestValue();
@@ -216,7 +214,7 @@ export class LinkPreviewsManager implements ILinkPreviewsManager {
     const newLinkPreviews = urls
       .filter((url) => {
         const existingPreviews = this.previews;
-        // account for trailing slashes added by the back-end
+        // The back-end may add a trailing slash.
         const existingPreviewLink =
           existingPreviews.get(url) || existingPreviews.get(url + '/');
         return !existingPreviewLink;
@@ -238,12 +236,11 @@ export class LinkPreviewsManager implements ILinkPreviewsManager {
     await Promise.all(
       newLinkPreviews.map(async (linkPreview) => {
         try {
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          const { duration, ...ogAttachment } = await this.client.enrichURL(
-            linkPreview.og_scrape_url,
-          );
+          const { duration: _duration, ...ogAttachment } = await this.client.getOG({
+            url: linkPreview.og_scrape_url,
+          });
           if (this.shouldDiscardEnrichQueries) return;
-          // due to typing and text changes, the URL may not be anymore in the store
+          // The URL may have left the store while typing.
           if (this.previews.has(linkPreview.og_scrape_url)) {
             this.updatePreview(linkPreview.og_scrape_url, {
               status: LinkPreviewStatus.LOADED,
@@ -267,15 +264,11 @@ export class LinkPreviewsManager implements ILinkPreviewsManager {
     this.findAndEnrichUrls.flush?.();
   };
 
-  /**
-   * Clears all non-dismissed previews when the text composer is cleared.
-   * This ensures that dismissed previews are not re-enriched in the future.
-   */
+  /** Clears all previews except dismissed ones, so those are not re-enriched. */
   clearPreviews = () => {
     const currentPreviews = this.previews;
     const newPreviews = new Map<LinkURL, LinkPreview>();
 
-    // Keep only dismissed previews
     currentPreviews.forEach((preview, url) => {
       if (LinkPreviewsManager.previewIsDismissed(preview)) {
         newPreviews.set(url, preview);
@@ -302,6 +295,7 @@ export class LinkPreviewsManager implements ILinkPreviewsManager {
         ...finalPreview,
         og_scrape_url: url,
         status,
+        custom: {},
       }),
     });
   };
@@ -330,8 +324,7 @@ export class LinkPreviewsManager implements ILinkPreviewsManager {
     preview.status === LinkPreviewStatus.PENDING;
 
   static getPreviewData = (preview: LinkPreview) => {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { status, ...data } = preview;
+    const { status: _status, ...data } = preview;
     return data;
   };
 }

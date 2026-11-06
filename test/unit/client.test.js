@@ -1,14 +1,20 @@
 import sinon from 'sinon';
+import { CanceledError } from 'axios';
 import { generateMsg } from './test-utils/generateMessage';
 import { getClientWithUser } from './test-utils/getClient';
 
 import * as utils from '../../src/utils';
 import { StreamChat } from '../../src/client';
-import { ConnectionState } from '../../src/connection_fallback';
+import { ChatApi } from '../../src/gen-imports';
+import { chatLoggerSystem } from '../../src/logger';
 import { StableWSConnection } from '../../src/connection';
+import { WSFallbackConnectionState } from '../../src/connection/wsConnection/WSConnectionFallback';
 import { mockChannelQueryResponse } from './test-utils/mockChannelQueryResponse';
 import { generateThreadResponse } from './test-utils/generateThreadResponse';
-import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from '../../src/constants';
+import {
+	DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE,
+	DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE,
+} from '../../src/constants';
 
 import {
 	describe,
@@ -20,9 +26,9 @@ import {
 	afterAll,
 	vi,
 } from 'vitest';
-import { Channel } from '../../src';
-import { normalizeQuerySort } from '../../src/utils';
+import { Channel, ChannelWatchStatus, formatMessage } from '../../src';
 import { MockOfflineDB } from './offline-support/MockOfflineDB';
+import { convertDateToTimestamp } from './test-utils/time';
 
 describe('StreamChat getInstance', () => {
 	beforeEach(() => {
@@ -53,7 +59,9 @@ describe('StreamChat getInstance', () => {
 	});
 
 	it('should throw error if connectUser called twice on an instance', async () => {
-		const client1 = StreamChat.getInstance('key2', { allowServerSideConnect: true });
+		const client1 = StreamChat.getInstance('key2', {
+			client: { allowServerSideConnect: true },
+		});
 		client1.openConnection = () => Promise.resolve();
 		client1._setToken = () => Promise.resolve();
 
@@ -66,7 +74,9 @@ describe('StreamChat getInstance', () => {
 	});
 
 	it('should not throw error if connectUser called twice with the same user', async () => {
-		const client1 = StreamChat.getInstance('key2', { allowServerSideConnect: true });
+		const client1 = StreamChat.getInstance('key2', {
+			client: { allowServerSideConnect: true },
+		});
 		client1.openConnection = () => Promise.resolve('openConnection');
 		client1._setToken = () => Promise.resolve();
 
@@ -78,57 +88,128 @@ describe('StreamChat getInstance', () => {
 
 	it('should set base url correctly', async () => {
 		const baseURL = 'http://example.com';
-		const client = StreamChat.getInstance('key3', { baseURL });
+		const client = StreamChat.getInstance('key3', { client: { baseURL } });
 
 		expect(client.baseURL).to.equal(baseURL);
 	});
 
 	it('should set axios request config correctly', async () => {
-		const client = StreamChat.getInstance('key', 'secret', {
-			axiosRequestConfig: {
-				headers: {
-					'Cache-Control': 'no-cache',
-					Pragma: 'no-cache',
+		const client = StreamChat.getInstance('key', {
+			client: {
+				axiosRequestConfig: {
+					headers: {
+						'Cache-Control': 'no-cache',
+						Pragma: 'no-cache',
+					},
 				},
 			},
 		});
+		client.tokenManager.getToken = () => 'mock-token';
 
-		let requestConfig = {};
-		client.axiosInstance.get = (url, config) => {
-			requestConfig = config;
-			return {
-				status: 200,
-			};
-		};
+		const requestSpy = vi
+			.spyOn(client.axiosInstance, 'request')
+			.mockResolvedValueOnce({ data: {}, status: 200 });
 
-		await client.getChannelType('messaging');
+		await client.getAppSettings();
 
-		expect(requestConfig.headers).to.haveOwnProperty('Cache-Control', 'no-cache');
-		expect(requestConfig.headers).to.haveOwnProperty('Pragma', 'no-cache');
+		expect(requestSpy).toHaveBeenCalledTimes(1);
+		expect(requestSpy.mock.calls[0][0].headers).to.haveOwnProperty(
+			'Cache-Control',
+			'no-cache',
+		);
+		expect(requestSpy.mock.calls[0][0].headers).to.haveOwnProperty('Pragma', 'no-cache');
 	});
 
-	it('app settings do not mutate', async () => {
-		const client = new StreamChat('key', 'secret');
-		const cert = Buffer.from('test');
-		const options = { apn_config: { p12_cert: cert } };
-		await expect(client.updateAppSettings(options)).rejects.toThrow(/.*/);
+	// `getApp` has no request, so `requestOptions` comes after an unused `_request` slot; nothing
+	// from it may reach the query string.
+	it('getAppSettings forwards requestOptions passed after the empty request slot', async () => {
+		const client = new StreamChat('key');
+		client.tokenManager.getToken = () => 'mock-token';
+		const controller = new AbortController();
 
-		expect(options.apn_config.p12_cert).to.be.eql(cert);
+		const requestSpy = vi
+			.spyOn(client.axiosInstance, 'request')
+			.mockResolvedValueOnce({ data: {}, status: 200 });
+
+		await client.getAppSettings(undefined, { signal: controller.signal, timeout: 1234 });
+
+		expect(requestSpy).toHaveBeenCalledTimes(1);
+		const config = requestSpy.mock.calls[0][0];
+		expect(config.signal).toBe(controller.signal);
+		expect(config.timeout).toBe(1234);
+		expect(config.params).not.toHaveProperty('signal');
+		expect(config.params).not.toHaveProperty('timeout');
 	});
 
-	it('should correctly resolve _cacheEnabled', async () => {
-		const client1 = new StreamChat('key', 'secret', {
-			disableCache: true,
+	// A failed request (e.g. on a cold start while offline) must not stay cached, or every later
+	// `appSettingsPromise` reader fails for the rest of the session.
+	it('getAppSettings does not keep a failed request', async () => {
+		const client = new StreamChat('key');
+		client.tokenManager.getToken = () => 'mock-token';
+		const requestSpy = vi
+			.spyOn(client.axiosInstance, 'request')
+			.mockRejectedValueOnce(new Error('Network Error'))
+			.mockResolvedValueOnce({ data: { app: { name: 'app' } }, status: 200 });
+
+		await expect(client.getAppSettings()).rejects.toThrow('Network Error');
+		expect(client.appSettingsPromise).toBeUndefined();
+
+		const appSettings = await client.getAppSettings();
+		expect(appSettings.app).toEqual({ name: 'app' });
+		expect(client.appSettingsPromise).toBeDefined();
+		expect(requestSpy).toHaveBeenCalledTimes(2);
+	});
+
+	it('getAppSettings keeps a newer request when an older one fails', async () => {
+		const client = new StreamChat('key');
+		client.tokenManager.getToken = () => 'mock-token';
+		let rejectFirst;
+		vi.spyOn(client.axiosInstance, 'request')
+			.mockImplementationOnce(
+				() => new Promise((_resolve, reject) => (rejectFirst = reject)),
+			)
+			.mockResolvedValueOnce({ data: { app: { name: 'app' } }, status: 200 });
+
+		const first = client.getAppSettings();
+		await client.getAppSettings();
+		const newer = client.appSettingsPromise;
+		rejectFirst(new Error('Network Error'));
+
+		await expect(first).rejects.toThrow('Network Error');
+		expect(client.appSettingsPromise).toBe(newer);
+	});
+});
+
+describe('StreamChat config(s) store', () => {
+	it('initializes channelServerConfigsStore and keeps configs access backward compatible', () => {
+		const client = new StreamChat('key');
+
+		expect(client.channelServerConfigs).to.eql({});
+		expect(client.channelServerConfigsStore.getLatestValue()).to.eql({ configs: {} });
+
+		const nextConfigs = { 'messaging:next': { typing_events: true } };
+		client.channelServerConfigs = nextConfigs;
+
+		expect(client.channelServerConfigs).to.equal(nextConfigs);
+		expect(client.channelServerConfigsStore.getLatestValue()).to.eql({
+			configs: nextConfigs,
 		});
-		expect(client1._cacheEnabled()).to.be.equal(false);
-		const client2 = new StreamChat('key', 'secret', {
-			disableCache: false,
+	});
+
+	it('updates channelServerConfigsStore through _addChannelConfig', () => {
+		const client = new StreamChat('key');
+
+		client._addChannelConfig({
+			cid: 'messaging:general',
+			config: { replies: true },
 		});
-		expect(client2._cacheEnabled()).to.be.equal(true);
-		const client3 = new StreamChat('key', {
-			disableCache: true,
+
+		expect(client.channelServerConfigsStore.getLatestValue()).to.eql({
+			configs: {
+				// Keyed by cid: a channel's `config_overrides` can make it differ from its siblings.
+				'messaging:general': { replies: true },
+			},
 		});
-		expect(client3._cacheEnabled()).to.be.equal(true);
 	});
 });
 
@@ -192,6 +273,170 @@ describe('Client userMuteStatus', function () {
 	});
 });
 
+describe('Client anonymous auth type', () => {
+	it('should stay anonymous after the hello event replaces client.user', async () => {
+		const client = new StreamChat('key', { client: { allowServerSideConnect: true } });
+		await client.tokenManager.setTokenOrProvider('', { id: 'local-anon-id', anon: true });
+		client._setUser({ id: 'local-anon-id', anon: true });
+
+		expect(client.anonymous).to.be.true;
+		expect(client.getAuthType()).to.equal('anonymous');
+
+		// The server's own-user payload has role 'anonymous' but NO `anon` flag. Reading
+		// the flag off client.user made every later HTTP request send stream-auth-type:
+		// jwt with an empty token, which the API rejects with 401 "token missing".
+		client.dispatchEvent({
+			type: 'connection.ok',
+			connection_id: 'id',
+			me: { id: '!anon', role: 'anonymous', mutes: [], channel_mutes: [] },
+		});
+
+		expect(client.user.id).to.equal('!anon');
+		expect(client.user.anon).to.be.undefined;
+		expect(client.anonymous).to.be.true;
+		expect(client.getAuthType()).to.equal('anonymous');
+	});
+
+	it('should send an empty token rather than omitting it for anonymous sessions', async () => {
+		const client = new StreamChat('key', { client: { allowServerSideConnect: true } });
+		await client.tokenManager.setTokenOrProvider('', { id: 'local-anon-id', anon: true });
+
+		expect(client.api._getToken()).to.equal('');
+	});
+
+	it('should report jwt for a regular user', async () => {
+		const client = new StreamChat('key', { client: { allowServerSideConnect: true } });
+		const token =
+			'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYW1pbiJ9.1R88K_f1CC2yrR6j1_OzMEbasfS_dxRSNbundEDBlJI';
+		await client.tokenManager.setTokenOrProvider(token, { id: 'amin' });
+
+		expect(client.anonymous).to.be.false;
+		expect(client.getAuthType()).to.equal('jwt');
+		expect(client.api._getToken()).to.equal(token);
+	});
+
+	it('should reset the anonymous flag on disconnect', async () => {
+		const client = new StreamChat('key', { client: { allowServerSideConnect: true } });
+		await client.tokenManager.setTokenOrProvider('', { id: 'local-anon-id', anon: true });
+		expect(client.anonymous).to.be.true;
+
+		client.tokenManager.reset();
+
+		expect(client.anonymous).to.be.false;
+		expect(client.getAuthType()).to.equal('jwt');
+	});
+});
+
+describe('Client createGuest', () => {
+	const guestResponse = {
+		access_token: 'guest.tok.en',
+		user: { id: 'guest-1', role: 'guest' },
+	};
+
+	// sinon stubs on ChatApi.prototype outlive the test that installed them
+	afterEach(() => sinon.restore());
+
+	it('should send the request as anonymous when the client has no token', async () => {
+		const client = new StreamChat('key', { client: { allowServerSideConnect: true } });
+		let authTypeDuringRequest;
+		let tokenDuringRequest;
+		sinon.stub(ChatApi.prototype, 'createGuest').callsFake(async () => {
+			// /api/v2/guest is only accepted with stream-auth-type: anonymous; a fresh
+			// client otherwise defaults to jwt with no token and the API returns 401.
+			authTypeDuringRequest = client.getAuthType();
+			tokenDuringRequest = client.api._getToken();
+			return guestResponse;
+		});
+
+		const result = await client.createGuest({ user: { id: 'guest-1' } });
+
+		expect(authTypeDuringRequest).to.equal('anonymous');
+		expect(tokenDuringRequest).to.equal('');
+		expect(result).to.equal(guestResponse);
+	});
+
+	it('should restore the un-authenticated state afterwards', async () => {
+		const client = new StreamChat('key', { client: { allowServerSideConnect: true } });
+		sinon.stub(ChatApi.prototype, 'createGuest').resolves(guestResponse);
+
+		await client.createGuest({ user: { id: 'guest-1' } });
+
+		expect(client.anonymous).to.be.false;
+		expect(client.tokenManager.token).to.be.undefined;
+	});
+
+	it('should restore state even when the request fails', async () => {
+		const client = new StreamChat('key', { client: { allowServerSideConnect: true } });
+		sinon.stub(ChatApi.prototype, 'createGuest').rejects(new Error('boom'));
+
+		await expect(client.createGuest({ user: { id: 'guest-1' } })).rejects.toThrow(/boom/);
+
+		expect(client.anonymous).to.be.false;
+		expect(client.tokenManager.token).to.be.undefined;
+	});
+
+	it('should not touch the auth mode of an already authenticated client', async () => {
+		const client = new StreamChat('key', { client: { allowServerSideConnect: true } });
+		const token = 'xyz.eyJ1c2VyX2lkIjoiYW1pbiJ9.xyz';
+		await client.tokenManager.setTokenOrProvider(token, { id: 'amin' });
+
+		let authTypeDuringRequest;
+		sinon.stub(ChatApi.prototype, 'createGuest').callsFake(async () => {
+			authTypeDuringRequest = client.getAuthType();
+			return guestResponse;
+		});
+
+		await client.createGuest({ user: { id: 'guest-1' } });
+
+		// Swapping auth out from under a live session would be worse than the rejection.
+		expect(authTypeDuringRequest).to.equal('jwt');
+		expect(client.tokenManager.token).to.equal(token);
+	});
+});
+
+describe('Client connection.ok hello event', () => {
+	const user = { id: 'user' };
+	const newConnectedClient = async () => {
+		const client = new StreamChat('', '');
+		client.connectUser = async () => {
+			client.user = user;
+			client.wsPromise = Promise.resolve();
+		};
+		await client.connectUser();
+		return client;
+	};
+
+	it('should populate own-user state from the v2 hello event', async () => {
+		const client = await newConnectedClient();
+		const mutes = [{ user, target: { id: 'mute1' } }];
+		const channel_mutes = [{ user, channel: { cid: 'messaging:muted' } }];
+
+		client.dispatchEvent({
+			type: 'connection.ok',
+			connection_id: 'id',
+			me: { ...user, mutes, channel_mutes, blocked_user_ids: ['blocked1'] },
+		});
+
+		expect(client.user.id).to.equal('user');
+		expect(client.mutedUsers).to.deep.equal(mutes);
+		expect(client.mutedChannels).to.deep.equal(channel_mutes);
+		expect(client.blockedUsers.getLatestValue().userIds).to.deep.equal(['blocked1']);
+		expect(client.userMuteStatus('mute1')).to.be.ok;
+	});
+
+	it('should default blocked users to an empty list', async () => {
+		const client = await newConnectedClient();
+
+		client.dispatchEvent({
+			type: 'connection.ok',
+			connection_id: 'id',
+			me: { ...user, mutes: [], channel_mutes: [] },
+		});
+
+		expect(client.blockedUsers.getLatestValue().userIds).to.deep.equal([]);
+	});
+});
+
 describe('Client active channels cache', () => {
 	const client = new StreamChat('', '');
 	const user = { id: 'user' };
@@ -200,18 +445,23 @@ describe('Client active channels cache', () => {
 		client.user = user;
 		client.wsPromise = Promise.resolve();
 	};
+	const makeChannelMock = (unreadCount) => ({
+		state: { unreadCount },
+		_setOwnUnreadCount(next) {
+			this.state.unreadCount = next;
+		},
+		// the channel store tears a channel down when it is cleared
+		disconnect() {},
+	});
+
 	beforeEach(() => {
-		client.activeChannels = {
-			vish: { state: { unreadCount: 1 } },
-			vish2: { state: { unreadCount: 2 } },
-		};
+		client.channelManager.clearChannels();
+		client.channelManager.getOrCreateChannel('vish', () => makeChannelMock(1));
+		client.channelManager.getOrCreateChannel('vish2', () => makeChannelMock(2));
 	});
 
 	const countUnreadChannels = (channels) =>
-		Object.values(channels).reduce(
-			(prevSum, currSum) => prevSum + currSum.state.unreadCount,
-			0,
-		);
+		channels.reduce((prevSum, currSum) => prevSum + currSum.state.unreadCount, 0);
 
 	it('should mark all active channels as read on notification.mark_read event if event.unread_channels is 0', function () {
 		client.dispatchEvent({
@@ -219,7 +469,7 @@ describe('Client active channels cache', () => {
 			unread_channels: 0,
 		});
 
-		expect(countUnreadChannels(client.activeChannels)).to.be.equal(0);
+		expect(countUnreadChannels(client.channelManager.values())).to.be.equal(0);
 	});
 
 	it('should not mark any active channel as read on notification.mark_read event if event.unread_channels > 0', function () {
@@ -228,7 +478,62 @@ describe('Client active channels cache', () => {
 			unread_channels: 1,
 		});
 
-		expect(countUnreadChannels(client.activeChannels)).to.be.equal(3);
+		expect(countUnreadChannels(client.channelManager.values())).to.be.equal(3);
+	});
+});
+
+describe('client.channelManager.ensure() custom-data preservation', () => {
+	let client;
+	beforeEach(async () => {
+		client = await getClientWithUser();
+	});
+
+	it("does not wipe an existing channel's custom when re-resolved with a non-custom arg", () => {
+		// First resolution seeds the channel's custom data (e.g. its display name).
+		const channel = client.channelManager.ensure({
+			type: 'messaging',
+			id: 'little-italy',
+			data: {
+				custom: { name: 'Little-Italy' },
+			},
+		});
+		expect(channel.data.custom.name).to.equal('Little-Italy');
+
+		// A later `client.channelManager.ensure({ type, id, data })` for the SAME channel that passes other fields but
+		// no `custom` — as thread hydration and getChannel do (`{ members }`, or even
+		// `{ members: undefined }` when no members are given) — must NOT blank the channel's custom.
+		// Regression: ensure used to run `channel.data.custom = data.custom` on any non-empty
+		// arg, wiping custom to `undefined` and dropping the channel's name from the channel list.
+		const viaMembers = client.channelManager.ensure({
+			type: 'messaging',
+			id: 'little-italy',
+			data: {
+				members: [{ user_id: 'u2' }],
+			},
+		});
+		expect(viaMembers).to.equal(channel); // same cached instance
+		expect(channel.data.custom.name).to.equal('Little-Italy');
+
+		client.channelManager.ensure({
+			type: 'messaging',
+			id: 'little-italy',
+			data: { members: undefined },
+		});
+		expect(channel.data.custom.name).to.equal('Little-Italy');
+	});
+
+	it('applies custom when the caller actually provides it', () => {
+		const channel = client.channelManager.ensure({
+			type: 'messaging',
+			id: 'ch-custom',
+			data: { custom: { name: 'Old' } },
+		});
+		client.channelManager.ensure({
+			type: 'messaging',
+			id: 'ch-custom',
+			data: { custom: { name: 'New' } },
+		});
+		expect(channel.data.custom.name).to.equal('New');
 	});
 });
 
@@ -236,9 +541,10 @@ describe('Client openConnection', () => {
 	let client;
 
 	beforeEach(() => {
-		const wsConnection = new StableWSConnection({});
-		wsConnection.isConnecting = false;
-		wsConnection.connect = function () {
+		// `connect()` always builds its own StableWSConnection, so the seam is the prototype.
+		// `isConnecting` has to flip synchronously — that is what the second `openConnection()`
+		// call reads to decide it should hand back the in-flight promise.
+		sinon.stub(StableWSConnection.prototype, 'connect').callsFake(function () {
 			this.isConnecting = true;
 			return new Promise((resolve) => {
 				setTimeout(() => {
@@ -247,13 +553,17 @@ describe('Client openConnection', () => {
 					});
 				}, 1000);
 			});
-		};
+		});
 
-		client = new StreamChat('', { allowServerSideConnect: true, wsConnection });
+		client = new StreamChat('', { client: { allowServerSideConnect: true } });
+	});
+
+	afterEach(() => {
+		sinon.restore();
 	});
 
 	it('should return same promise in case of multiple calls', async () => {
-		client.userID = 'vishal';
+		client.user = { id: 'vishal' };
 		client._setUser({
 			id: 'vishal',
 		});
@@ -265,82 +575,253 @@ describe('Client openConnection', () => {
 	});
 });
 
+describe('Client watching requests across close/reopen', () => {
+	// The #1868 successors. Those cases asserted that queryChannels() gates on `wsPromise`;
+	// `1ebdf6d5 feat!: move wait for connection id to api client` moved the gate to
+	// ConnectionIdManager, so the same scenarios are pinned here against the mechanism that
+	// replaced it. The contract is the one `wsPromise` has had since #1868: a close suspends,
+	// a reopen finishes the work, and only a teardown fails it.
+	const flush = (ms = 0) => new Promise((resolve) => setTimeout(resolve, ms));
+
+	// Opens immediately but answers the handshake only when told, so a connect can be held in
+	// flight across a closeConnection() the way a backgrounding app holds one.
+	class HeldWebSocket {
+		static instances = [];
+		static OPEN = 1;
+
+		constructor() {
+			this.OPEN = 1;
+			this.readyState = 1;
+			HeldWebSocket.instances.push(this);
+			queueMicrotask(() => this.onopen?.({ type: 'open' }));
+		}
+
+		send() {}
+
+		close() {
+			this.readyState = 3;
+		}
+
+		hello(connectionId) {
+			this.onmessage?.({
+				data: JSON.stringify({
+					type: 'connection.ok',
+					connection_id: connectionId,
+					created_at: 1628678564222203145,
+					me: { id: 'user', role: 'user', created_at: 1627391903293696000 },
+				}),
+			});
+		}
+	}
+
+	const setup = () => {
+		HeldWebSocket.instances = [];
+		const client = new StreamChat('key', { client: { allowServerSideConnect: true } });
+		client.wsConnection.updateConfig({ webSocketImpl: HeldWebSocket });
+		client.tokenManager.getToken = () => 'mock-token';
+		client.tokenManager.tokenReady = () => Promise.resolve();
+		client.tokenManager.loadToken = () => Promise.resolve('mock-token');
+		client._setToken = () => Promise.resolve('mock-token');
+
+		// stubbed below _doRequest so the connection-id gate itself still runs
+		const request = vi
+			.spyOn(client.axiosInstance, 'request')
+			.mockResolvedValue({ data: { channels: [] }, status: 200, headers: {} });
+
+		return { client, request };
+	};
+
+	const settled = (promise) => Promise.race([promise, flush(40).then(() => 'pending')]);
+	const lastSocket = () => HeldWebSocket.instances[HeldWebSocket.instances.length - 1];
+
+	it('finishes an in-flight watching request against the reopened socket', async () => {
+		const { client, request } = setup();
+
+		const connecting = client.connectUser({ id: 'user' }, 'mock-token').then(
+			() => 'resolved',
+			(error) => 'rejected: ' + error.message,
+		);
+		await flush();
+		const query = client.queryChannels().then(
+			() => 'resolved',
+			(error) => 'rejected: ' + error.message,
+		);
+		await flush();
+
+		// the app backgrounds mid-handshake
+		await client.closeConnection();
+		expect(await settled(query)).to.equal('pending');
+		expect(await settled(connecting)).to.equal('pending');
+		expect(request).not.toHaveBeenCalled();
+
+		// and foregrounds; the reopened socket completes its handshake
+		client.openConnection().catch(() => {});
+		await flush();
+		lastSocket().hello('conn-2');
+
+		expect(await settled(query)).to.equal('resolved');
+		expect(await settled(connecting)).to.equal('resolved');
+		// the request rode the *new* socket's id, never the one it was issued under
+		expect(request.mock.calls[0][0].params.connection_id).to.equal('conn-2');
+	});
+
+	it('rejects an in-flight watching request on disconnectUser', async () => {
+		const { client, request } = setup();
+
+		client.connectUser({ id: 'user' }, 'mock-token').catch(() => {});
+		await flush();
+		const query = client.queryChannels().then(
+			() => 'resolved',
+			(error) => 'rejected: ' + error.message,
+		);
+		await flush();
+
+		// nothing will reopen after a teardown, so the request is told rather than left hanging
+		await client.disconnectUser();
+		expect(await settled(query)).to.match(/^rejected: .*disconnectUser\(\) was called/);
+		expect(request).not.toHaveBeenCalled();
+
+		// and the next one gets the actionable error rather than a silent wait
+		expect(() => client.connectionIdManager.getConnectionId()).to.throw(
+			/No connection id is available/,
+		);
+	});
+
+	it('leaves the next watching request waiting when the reopen fails and the socket is retrying', async () => {
+		const { client, request } = setup();
+		client._setUser({ id: 'user' });
+
+		vi.spyOn(StableWSConnection.prototype, 'connect').mockImplementation(
+			async function () {
+				this.isDisconnected = false;
+				this.client.connectionIdManager.arm();
+				throw new Error(JSON.stringify({ message: 'connect failed', isWSFailure: true }));
+			},
+		);
+
+		client.openConnection().catch(() => {});
+		await flush();
+
+		// a WS failure leaves StableWSConnection retrying, so the request waits for that rather
+		// than being told no connection is being established
+		const query = client.queryChannels();
+		expect(await settled(query)).to.equal('pending');
+		expect(request).not.toHaveBeenCalled();
+
+		client.connectionIdManager.resolveConnectionId('conn-3');
+		await query;
+		expect(request.mock.calls[0][0].params.connection_id).to.equal('conn-3');
+	});
+});
+
+describe('Client connection id after a failed initial connect', () => {
+	// what `_waitForHealthy` throws: the flag rides in the JSON message, not as a property
+	const connectError = (isWSFailure) =>
+		new Error(
+			JSON.stringify({
+				code: '',
+				StatusCode: '',
+				message: 'initial WS connection could not be established',
+				isWSFailure,
+			}),
+		);
+
+	const openConnectionFailingWith = async (error) => {
+		const client = new StreamChat('key', { client: { allowServerSideConnect: true } });
+		client._setUser({ id: 'user' });
+
+		vi.spyOn(StableWSConnection.prototype, 'connect').mockImplementation(
+			async function () {
+				// mirrors _connect(), which arms before anything can await a connection id
+				this.client.connectionIdManager.arm();
+				throw error;
+			},
+		);
+
+		await client.openConnection().catch(() => {});
+		return client;
+	};
+
+	it('keeps waiters waiting when the socket failed and StableWSConnection is retrying', async () => {
+		const client = await openConnectionFailingWith(connectError(true));
+
+		// onerror/onclose fired _reconnect() before this rejected, so the retry owns recovery:
+		// a watching request has to wait for it, not be told nothing is being established
+		const pending = client.connectionIdManager.getConnectionId();
+		expect(pending).to.be.instanceOf(Promise);
+
+		client.connectionIdManager.resolveConnectionId('conn-1');
+		expect(await pending).to.equal('conn-1');
+	});
+
+	it('rejects waiters when the failure is terminal', async () => {
+		const client = await openConnectionFailingWith(connectError(false));
+
+		// a rejected token or a bad API key will not fix itself, so waiters are told rather than
+		// left hanging on a retry that is not coming
+		expect(() => client.connectionIdManager.getConnectionId()).to.throw(
+			/No connection id is available/,
+		);
+	});
+});
+
 describe('Client wsPromise close/reopen race', () => {
 	const timeout = (ms) =>
 		new Promise((resolve) => setTimeout(() => resolve('timeout'), ms));
 
+	// `client.connect()` builds its own StableWSConnection unconditionally, so the seam is
+	// `connect` itself rather than an injected socket: the stub installs the object the rest of
+	// the client reads (`isConnecting` / `isHealthy` / `disconnect`), drives the connection-id
+	// lifecycle the way StableWSConnection does, and hands back a promise the test settles by hand.
 	const createClientWithHangingConnect = () => {
 		const connectResolvers = [];
-		const wsConnection = new StableWSConnection({});
-		wsConnection.isConnecting = false;
-		wsConnection.isHealthy = false;
-		wsConnection.disconnect = function () {
-			this.isConnecting = false;
-			this.isHealthy = false;
-			return Promise.resolve();
+		let failNext = false;
+
+		const client = new StreamChat('key', { client: { allowServerSideConnect: true } });
+
+		const wsConnection = {
+			isConnecting: false,
+			isHealthy: false,
+			disconnect() {
+				this.isConnecting = false;
+				this.isHealthy = false;
+				// mirrors StableWSConnection.disconnect(): the id dies with the socket
+				client.connectionIdManager.reset();
+				return Promise.resolve();
+			},
 		};
-		wsConnection.connect = function () {
-			this.isConnecting = true;
+		client.wsConnection = wsConnection;
+
+		client.connect = function () {
+			wsConnection.isConnecting = true;
+			this.connectionIdManager.arm();
+
+			if (failNext) {
+				failNext = false;
+				wsConnection.isConnecting = false;
+				return Promise.reject(new Error('connect failed'));
+			}
+
 			return new Promise((resolve) => {
 				connectResolvers.push((connection) => {
-					this.isConnecting = false;
-					this.isHealthy = true;
-					this.connectionID = connection.connection_id;
+					wsConnection.isConnecting = false;
+					wsConnection.isHealthy = true;
+					this.connectionIdManager.resolveConnectionId(connection.connection_id);
 					resolve(connection);
 				});
 			});
 		};
 
-		const client = new StreamChat('key', {
-			allowServerSideConnect: true,
-			wsConnection,
-		});
-		client.userID = 'user';
 		client._setUser({ id: 'user' });
 
-		return { client, connectResolvers };
-	};
-
-	it('should resolve queryChannels after closeConnection and openConnection during connect', async () => {
-		const { client, connectResolvers } = createClientWithHangingConnect();
-		const postStub = sinon.stub(client, 'post').resolves({ channels: [] });
-
-		client.openConnection();
-		const queryPromise = client.queryChannels().then(() => 'resolved');
-
-		await client.closeConnection();
-		client.openConnection();
-
-		expect(connectResolvers.length).to.equal(2);
-		connectResolvers[1]({ connection_id: 'conn-2' });
-
-		const outcome = await Promise.race([queryPromise, timeout(200)]);
-		expect(outcome).to.equal('resolved');
-		expect(postStub.calledOnce).to.be.true;
-
-		await client.closeConnection();
-		postStub.restore();
-	});
-
-	it('should reject queryChannels when connect is closed and the next connect fails', async () => {
-		const { client } = createClientWithHangingConnect();
-
-		client.openConnection();
-		const queryPromise = client.queryChannels().then(
-			() => 'resolved',
-			(error) => error.message,
-		);
-
-		await client.closeConnection();
-		client.wsConnection.connect = function () {
-			this.isConnecting = true;
-			return Promise.reject(new Error('connect failed'));
+		return {
+			client,
+			connectResolvers,
+			failNextConnect: () => {
+				failNext = true;
+			},
 		};
-		client.openConnection();
-
-		const outcome = await Promise.race([queryPromise, timeout(200)]);
-		expect(outcome).to.equal('connect failed');
-	});
+	};
 
 	it('should reject the pending wsPromise on disconnectUser', async () => {
 		const { client } = createClientWithHangingConnect();
@@ -405,13 +886,13 @@ describe('Client wsPromise close/reopen race', () => {
 		expect(client.wsPromise).to.be.null;
 	});
 
-	it('should not hand back a resolved wsPromise after recoverState settled an in-flight connect', async () => {
+	it('should not hand back a resolved wsPromise after a settle raced an in-flight connect', async () => {
 		const { client, connectResolvers } = createClientWithHangingConnect();
 
 		client.openConnection().catch(() => {});
-		// StableWSConnection.connect() fires _reconnect({ refreshToken: true }) without
-		// awaiting it on TOKEN_EXPIRED, so recoverState() runs while connect() is pending
-		await client.recoverState();
+		// StableWSConnection._reconnect() settles the connect promises on every successful
+		// reconnect, so this can land while the original connect() is still pending
+		client._settleConnectPromises();
 
 		await client.closeConnection();
 		const reopened = client.openConnection();
@@ -434,7 +915,6 @@ describe('Client wsPromise close/reopen race', () => {
 		const { client } = createClientWithHangingConnect();
 		delete client.user;
 		delete client._user;
-		delete client.userID;
 		client._setToken = () => Promise.resolve('token');
 
 		const connectA = client.connectUser({ id: 'A' }, 'token').then(
@@ -451,7 +931,7 @@ describe('Client wsPromise close/reopen race', () => {
 
 		// A's cleanup must not have disconnected the anonymous user that took over
 		expect(client.userID).to.equal(anonymousUserID);
-		expect(client.anonymous).to.be.true;
+		expect(client.user?.anon).to.be.true;
 	});
 
 	it('should not tear down a newer connectUser when an older one is rejected', async () => {
@@ -459,7 +939,6 @@ describe('Client wsPromise close/reopen race', () => {
 		// the helper pre-sets a user; start from a clean slate for connectUser()
 		delete client.user;
 		delete client._user;
-		delete client.userID;
 		// the helper never sets a real token, and connectUser() validates it
 		client._setToken = () => Promise.resolve('token');
 
@@ -487,7 +966,7 @@ describe('Client wsPromise close/reopen race', () => {
 describe('Client connectUser', () => {
 	let client;
 	beforeEach(() => {
-		client = new StreamChat('', { allowServerSideConnect: true });
+		client = new StreamChat('', { client: { allowServerSideConnect: true } });
 		client.openConnection = () => Promise.resolve('openConnection');
 		client._setToken = () => Promise.resolve('_setToken');
 	});
@@ -530,12 +1009,43 @@ describe('Client connectUser', () => {
 		expect(connection).to.equal('openConnection');
 	});
 
-	it('_getConnectionID, _hasConnectionID', () => {
+	it('drops the connection id when the socket goes down', () => {
+		const socket = new StableWSConnection({ wsConnection: client.wsConnection });
+		client.wsConnection.connection = socket;
+		socket._setHealth(true);
+		client.connectionIdManager.resolveConnectionId('ID');
+		expect(client.connectionIdManager.connectionId).to.equal('ID');
+
+		// The server keys watches by this id and rejects a request carrying one it has closed, so a
+		// value here always names a connection the server still holds.
+		socket._setHealth(false);
+		expect(client.wsConnection.isHealthy).to.be.false;
+		expect(client.connectionIdManager.connectionId).to.equal(undefined);
+	});
+
+	it('_getConnectionID, _hasConnectionID read through the connection id manager', () => {
 		expect(client._hasConnectionID()).to.be.false;
 		expect(client._getConnectionID()).to.equal(undefined);
-		client.wsConnection = { connectionID: 'ID' };
+
+		client.connectionIdManager.resolveConnectionId('ID');
+
 		expect(client._getConnectionID()).to.equal('ID');
 		expect(client._hasConnectionID()).to.be.true;
+	});
+
+	it('drops the connection id when the socket closes', async () => {
+		client.connectionIdManager.resolveConnectionId('ID');
+		const socket = new StableWSConnection({ wsConnection: client.wsConnection });
+		client.wsConnection.connection = socket;
+		// the socket was never opened, so disconnect() only has to run its teardown
+		socket.ws = undefined;
+
+		await client.closeConnection();
+
+		// the server tears the watch down with the connection - keeping the id would let the next
+		// request register a subscription against one that no longer exists
+		expect(client._getConnectionID()).to.equal(undefined);
+		expect(client._hasConnectionID()).to.be.false;
 	});
 });
 
@@ -547,7 +1057,6 @@ describe('Client disconnectUser', () => {
 		};
 		const { resolve, promise } = Promise.withResolvers();
 		client.wsConnection = { disconnect: () => promise };
-		client.wsFallback = null;
 		const disconnectPromise = client.disconnectUser();
 		expect(client.tokenManager.reset.called).to.be.false;
 		resolve();
@@ -565,6 +1074,58 @@ describe('Client disconnectUser', () => {
 		expect(client.tokenManager.reset.called).to.be.true;
 	});
 
+	describe('when a user connects before the close settles', () => {
+		let client;
+		let resolveClose;
+
+		beforeEach(() => {
+			client = new StreamChat('key', { client: { allowServerSideConnect: true } });
+			// the real connectUser, without a socket
+			client.openConnection = () => Promise.resolve();
+			const { resolve, promise } = Promise.withResolvers();
+			resolveClose = resolve;
+			client.wsConnection = { disconnect: () => promise };
+		});
+
+		it('keeps the next user token', async () => {
+			await client.connectUser({ id: 'a' }, async () => 'token-a');
+
+			const disconnectPromise = client.disconnectUser();
+			await client.connectUser({ id: 'b' }, async () => 'token-b');
+			resolveClose();
+			await disconnectPromise;
+
+			expect(client.tokenManager.token).to.equal('token-b');
+			expect(client.tokenManager.user.id).to.equal('b');
+		});
+
+		it('keeps the token of the same user reconnecting', async () => {
+			const user = { id: 'a' };
+			const tokenProvider = async () => 'token-a';
+			await client.connectUser(user, tokenProvider);
+
+			const disconnectPromise = client.disconnectUser();
+			await client.connectUser(user, tokenProvider);
+			resolveClose();
+			await disconnectPromise;
+
+			expect(client.tokenManager.token).to.equal('token-a');
+			expect(client.tokenManager.user).to.equal(user);
+		});
+
+		it('keeps an anonymous user anonymous', async () => {
+			await client.connectUser({ id: 'a' }, async () => 'token-a');
+
+			const disconnectPromise = client.disconnectUser();
+			await client.connectAnonymousUser();
+			resolveClose();
+			await disconnectPromise;
+
+			expect(client.anonymous).to.be.true;
+			expect(client.getAuthType()).to.equal('anonymous');
+		});
+	});
+
 	it('should clear upload manager records', async () => {
 		const client = new StreamChat('', '');
 		client.uploadManager.state.next(() => ({
@@ -577,7 +1138,6 @@ describe('Client disconnectUser', () => {
 		}));
 		const { resolve, promise } = Promise.withResolvers();
 		client.wsConnection = { disconnect: () => promise };
-		client.wsFallback = null;
 		const disconnectPromise = client.disconnectUser();
 		expect(Object.keys(client.uploadManager.uploads)).to.have.length(0);
 		resolve();
@@ -592,7 +1152,6 @@ describe('Client disconnectUser', () => {
 
 		const { resolve, promise } = Promise.withResolvers();
 		client.wsConnection = { disconnect: () => promise };
-		client.wsFallback = null;
 		const disconnectPromise = client.disconnectUser();
 
 		expect(client.messageComposerCache.peek('cid:a')).to.be.undefined;
@@ -610,163 +1169,22 @@ describe('Detect node environment', () => {
 	});
 
 	it('should warn when using connectUser on a node environment', async () => {
-		const _warn = console.warn;
-		let warning = '';
-		console.warn = (msg) => {
-			warning = msg;
-		};
+		const sinkSpy = vi.fn();
+		chatLoggerSystem.configureLoggers({
+			default: { sink: sinkSpy, level: 'trace' },
+		});
 
 		try {
 			await client.connectUser({ id: 'user' }, 'fake token');
 		} catch (e) {}
 
 		await client.disconnectUser();
-		expect(warning).to.equal(
-			'Please do not use connectUser server side. connectUser impacts MAU and concurrent connection usage and thus your bill. If you have a valid use-case, add "allowServerSideConnect: true" to the client options to disable this warning.',
+		expect(sinkSpy).toHaveBeenCalledWith(
+			'warn',
+			expect.stringContaining('Do not use connectUser server-side.'),
 		);
 
-		console.warn = _warn;
-	});
-
-	it('should not warn when adding the allowServerSideConnect flag', async () => {
-		const client2 = new StreamChat('', '', { allowServerSideConnect: true });
-
-		const _warn = console.warn;
-		let warning = '';
-		console.warn = (msg) => {
-			warning = msg;
-		};
-
-		try {
-			await client2.connectUser({ id: 'user' }, 'fake token');
-		} catch (e) {}
-
-		await client2.disconnect();
-		expect(warning).to.equal('');
-
-		console.warn = _warn;
-	});
-});
-
-describe('Client deleteUsers', () => {
-	it('should allow completely optional options', async () => {
-		const client = await getClientWithUser();
-
-		client.post = () => Promise.resolve();
-
-		await expect(client.deleteUsers(['_'])).resolves.toEqual();
-	});
-
-	it('delete types - options.conversations', async () => {
-		const client = await getClientWithUser();
-
-		client.post = () => Promise.resolve();
-
-		await expect(client.deleteUsers(['_'], { conversations: 'hard' })).resolves.toEqual();
-		await expect(client.deleteUsers(['_'], { conversations: 'soft' })).resolves.toEqual();
-		await expect(
-			client.deleteUsers(['_'], { conversations: 'pruning' }),
-		).rejects.toThrow();
-		await expect(client.deleteUsers(['_'], { conversations: '' })).rejects.toThrow();
-	});
-
-	it('delete types - options.messages', async () => {
-		const client = await getClientWithUser();
-
-		client.post = () => Promise.resolve();
-
-		await expect(client.deleteUsers(['_'], { messages: 'hard' })).resolves.toEqual();
-		await expect(client.deleteUsers(['_'], { messages: 'soft' })).resolves.toEqual();
-		await expect(client.deleteUsers(['_'], { messages: 'pruning' })).resolves.toEqual();
-		await expect(client.deleteUsers(['_'], { messages: '' })).rejects.toThrow();
-	});
-
-	it('delete types - options.user', async () => {
-		const client = await getClientWithUser();
-
-		client.post = () => Promise.resolve();
-
-		await expect(client.deleteUsers(['_'], { user: 'hard' })).resolves.toEqual();
-		await expect(client.deleteUsers(['_'], { user: 'soft' })).resolves.toEqual();
-		await expect(client.deleteUsers(['_'], { user: 'pruning' })).resolves.toEqual();
-		await expect(client.deleteUsers(['_'], { user: '' })).rejects.toThrow();
-	});
-});
-
-describe('updateMessage should maintain data integrity', () => {
-	let client;
-
-	beforeEach(async () => {
-		client = await getClientWithUser();
-	});
-
-	it('should convert mentioned_users from array of user objects to array of userIds', async () => {
-		client.post = (url, config) => {
-			expect(typeof config.message.mentioned_users[0]).to.be.equal('string');
-			expect(config.message.mentioned_users[0]).to.be.equal('uthred');
-		};
-		await client.updateMessage(
-			generateMsg({
-				mentioned_users: [
-					{
-						id: 'uthred',
-						name: 'Uthred Of Bebbanburg',
-					},
-				],
-			}),
-		);
-
-		await client.updateMessage(
-			generateMsg({
-				mentioned_users: ['uthred'],
-			}),
-		);
-	});
-
-	it('should allow empty mentioned_users', async () => {
-		client.post = (url, config) => {
-			expect(config.message.mentioned_users[0]).to.be.equal(undefined);
-		};
-
-		await client.updateMessage(
-			generateMsg({
-				mentioned_users: [],
-			}),
-		);
-
-		client.post = (url, config) => {
-			expect(config.message.mentioned_users).to.be.equal(undefined);
-		};
-
-		await client.updateMessage(
-			generateMsg({
-				text: 'test message',
-				mentioned_users: undefined,
-			}),
-		);
-	});
-
-	it('should remove reserved and volatile fields before running the update', async () => {
-		const postSpy = sinon.stub(client, 'post');
-		const updatedMessage = generateMsg({
-			text: 'test message',
-			pinned_at: new Date().toISOString(),
-			mentioned_users: undefined,
-		});
-
-		await client.updateMessage(updatedMessage);
-
-		const messageInQuery = {
-			attachments: updatedMessage.attachments,
-			mentioned_users: updatedMessage.mentioned_users,
-			reaction_scores: updatedMessage.reaction_scores,
-			silent: updatedMessage.silent,
-			status: updatedMessage.status,
-			text: updatedMessage.text,
-		};
-
-		expect(postSpy.callCount).to.equal(1);
-		expect(postSpy.firstCall.args[1].message).to.toMatchObject(messageInQuery);
+		chatLoggerSystem.restoreDefaults();
 	});
 });
 
@@ -774,33 +1192,41 @@ describe('message update', () => {
 	let client;
 	let loggerSpy;
 	let queueTaskSpy;
-	let _updateMessageSpy;
+	let updateMessageSpy;
 
 	beforeEach(async () => {
 		client = await getClientWithUser();
 		const offlineDb = new MockOfflineDB({ client });
 
 		client.setOfflineDBApi(offlineDb);
-		await client.offlineDb.init(client.userID);
+		await client.offlineDb.init(client.userId);
 
-		loggerSpy = vi.spyOn(client, 'logger').mockImplementation(vi.fn());
+		loggerSpy = vi.fn();
+		chatLoggerSystem.configureLoggers({
+			default: { sink: loggerSpy, level: 'trace' },
+		});
 		queueTaskSpy = vi.spyOn(client.offlineDb, 'queueTask').mockResolvedValue({});
-		_updateMessageSpy = vi.spyOn(client, '_updateMessage').mockResolvedValue({});
+		updateMessageSpy = vi.spyOn(client, 'updateMessage').mockResolvedValue({});
 	});
 
 	afterEach(() => {
+		chatLoggerSystem.restoreDefaults();
 		vi.resetAllMocks();
 	});
 
-	describe('_updateMessage', () => {
-		// Sanitization lives here rather than in `updateMessage` because this is where every path
-		// converges - including the offline replay of a queued `update-message` task, and the
-		// replay of a `send-message` task that a failed edit was merged into.
-		let postSpy;
+	describe('updateMessage (the HTTP request)', () => {
+		// Sanitization lives here because this is where every path converges - the full edit, the
+		// offline replay of a queued `update-message` task, and the replay of a `send-message` task
+		// that a failed edit was merged into.
+		let sendRequestSpy;
+
+		const sentMessage = () => sendRequestSpy.mock.calls[0][4].message;
 
 		beforeEach(() => {
-			_updateMessageSpy.mockRestore();
-			postSpy = vi.spyOn(client, 'post').mockResolvedValue({});
+			updateMessageSpy.mockRestore();
+			sendRequestSpy = vi
+				.spyOn(client.api, 'sendRequest')
+				.mockResolvedValue({ metadata: {} });
 		});
 
 		it('strips composer-internal localMetadata from outgoing attachments', async () => {
@@ -815,16 +1241,15 @@ describe('message update', () => {
 				],
 			});
 
-			await client._updateMessage(message);
+			await client.updateMessage({ id: message.id }, { message });
 
-			const sent = postSpy.mock.calls[0][1].message;
+			const sent = sentMessage();
 			expect(sent.attachments).toHaveLength(1);
 			expect(sent.attachments[0]).not.toHaveProperty('localMetadata');
 			expect(sent.attachments[0].image_url).toBe('https://example.com/image.jpg');
 		});
 
 		it('drops an attachment whose upload never resolved, and warns', async () => {
-			vi.spyOn(console, 'warn').mockImplementation(() => {});
 			const message = generateMsg({
 				id: 'msg-123',
 				attachments: [
@@ -836,26 +1261,50 @@ describe('message update', () => {
 				],
 			});
 
-			await client._updateMessage(message);
+			await client.updateMessage({ id: message.id }, { message });
 
-			expect(postSpy.mock.calls[0][1].message.attachments).toEqual([]);
+			expect(sentMessage().attachments).toEqual([]);
 			expect(loggerSpy).toHaveBeenCalledWith(
 				'warn',
 				expect.stringContaining('Dropped 1 attachment(s)'),
 				expect.objectContaining({ attachments: expect.any(Array) }),
 			);
 		});
+
+		it('sends the request without queueing it, even with an offline DB', async () => {
+			const message = generateMsg({ id: 'msg-123', cid: 'messaging:channel-123' });
+
+			await client.updateMessage({ id: message.id }, { message });
+
+			expect(queueTaskSpy).not.toHaveBeenCalled();
+			expect(sendRequestSpy).toHaveBeenCalledTimes(1);
+		});
 	});
 
-	describe('updateMessage', () => {
-		it('queues replayable updates through offlineDb', async () => {
-			const message = generateMsg({
-				id: 'msg-123',
-				cid: 'messaging:channel-123',
-				text: 'edited',
+	describe('the full edit (messageOperations.update) queues through the offline DB', () => {
+		const edit = (overrides) =>
+			utils.formatMessage(
+				generateMsg({
+					id: 'msg-123',
+					cid: 'messaging:channel-123',
+					status: 'received',
+					text: 'edited',
+					...overrides,
+				}),
+			);
+		const update = (localMessage, options) =>
+			client.channel('messaging', 'channel-123').messageOperations.update({
+				localMessage,
+				options,
 			});
+		const pathParams = { id: 'msg-123' };
+		const queuedRequest = (extra = {}) => ({
+			message: expect.objectContaining({ id: 'msg-123', text: 'edited' }),
+			...extra,
+		});
 
-			await client.updateMessage(message, { id: 'user-123' }, { skip_enrich_url: true });
+		it('queues the edit, keyed by the channel its cid names', async () => {
+			await update(edit(), { skip_enrich_url: true });
 
 			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
 			expect(queueTaskSpy).toHaveBeenCalledWith({
@@ -863,343 +1312,131 @@ describe('message update', () => {
 					channelId: 'channel-123',
 					channelType: 'messaging',
 					messageId: 'msg-123',
-					payload: [message, { id: 'user-123' }, { skip_enrich_url: true }],
+					payload: [pathParams, queuedRequest({ skip_enrich_url: true })],
 					type: 'update-message',
 				},
 			});
-			expect(_updateMessageSpy).not.toHaveBeenCalled();
+			expect(updateMessageSpy).not.toHaveBeenCalled();
 		});
 
-		it('queues replayable updates without channel data if cid is missing or invalid', async () => {
-			const message = generateMsg({
-				id: 'msg-123',
-				cid: 'invalid-cid',
-				text: 'edited',
-			});
-
-			await client.updateMessage(message);
+		it('queues it without channel data if the cid is missing or invalid', async () => {
+			await update(edit({ cid: 'invalid-cid' }));
 
 			expect(queueTaskSpy).toHaveBeenCalledWith({
 				task: {
 					messageId: 'msg-123',
-					payload: [message, undefined, undefined],
+					payload: [pathParams, queuedRequest()],
 					type: 'update-message',
 				},
 			});
 		});
 
-		it('falls back to _updateMessage if offlineDb is not set', async () => {
-			const message = generateMsg({
-				id: 'msg-123',
-				text: 'edited',
-			});
-
+		it('sends the request directly if offlineDb is not set', async () => {
 			client.offlineDb = undefined;
 
-			await client.updateMessage(message, 'user-123', { skip_enrich_url: true });
+			await update(edit(), { skip_enrich_url: true });
 
-			expect(_updateMessageSpy).toHaveBeenCalledTimes(1);
-			expect(_updateMessageSpy).toHaveBeenCalledWith(message, 'user-123', {
-				skip_enrich_url: true,
-			});
+			expect(updateMessageSpy).toHaveBeenCalledTimes(1);
+			expect(updateMessageSpy).toHaveBeenCalledWith(
+				pathParams,
+				queuedRequest({ skip_enrich_url: true }),
+			);
 		});
 
-		it('routes updates with local attachment metadata through offlineDb queue handling', async () => {
-			const message = generateMsg({
-				id: 'msg-123',
-				attachments: [
-					{
-						type: 'image',
-						image_url: 'https://example.com/image.jpg',
-						localMetadata: {
-							file: { uri: 'file://test.jpg' },
-							id: 'local-1',
-							uploadState: 'pending',
+		it('routes an edit whose attachments carry local metadata through the queue', async () => {
+			await update(
+				edit({
+					attachments: [
+						{
+							type: 'image',
+							image_url: 'https://example.com/image.jpg',
+							localMetadata: { id: 'local-1', uploadState: 'finished' },
 						},
-					},
-				],
-			});
-
-			await client.updateMessage(message);
+					],
+				}),
+			);
 
 			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
-			expect(queueTaskSpy).toHaveBeenCalledWith({
-				task: {
-					messageId: 'msg-123',
-					payload: [message, undefined, undefined],
-					type: 'update-message',
-				},
-			});
-			expect(_updateMessageSpy).not.toHaveBeenCalled();
+			expect(updateMessageSpy).not.toHaveBeenCalled();
 		});
 
-		it('routes updates with originalFile attachments through offlineDb queue handling', async () => {
-			const message = generateMsg({
-				id: 'msg-123',
-				attachments: [
-					{
-						type: 'file',
-						asset_url: 'https://example.com/test.pdf',
-						originalFile: { uri: 'content://test.pdf' },
-					},
-				],
-			});
-
-			await client.updateMessage(message);
+		it('routes an edit with originalFile attachments through the queue', async () => {
+			await update(
+				edit({
+					attachments: [
+						{
+							type: 'file',
+							asset_url: 'https://example.com/test.pdf',
+							originalFile: { uri: 'content://test.pdf' },
+						},
+					],
+				}),
+			);
 
 			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
-			expect(queueTaskSpy).toHaveBeenCalledWith({
-				task: {
-					messageId: 'msg-123',
-					payload: [message, undefined, undefined],
-					type: 'update-message',
-				},
-			});
-			expect(_updateMessageSpy).not.toHaveBeenCalled();
+			expect(updateMessageSpy).not.toHaveBeenCalled();
 		});
 
-		it('logs and falls back to _updateMessage if offline queueing throws', async () => {
-			const message = generateMsg({
-				id: 'msg-123',
-				text: 'edited',
-			});
+		it('logs and sends the request directly if offline queueing throws', async () => {
 			queueTaskSpy.mockRejectedValue(new Error('Offline failure'));
 
-			await client.updateMessage(message);
+			await update(edit());
 
-			expect(loggerSpy).toHaveBeenCalledTimes(1);
-			expect(_updateMessageSpy).toHaveBeenCalledTimes(1);
-			expect(_updateMessageSpy).toHaveBeenCalledWith(message, undefined, undefined);
+			expect(loggerSpy).toHaveBeenCalledWith(
+				'error',
+				expect.stringContaining('Updating the message failed.'),
+				expect.anything(),
+			);
+			expect(updateMessageSpy).toHaveBeenCalledTimes(1);
+			expect(updateMessageSpy).toHaveBeenCalledWith(pathParams, queuedRequest());
 		});
 
-		it('logs and falls back to _updateMessage when queueTask rethrows for failed offline edits', async () => {
-			const failedEditedMessage = generateMsg({
-				id: 'msg-123',
-				status: 'failed',
-				text: 'edited',
-				message_text_updated_at: '2026-04-01T20:48:43.886269Z',
-			});
-
+		it('reconciles the direct response when queueTask rethrows for a failed offline edit', async () => {
 			client.wsConnection = { isHealthy: false };
 			queueTaskSpy.mockRejectedValue(new Error('Offline failure'));
-			_updateMessageSpy.mockResolvedValue({ message: failedEditedMessage });
+			updateMessageSpy.mockResolvedValue({
+				message: generateMsg({ id: 'msg-123', text: 'from server' }),
+			});
+			const channel = client.channel('messaging', 'channel-123');
 
-			const response = await client.updateMessage(failedEditedMessage);
+			await update(edit());
 
 			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
-			expect(loggerSpy).toHaveBeenCalledTimes(1);
-			expect(_updateMessageSpy).toHaveBeenCalledTimes(1);
-			expect(_updateMessageSpy).toHaveBeenCalledWith(
-				failedEditedMessage,
-				undefined,
-				undefined,
-			);
-			expect(response.message.text).toBe('edited');
-			expect(response.message.status).toBe('failed');
+			expect(updateMessageSpy).toHaveBeenCalledTimes(1);
+			expect(channel.messagePaginator.getItem('msg-123')?.text).toBe('from server');
 		});
 	});
 });
-
-describe('Client search', async () => {
-	const client = await getClientWithUser();
-
-	it('search with sorting by defined field', async () => {
-		client.get = (url, config) => {
-			expect(config.payload.sort).to.be.eql([{ field: 'updated_at', direction: -1 }]);
-		};
-		await client.search({ cid: 'messaging:my-cid' }, 'query', {
-			sort: [{ updated_at: -1 }],
-		});
-	});
-	it('search with sorting by custom field', async () => {
-		client.get = (url, config) => {
-			expect(config.payload.sort).to.be.eql([{ field: 'custom_field', direction: -1 }]);
-		};
-		await client.search({ cid: 'messaging:my-cid' }, 'query', {
-			sort: [{ custom_field: -1 }],
-		});
-	});
-	it('sorting and offset works', async () => {
-		await expect(
-			client.search({ cid: 'messaging:my-cid' }, 'query', {
-				offset: 1,
-				sort: [{ custom_field: -1 }],
-			}),
-		).resolves.toEqual();
-	});
-	it('next and offset fails', async () => {
-		await expect(
-			client.search({ cid: 'messaging:my-cid' }, 'query', {
-				offset: 1,
-				next: 'next',
-			}),
-		).rejects.toThrow(Error);
-	});
-});
-
-describe('Client setLocalDevice', async () => {
-	const device = { id: 'id1', push_provider: 'apn' };
-	const client = new StreamChat('', '', { device });
-
-	it('should update device info before ws open', async () => {
-		expect(client.options.device).to.deep.equal(device);
-		const newDevice = { id: 'id2', push_provider: 'firebase' };
-		client.setLocalDevice(newDevice);
-		expect(client.options.device).to.deep.equal(newDevice);
-	});
-
-	it('should throw error when updating device with ws open', async () => {
-		client.wsConnection = new StableWSConnection({});
-		client.wsConnection.isHealthy = true;
-		client.wsConnection.connectionID = 'ID';
-
-		expect(() =>
-			client.setLocalDevice({ id: 'id3', push_provider: 'firebase' }),
-		).to.throw();
-	});
-});
-
-describe('Client WSFallback', () => {
-	let client;
-	const userToken =
-		'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYW1pbiJ9.1R88K_f1CC2yrR6j1_OzMEbasfS_dxRSNbundEDBlJI';
-	beforeEach(() => {
-		sinon.restore();
-		client = new StreamChat('', { allowServerSideConnect: true, enableWSFallback: true });
-		client.defaultWSTimeout = 500;
-		client.defaultWSTimeoutWithFallback = 500;
-	});
-
-	it('_getConnectionID, _hasConnectionID', () => {
-		expect(client._hasConnectionID()).to.be.false;
-		expect(client._getConnectionID()).to.equal(undefined);
-		client.wsFallback = { connectionID: 'ID' };
-		expect(client._getConnectionID()).to.equal('ID');
-		expect(client._hasConnectionID()).to.be.true;
-	});
-
-	it('should try wsFallback if WebSocket fails', async () => {
-		const eventDate = new Date(Date.UTC(2009, 1, 3, 23, 3, 3));
-		const stub = sinon
-			.stub()
-			.onCall(0)
-			.resolves({ event: { connection_id: 'new_id', received_at: eventDate } });
-
-		client.doAxiosRequest = stub;
-		client.wsBaseURL = 'ws://getstream.io';
-		const health = await client.connectUser({ id: 'amin' }, userToken);
-		expect(health).to.be.eql({ connection_id: 'new_id', received_at: eventDate });
-		expect(client.wsFallback.state).to.be.eql(ConnectionState.Connected);
-		expect(client.wsFallback.connectionID).to.be.eql('new_id');
-		expect(client.wsFallback.consecutiveFailures).to.be.eql(0);
-
-		expect(client.wsConnection.isHealthy).to.be.false;
-		expect(client.wsConnection.isDisconnected).to.be.true;
-		expect(client.wsConnection.connectionID).to.be.undefined;
-		expect(client.wsConnection.totalFailures).to.be.greaterThan(1);
-		await client.disconnectUser();
-		expect(client.wsFallback.state).to.be.eql(ConnectionState.Disconnected);
-		stub.reset();
-	});
-
-	it('should fire transport.changed and health.check event', async () => {
-		const eventDate = new Date(Date.UTC(2009, 1, 3, 23, 3, 3));
-		sinon.spy(client, 'dispatchEvent');
-		client.doAxiosRequest = () => ({
-			event: { type: 'health.check', connection_id: 'new_id', received_at: eventDate },
-		});
-		client.wsBaseURL = 'ws://getstream.io';
-		const health = await client.connectUser({ id: 'amin' }, userToken);
-		await client.disconnectUser();
-		expect(health).to.be.eql({
-			type: 'health.check',
-			connection_id: 'new_id',
-			received_at: eventDate,
-		});
-
-		expect(
-			client.dispatchEvent.calledWithMatch({
-				type: 'transport.changed',
-				mode: 'longpoll',
-			}),
-		).to.be.true;
-		expect(
-			client.dispatchEvent.calledWithMatch({
-				type: 'health.check',
-				connection_id: 'new_id',
-				received_at: eventDate,
-			}),
-		).to.be.true;
-	});
-
-	it('should ignore fallback if flag is false', async () => {
-		client.wsBaseURL = 'ws://getstream.io';
-		client.options.enableWSFallback = false;
-
-		await expect(client.connectUser({ id: 'amin' }, userToken)).rejects.toThrow(
-			/"initial WS connection could not be established","isWSFailure":true/,
-		);
-
-		expect(client.wsFallback).to.be.undefined;
-	});
-
-	// FIXME: this test is wrong and all kinds of flaky
-	it.skip('should ignore fallback if browser is offline', async () => {
-		client.wsBaseURL = 'ws://getstream.io';
-		client.options.enableWSFallback = true;
-		sinon.stub(utils, 'isOnline').returns(false);
-
-		await expect(client.connectUser({ id: 'amin' }, userToken)).rejects.toThrow(
-			/"initial WS connection could not be established","isWSFailure":true/,
-		);
-
-		expect(client.wsFallback).to.be.undefined;
-	});
-
-	it('should reuse the fallback if already created', async () => {
-		client.options.enableWSFallback = true;
-		const fallback = {
-			isHealthy: () => false,
-			connect: sinon.stub().returns({ connection_id: 'id' }),
-		};
-		client.wsFallback = fallback;
-		sinon.stub(utils, 'isOnline').returns(false);
-
-		const health = await client.connectUser({ id: 'amin' }, userToken);
-
-		expect(health).to.be.eql({ connection_id: 'id' });
-		expect(client.wsFallback).to.be.equal(fallback);
-	});
-});
-
-// deterministic ids and timestamps, so the same message N is identical across pages
-const numberedMessages = (from, to) =>
-	Array.from({ length: to - from + 1 }, (_, i) =>
-		generateMsg({
-			id: `message-${from + i}`,
-			text: `Message ${from + i}`,
-			date: new Date(Date.UTC(2026, 0, 1, 0, from + i)).toISOString(),
-		}),
-	);
 
 describe('StreamChat.queryChannels', async () => {
-	it('should not hydrate activeChannels and channel configs when disableCache is true', async () => {
-		const client = await getClientWithUser();
-		client._cacheEnabled = () => false;
-		const mockedChannelsQueryResponse = Array.from({ length: 10 }, () => ({
+	/**
+	 * A queryChannels response entry for a DISTINCT channel with messages carrying distinct,
+	 * deterministic timestamps.
+	 *
+	 * Both matter for the paginator assertions: spreading `mockChannelQueryResponse` repeatedly yields
+	 * N entries sharing one cid, so the same channel gets re-seeded N times with disjoint "newest"
+	 * pages — and because `generateMsg()` stamps `created_at` with `new Date()`, all those messages land
+	 * in the same millisecond, leaving the sort order to the random-uuid tiebreaker. A later page whose
+	 * head then happens to sort above the head interval force-merges into it (a first-page seed marks
+	 * the interval `isHead`), welding every page together, which made the item-count assertions fail in
+	 * roughly 5% of runs.
+	 */
+	const generateQueriedChannel = ({ index, messageCount }) => {
+		const id = `queried-channel-${index}`;
+		return {
 			...mockChannelQueryResponse,
-			messages: Array.from(
-				{ length: DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE },
-				generateMsg,
+			channel: {
+				...mockChannelQueryResponse.channel,
+				id,
+				cid: `messaging:${id}`,
+			},
+			messages: Array.from({ length: messageCount }, (_, messageIndex) =>
+				generateMsg({
+					date: new Date(Date.UTC(2024, 0, 1, 0, 0, messageIndex)),
+				}),
 			),
-		}));
-		const mock = sinon.mock(client);
-		mock.expects('post').returns(Promise.resolve(mockedChannelsQueryResponse));
-		await client.queryChannels();
-		expect(Object.keys(client.activeChannels).length).to.be.equal(0);
-		expect(Object.keys(client.configs).length).to.be.equal(0);
-		mock.restore();
-	});
+		};
+	};
 
 	it('should return hydrated channels as Channel instances from queryChannels', async () => {
 		const client = await getClientWithUser();
@@ -1210,347 +1447,676 @@ describe('StreamChat.queryChannels', async () => {
 				generateMsg,
 			),
 		}));
-		const postStub = sinon
-			.stub(client, 'post')
-			.returns(Promise.resolve({ channels: mockedChannelsQueryResponse }));
-		const queryChannelsResponse = await client.queryChannels();
+		const stub = sinon
+			.stub(client, 'queryChannels')
+			.resolves({ channels: mockedChannelsQueryResponse });
+		const queryChannelsResponse = await client.queryChannelsAndHydrate();
 		expect(queryChannelsResponse.length).to.be.equal(mockedChannelsQueryResponse.length);
 		queryChannelsResponse.forEach((item) => {
 			expect(item).to.be.instanceOf(Channel);
 		});
-		postStub.restore();
+		stub.restore();
 	});
 
-	it('should return the raw channels response from queryChannelsRequest', async () => {
+	it('should sync channel data-backed stores when hydrating channels from queryChannels', async () => {
 		const client = await getClientWithUser();
-		const mockedChannelsQueryResponse = Array.from({ length: 10 }, () => ({
-			...mockChannelQueryResponse,
-			messages: Array.from(
-				{ length: DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE },
-				generateMsg,
-			),
-		}));
-		const postStub = sinon
-			.stub(client, 'post')
-			.returns(Promise.resolve({ channels: mockedChannelsQueryResponse }));
-		const queryChannelsResponse = await client.queryChannelsRequest();
-		expect(queryChannelsResponse.length).to.be.equal(mockedChannelsQueryResponse.length);
-		expect(queryChannelsResponse).to.deep.equal(mockedChannelsQueryResponse);
-		postStub.restore();
+		const mockedChannelsQueryResponse = [
+			{
+				...mockChannelQueryResponse,
+				channel: {
+					...mockChannelQueryResponse.channel,
+					member_count: 7,
+					own_capabilities: ['send-message', 'read-events'],
+				},
+				messages: Array.from(
+					{ length: DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE },
+					generateMsg,
+				),
+			},
+		];
+		const stub = sinon
+			.stub(client, 'queryChannels')
+			.resolves({ channels: mockedChannelsQueryResponse });
+
+		const [channel] = await client.queryChannelsAndHydrate();
+
+		expect(channel.state.member_count).to.equal(7);
+		expect(channel.state.getLatestValue()).to.deep.include({
+			ownCapabilities: ['send-message', 'read-events'],
+		});
+
+		channel.data = {
+			...channel.data,
+			member_count: 8,
+			own_capabilities: ['send-message'],
+		};
+
+		expect(channel.state.member_count).to.equal(8);
+		expect(channel.state.getLatestValue()).to.deep.include({
+			ownCapabilities: ['send-message'],
+		});
+
+		stub.restore();
 	});
 
-	it('should not update pagination for queried message set', async () => {
+	it('does not weld a jumped/older window into the newest page when re-hydrating a shared channel on re-query', async () => {
 		const client = await getClientWithUser();
-		const mockedChannelsQueryResponse = Array.from({ length: 10 }, () => ({
-			...mockChannelQueryResponse,
-			messages: Array.from(
-				{ length: DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE },
-				generateMsg,
-			),
-		}));
-		const mock = sinon.mock(client);
-		mock.expects('post').returns(Promise.resolve(mockedChannelsQueryResponse));
-		await client.queryChannels();
-		Object.values(client.activeChannels).forEach((channel) => {
-			expect(channel.state.messageSets.length).to.be.equal(1);
-			expect(channel.state.messageSets[0].pagination).to.eql({
-				hasNext: true,
-				hasPrev: true,
-			});
+		const newest = [
+			generateMsg({
+				id: 'm5',
+				created_at: convertDateToTimestamp('2023-11-14T12:00:05.000Z'),
+			}),
+			generateMsg({
+				id: 'm6',
+				created_at: convertDateToTimestamp('2023-11-14T12:00:06.000Z'),
+			}),
+			generateMsg({
+				id: 'm7',
+				created_at: convertDateToTimestamp('2023-11-14T12:00:07.000Z'),
+			}),
+		];
+		const stub = sinon.stub(client, 'queryChannels').resolves({
+			channels: [{ ...mockChannelQueryResponse, messages: newest }],
 		});
-		mock.restore();
+
+		// Initial query seeds the (cold) paginator with the newest window. message_limit === page
+		// length so the seed is NOT flagged as the complete set (hasMoreTail stays true: older exist,
+		// so an older jumped window stays a separate interval instead of merging at the tail edge).
+		const [channel] = await client.queryChannelsAndHydrate({ message_limit: 3 });
+
+		// Simulate the user jumping to an OLDER window, disjoint from the newest, which becomes the
+		// active (visible) interval while the newest window stays loaded as a separate interval.
+		const older = [
+			channel.state.formatMessage(
+				generateMsg({
+					id: 'm1',
+					created_at: convertDateToTimestamp('2023-11-14T12:00:01.000Z'),
+				}),
+			),
+			channel.state.formatMessage(
+				generateMsg({
+					id: 'm2',
+					created_at: convertDateToTimestamp('2023-11-14T12:00:02.000Z'),
+				}),
+			),
+		];
+		channel.messagePaginator.ingestPage({
+			page: older,
+			isHead: false,
+			isTail: false,
+			setActive: true,
+		});
+		const activeBefore = channel.messagePaginator.state
+			.getLatestValue()
+			.items?.map((m) => m.id);
+		expect(activeBefore).to.eql(['m1', 'm2']);
+
+		// A channel-list re-query on reconnect re-hydrates the SAME channel instance with the newest
+		// window (disjoint from the jumped one). Nobody reads the channel, so the newest window is
+		// shown; it must NOT be welded to the jumped one (which would drop m3/m4 in the middle).
+		await client.queryChannelsAndHydrate({ message_limit: 3 });
+
+		const activeAfter = channel.messagePaginator.state
+			.getLatestValue()
+			.items?.map((m) => m.id);
+		expect(activeAfter).to.eql(['m5', 'm6', 'm7']);
+		await channel.messagePaginator.jumpToMessage('m1');
+		expect(channel.messagePaginator.items?.map((m) => m.id)).to.eql(['m1', 'm2']);
+
+		stub.restore();
 	});
 
-	it('should update pagination for queried message set to prevent more pagination', async () => {
+	it('reconciles a trailing offline hard-delete on channel-list re-hydrate (cold-boot path)', async () => {
 		const client = await getClientWithUser();
-		const mockedChannelQueryResponse = Array.from({ length: 10 }, () => ({
-			...mockChannelQueryResponse,
-			messages: Array.from(
-				{ length: DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE - 1 },
-				generateMsg,
+		const full = [
+			generateMsg({
+				id: 'm5',
+				created_at: convertDateToTimestamp('2023-11-14T12:00:05.000Z'),
+			}),
+			generateMsg({
+				id: 'm6',
+				created_at: convertDateToTimestamp('2023-11-14T12:00:06.000Z'),
+			}),
+			generateMsg({
+				id: 'm7',
+				created_at: convertDateToTimestamp('2023-11-14T12:00:07.000Z'),
+			}),
+		];
+		const stub = sinon.stub(client, 'queryChannels').resolves({
+			channels: [{ ...mockChannelQueryResponse, messages: full }],
+		});
+
+		// First hydrate seeds the (cold) paginator with m5,m6,m7 — m7 is the newest / bottom-most.
+		const [channel] = await client.queryChannelsAndHydrate({ message_limit: 3 });
+		expect(channel.messagePaginator.getItem('m7')).to.not.be.undefined;
+
+		// While the app was closed, m7 (the latest message) was hard-deleted. The next channel-list
+		// query returns the window WITHOUT it. m7 is above the newest returned message (m6), so only
+		// the pre-fetch head snapshot lets the reconcile prune it — the cold-boot path must supply it.
+		stub.resolves({
+			channels: [{ ...mockChannelQueryResponse, messages: [full[0], full[1]] }],
+		});
+		await client.queryChannelsAndHydrate({ message_limit: 3 });
+
+		expect(channel.messagePaginator.getItem('m7')).to.be.undefined;
+
+		stub.restore();
+	});
+
+	it('keeps a message unsent when the channel-list query went out and confirmed during it', async () => {
+		const client = await getClientWithUser();
+		const at = (second) => convertDateToTimestamp(`2023-11-14T12:00:0${second}.000Z`);
+		const loaded = [5, 6].map((second) =>
+			generateMsg({ id: `m${second}`, created_at: at(second) }),
+		);
+		const stub = sinon.stub(client, 'queryChannels').resolves({
+			channels: [{ ...mockChannelQueryResponse, messages: loaded }],
+		});
+		const [channel] = await client.queryChannelsAndHydrate({ message_limit: 3 });
+		const { cid } = channel;
+		channel.messagePaginator.ingestItem(
+			channel.state.formatMessage(
+				generateMsg({ cid, id: 'mine', created_at: at(7), status: 'failed' }),
 			),
-		}));
-		const mock = sinon.mock(client);
-		mock.expects('post').returns(Promise.resolve(mockedChannelQueryResponse));
-		await client.queryChannels();
-		Object.values(client.activeChannels).forEach((channel) => {
-			expect(channel.state.messageSets.length).to.be.equal(1);
-			expect(channel.state.messageSets[0].pagination).to.eql({
-				hasNext: true,
-				hasPrev: false,
-			});
+		);
+		stub.callsFake(async () => {
+			// resent while the query runs, confirmed after the server produced the page
+			channel.messagePaginator.ingestItem(
+				channel.state.formatMessage(generateMsg({ cid, id: 'mine', created_at: at(8) })),
+			);
+			return { channels: [{ ...mockChannelQueryResponse, messages: loaded }] };
 		});
-		mock.restore();
+
+		await client.queryChannelsAndHydrate({ message_limit: 3 });
+
+		expect(channel.messagePaginator.getItem('mine')?.status).to.equal('received');
+
+		stub.restore();
 	});
 
-	describe('message_limit: 0', () => {
-		it('keeps hasPrev of a channel that already has messages loaded', async () => {
-			const client = await getClientWithUser();
-			const postStub = sinon.stub(client, 'post');
-			postStub.resolves({
-				channels: [{ ...mockChannelQueryResponse, messages: numberedMessages(36, 60) }],
+	describe('a list queried without messages (message_limit: 0)', () => {
+		const at = (minute) =>
+			convertDateToTimestamp(new Date(Date.UTC(2020, 0, 1, 0, minute, 0)));
+		const message = (cid, id, minute) => generateMsg({ cid, id, created_at: at(minute) });
+
+		// the channel's latest message is m30, but the list asked for none
+		const hydrateWithoutMessages = async (client) => {
+			const stub = sinon.stub(client, 'queryChannels').resolves({
+				channels: [
+					{
+						...mockChannelQueryResponse,
+						channel: { ...mockChannelQueryResponse.channel, last_message_at: at(30) },
+						messages: [],
+					},
+				],
 			});
-			const [channel] = await client.queryChannels({}, {}, { message_limit: 25 });
-			expect(channel.state.messagePagination.hasPrev).toBe(true);
+			const [channel] = await client.queryChannelsAndHydrate({ message_limit: 0 });
+			stub.restore();
+			return channel;
+		};
 
-			postStub.resolves({ channels: [{ ...mockChannelQueryResponse, messages: [] }] });
-			await client.queryChannels({}, {}, { message_limit: 0 });
+		it('leaves the message list not loaded rather than empty', async () => {
+			const client = await getClientWithUser();
+			const channel = await hydrateWithoutMessages(client);
 
-			expect(channel.state.messages.map((m) => m.text)).toEqual(
-				numberedMessages(36, 60).map((m) => m.text),
-			);
-			expect(channel.state.messagePagination.hasPrev).toBe(true);
+			expect(channel.messagePaginator.items).toBeUndefined();
+			expect(channel.messagePaginator.hasMoreTail).toBe(true);
 		});
 
-		it('keeps hasPrev false of a channel that is fully loaded', async () => {
+		it('loads the messages older than a live message', async () => {
 			const client = await getClientWithUser();
-			const postStub = sinon.stub(client, 'post');
-			postStub.resolves({
-				channels: [{ ...mockChannelQueryResponse, messages: numberedMessages(1, 10) }],
-			});
-			const [channel] = await client.queryChannels({}, {}, { message_limit: 25 });
-			expect(channel.state.messagePagination.hasPrev).toBe(false);
-
-			postStub.resolves({ channels: [{ ...mockChannelQueryResponse, messages: [] }] });
-			await client.queryChannels({}, {}, { message_limit: 0 });
-
-			expect(channel.state.messagePagination.hasPrev).toBe(false);
-		});
-
-		it('allows loading messages of a channel that has none loaded yet', async () => {
-			const client = await getClientWithUser();
-			sinon
-				.stub(client, 'post')
-				.resolves({ channels: [{ ...mockChannelQueryResponse, messages: [] }] });
-
-			const [channel] = await client.queryChannels({}, {}, { message_limit: 0 });
-
-			expect(channel.state.messagePagination.hasPrev).toBe(true);
-		});
-	});
-
-	describe('latest page that does not connect to the loaded messages', () => {
-		it('does not merge the page with the loaded messages, so the gap can be paginated', async () => {
-			const client = await getClientWithUser();
-			const postStub = sinon.stub(client, 'post');
-			postStub.resolves({
-				channels: [{ ...mockChannelQueryResponse, messages: numberedMessages(1, 25) }],
-			});
-			const [channel] = await client.queryChannels({}, {}, { message_limit: 25 });
-
-			// e.g. recoverState after Message 26..125 arrived while disconnected
-			postStub.resolves({
-				channels: [{ ...mockChannelQueryResponse, messages: numberedMessages(101, 125) }],
-			});
-			await client.queryChannels({}, {}, { message_limit: 25 });
-
-			expect(channel.state.messages.map((m) => m.text)).toEqual(
-				numberedMessages(101, 125).map((m) => m.text),
-			);
-			expect(channel.state.messagePagination).toEqual({ hasNext: false, hasPrev: true });
-
-			// paginate back through the gap
-			for (const [from, to] of [
-				[76, 100],
-				[51, 75],
-				[26, 50],
-				[1, 25],
-			]) {
-				const page = numberedMessages(from, to);
-				postStub.resolves({ ...mockChannelQueryResponse, messages: page });
-				await channel.query({
-					messages: { limit: 25, id_lt: channel.state.messages[0].id },
-				});
-			}
-			postStub.resolves({ ...mockChannelQueryResponse, messages: [] });
-			await channel.query({
-				messages: { limit: 25, id_lt: channel.state.messages[0].id },
-			});
-
-			expect(channel.state.messageSets.length).toBe(1);
-			expect(channel.state.messages.map((m) => m.text)).toEqual(
-				numberedMessages(1, 125).map((m) => m.text),
-			);
-			expect(channel.state.messagePagination.hasPrev).toBe(false);
-		});
-
-		it('still merges a latest page that overlaps the loaded messages', async () => {
-			const client = await getClientWithUser();
-			const postStub = sinon.stub(client, 'post');
-			postStub.resolves({
-				channels: [{ ...mockChannelQueryResponse, messages: numberedMessages(1, 25) }],
-			});
-			const [channel] = await client.queryChannels({}, {}, { message_limit: 25 });
-
-			postStub.resolves({
-				channels: [{ ...mockChannelQueryResponse, messages: numberedMessages(11, 35) }],
-			});
-			await client.queryChannels({}, {}, { message_limit: 25 });
-
-			expect(channel.state.messageSets.length).toBe(1);
-			expect(channel.state.messages.map((m) => m.text)).toEqual(
-				numberedMessages(1, 35).map((m) => m.text),
-			);
-		});
-
-		it('keeps the loaded messages when a disjoint newer message arrives over WS', async () => {
-			const client = await getClientWithUser();
-			sinon.stub(client, 'post').resolves({
-				channels: [{ ...mockChannelQueryResponse, messages: numberedMessages(1, 25) }],
-			});
-			const [channel] = await client.queryChannels({}, {}, { message_limit: 25 });
-
+			const channel = await hydrateWithoutMessages(client);
 			channel._handleChannelEvent({
 				type: 'message.new',
-				message: numberedMessages(101, 101)[0],
+				user: { id: 'other' },
+				message: message(channel.cid, 'm40', 40),
 			});
-
-			expect(channel.state.messages.length).toBe(26);
-		});
-
-		it('drops the stale messages when watch returns a disjoint newer page', async () => {
-			const client = await getClientWithUser();
-			const postStub = sinon.stub(client, 'post');
-			postStub.resolves({
-				channels: [{ ...mockChannelQueryResponse, messages: numberedMessages(1, 25) }],
-			});
-			const [channel] = await client.queryChannels({}, {}, { message_limit: 25 });
-
-			postStub.resolves({
-				...mockChannelQueryResponse,
-				messages: numberedMessages(101, 125),
-			});
-			await channel.watch({ messages: { limit: 25 } });
-
-			expect(channel.state.messages.map((m) => m.text)).toEqual(
-				numberedMessages(101, 125).map((m) => m.text),
+			const older = Array.from({ length: 5 }, (_, i) =>
+				message(channel.cid, `m${35 + i}`, 35 + i),
 			);
-			expect(channel.state.messagePagination.hasPrev).toBe(true);
-		});
+			const getOrCreate = vi
+				.spyOn(channel, 'getOrCreate')
+				.mockResolvedValue({ ...mockChannelQueryResponse, messages: older });
 
-		it('extends the latest messages with a page loaded by a forward cursor', async () => {
-			const client = await getClientWithUser();
-			const postStub = sinon.stub(client, 'post');
-			postStub.resolves({
-				channels: [{ ...mockChannelQueryResponse, messages: numberedMessages(1, 25) }],
-			});
-			const [channel] = await client.queryChannels({}, {}, { message_limit: 25 });
+			await channel.messagePaginator.toTail();
 
-			postStub.resolves({
-				...mockChannelQueryResponse,
-				messages: numberedMessages(26, 50),
-			});
-			await channel.query({ messages: { limit: 25, id_gt: 'message-25' } }, 'latest');
-
-			expect(channel.state.messageSets.length).toBe(1);
-			expect(channel.state.messages.map((m) => m.text)).toEqual(
-				numberedMessages(1, 50).map((m) => m.text),
-			);
-		});
-
-		it('replaces the stale latest messages without leaving a jumped-to message set', async () => {
-			const client = await getClientWithUser();
-			const postStub = sinon.stub(client, 'post');
-			postStub.resolves({
-				channels: [{ ...mockChannelQueryResponse, messages: numberedMessages(51, 75) }],
-			});
-			const [channel] = await client.queryChannels({}, {}, { message_limit: 25 });
-
-			postStub.resolves({
-				...mockChannelQueryResponse,
-				messages: numberedMessages(1, 20),
-			});
-			await channel.state.loadMessageIntoState('message-10');
-			expect(channel.state.messages.map((m) => m.text)).toEqual(
-				numberedMessages(1, 20).map((m) => m.text),
-			);
-
-			postStub.resolves({
-				channels: [{ ...mockChannelQueryResponse, messages: numberedMessages(101, 125) }],
-			});
-			await client.queryChannels({}, {}, { message_limit: 25 });
-
-			expect(channel.state.messageSets.length).toBe(2);
-			expect(channel.state.messages.map((m) => m.text)).toEqual(
-				numberedMessages(1, 20).map((m) => m.text),
-			);
-			expect(channel.state.latestMessages.map((m) => m.text)).toEqual(
-				numberedMessages(101, 125).map((m) => m.text),
-			);
-		});
-
-		it('keeps the latest messages while they include a failed local message', async () => {
-			const client = await getClientWithUser();
-			const postStub = sinon.stub(client, 'post');
-			postStub.resolves({
-				channels: [{ ...mockChannelQueryResponse, messages: numberedMessages(1, 25) }],
-			});
-			const [channel] = await client.queryChannels({}, {}, { message_limit: 25 });
-			channel.state.addMessageSorted({
-				...generateMsg({
-					id: 'failed-message',
-					date: new Date(Date.UTC(2026, 0, 1, 0, 25, 30)).toISOString(),
+			expect(getOrCreate).toHaveBeenCalledWith(
+				expect.objectContaining({
+					messages: expect.objectContaining({ id_lt: 'm40' }),
 				}),
-				status: 'failed',
+				undefined,
+			);
+			expect(channel.messagePaginator.items.map((m) => m.id)).toEqual([
+				'm35',
+				'm36',
+				'm37',
+				'm38',
+				'm39',
+				'm40',
+			]);
+		});
+
+		it('keeps showing the next live message after loading older ones', async () => {
+			const client = await getClientWithUser();
+			const channel = await hydrateWithoutMessages(client);
+			const receive = (id, minute) =>
+				channel._handleChannelEvent({
+					type: 'message.new',
+					user: { id: 'other' },
+					message: message(channel.cid, id, minute),
+				});
+			receive('m40', 40);
+			vi.spyOn(channel, 'getOrCreate').mockResolvedValue({
+				...mockChannelQueryResponse,
+				messages: Array.from({ length: 5 }, (_, i) =>
+					message(channel.cid, `m${35 + i}`, 35 + i),
+				),
+			});
+			await channel.messagePaginator.toTail();
+
+			receive('m41', 41);
+
+			expect(channel.messagePaginator.items.map((m) => m.id).slice(-2)).toEqual([
+				'm40',
+				'm41',
+			]);
+		});
+	});
+
+	// V10 counterparts of the message-set regressions fixed on v9 by #1934 (#1930, #1931).
+	describe('the newest page of a list query, compared with the loaded messages', () => {
+		const { cid } = mockChannelQueryResponse.channel;
+		const at = (n) => convertDateToTimestamp(new Date(Date.UTC(2026, 0, 1, 0, n)));
+		const message = (n, extra = {}) =>
+			generateMsg({
+				cid,
+				id: `m${n}`,
+				text: `Message ${n}`,
+				created_at: at(n),
+				...extra,
+			});
+		const range = (from, to) =>
+			Array.from({ length: to - from + 1 }, (_, i) => message(from + i));
+		const ids = (messages) => messages.map((m) => m.id);
+		const shownIds = (channel) => ids(channel.messagePaginator.items ?? []);
+
+		const hydrate = async (client, messages, messageLimit = 25) => {
+			const stub = sinon.stub(client, 'queryChannels').resolves({
+				channels: [
+					{
+						...mockChannelQueryResponse,
+						channel: {
+							...mockChannelQueryResponse.channel,
+							last_message_at: messages.length ? messages.at(-1).created_at : undefined,
+						},
+						messages,
+					},
+				],
+			});
+			const [channel] = await client.queryChannelsAndHydrate({
+				message_limit: messageLimit,
+			});
+			stub.restore();
+			return channel;
+		};
+
+		// Answers the channel's own queries from `all` the way the server does.
+		const serveFrom = (channel, all) =>
+			vi
+				.spyOn(channel, 'getOrCreate')
+				.mockImplementation(async ({ messages = {} } = {}) => {
+					const limit = messages.limit ?? 25;
+					const index = (id) => all.findIndex((m) => m.id === id);
+					let page;
+					if (messages.id_lt) page = all.slice(0, index(messages.id_lt)).slice(-limit);
+					else if (messages.id_gt)
+						page = all.slice(
+							index(messages.id_gt) + 1,
+							index(messages.id_gt) + 1 + limit,
+						);
+					else if (messages.id_around) {
+						// split evenly around the message, a side that runs out filled from the other
+						let start = Math.max(0, index(messages.id_around) - Math.floor(limit / 2));
+						start = Math.max(0, Math.min(start, all.length - limit));
+						page = all.slice(start, start + limit);
+					} else page = all.slice(-limit);
+					return {
+						...mockChannelQueryResponse,
+						channel: {
+							...mockChannelQueryResponse.channel,
+							last_message_at: all.at(-1).created_at,
+						},
+						messages: page,
+					};
+				});
+
+		describe('message_limit: 0 (#1931)', () => {
+			it('keeps the loaded messages and that older ones can be loaded', async () => {
+				const client = await getClientWithUser();
+				const channel = await hydrate(client, range(36, 60));
+				expect(channel.messagePaginator.hasMoreTail).toBe(true);
+
+				await hydrate(client, [], 0);
+
+				expect(shownIds(channel)).toEqual(ids(range(36, 60)));
+				expect(channel.messagePaginator.hasMoreTail).toBe(true);
 			});
 
-			postStub.resolves({
-				channels: [{ ...mockChannelQueryResponse, messages: numberedMessages(101, 125) }],
+			it('keeps a fully loaded channel fully loaded', async () => {
+				const client = await getClientWithUser();
+				const channel = await hydrate(client, range(1, 10));
+				expect(channel.messagePaginator.hasMoreTail).toBe(false);
+
+				await hydrate(client, [], 0);
+
+				expect(shownIds(channel)).toEqual(ids(range(1, 10)));
+				expect(channel.messagePaginator.hasMoreTail).toBe(false);
 			});
-			await client.queryChannels({}, {}, { message_limit: 25 });
+		});
 
-			expect(channel.state.messages.map((m) => m.id)).toContain('failed-message');
+		describe('a cached page read against the query message_limit (#1958)', () => {
+			it('keeps older messages loadable once the online page arrives', async () => {
+				const client = await getClientWithUser();
+				// as ChannelPaginator.preloadFirstPageFromOfflineDb does: the DB returns the newest
+				// `message_limit` messages, read against that limit
+				const [channel] = client.hydrateChannels(
+					[
+						{
+							...mockChannelQueryResponse,
+							channel: { ...mockChannelQueryResponse.channel, last_message_at: at(200) },
+							messages: range(191, 200),
+						},
+					],
+					{ offlineMode: true },
+					{ message_limit: 10 },
+				);
+				expect(channel.messagePaginator.hasMoreTail).toBe(true);
+
+				await hydrate(client, range(191, 200), 10);
+				expect(shownIds(channel)).toEqual(ids(range(191, 200)));
+				expect(channel.messagePaginator.hasMoreTail).toBe(true);
+
+				serveFrom(channel, range(1, 200));
+				await channel.messagePaginator.toTail();
+
+				// one page of the channel's own page size, with more left behind it
+				expect(shownIds(channel)).toEqual(ids(range(91, 200)));
+				expect(channel.messagePaginator.hasMoreTail).toBe(true);
+			});
+		});
+
+		describe('a cached page over loaded messages', () => {
+			it('merges with the loaded messages without duplicating them', async () => {
+				const client = await getClientWithUser();
+				const channel = await hydrate(client, range(1, 25));
+
+				// as ChannelPaginator.preloadFirstPageFromOfflineDb does for a channel already loaded
+				client.hydrateChannels(
+					[
+						{
+							...mockChannelQueryResponse,
+							channel: { ...mockChannelQueryResponse.channel, last_message_at: at(35) },
+							messages: range(11, 35),
+						},
+					],
+					{ offlineMode: true },
+					{ message_limit: 25 },
+				);
+
+				expect(shownIds(channel)).toEqual(ids(range(1, 35)));
+			});
+		});
+
+		describe('a newest page that does not connect to the loaded messages (#1930)', () => {
+			it('shows the newest page, and the gap can be paginated back to the loaded messages', async () => {
+				const client = await getClientWithUser();
+				const channel = await hydrate(client, range(1, 25));
+
+				// e.g. m26..m125 arrived while the app was disconnected
+				await hydrate(client, range(101, 125));
+
+				expect(shownIds(channel)).toEqual(ids(range(101, 125)));
+				expect(channel.messagePaginator.hasMoreHead).toBe(false);
+				expect(channel.messagePaginator.hasMoreTail).toBe(true);
+
+				serveFrom(channel, range(1, 125));
+				for (let i = 0; i < 10 && channel.messagePaginator.hasMoreTail; i++) {
+					await channel.messagePaginator.toTail();
+				}
+
+				expect(shownIds(channel)).toEqual(ids(range(1, 125)));
+				expect(channel.messagePaginator.hasMoreTail).toBe(false);
+			});
+
+			it('still merges a newest page that overlaps the loaded messages', async () => {
+				const client = await getClientWithUser();
+				const channel = await hydrate(client, range(1, 25));
+
+				await hydrate(client, range(11, 35));
+
+				expect(shownIds(channel)).toEqual(ids(range(1, 35)));
+			});
+
+			it('keeps the loaded messages when a newer message arrives over the socket', async () => {
+				const client = await getClientWithUser();
+				const channel = await hydrate(client, range(1, 25));
+
+				channel._handleChannelEvent({
+					type: 'message.new',
+					user: { id: 'other' },
+					message: message(101),
+				});
+
+				expect(shownIds(channel)).toEqual([...ids(range(1, 25)), 'm101']);
+			});
+
+			it('shows the newest page across a gap that watch() returns', async () => {
+				const client = await getClientWithUser();
+				const channel = await hydrate(client, range(1, 25));
+				serveFrom(channel, range(1, 125));
+
+				await channel.watch({ messages: { limit: 25 } });
+
+				expect(shownIds(channel)).toEqual(ids(range(101, 125)));
+				expect(channel.messagePaginator.hasMoreTail).toBe(true);
+			});
+
+			it('extends the loaded messages with a page loaded by a forward cursor', async () => {
+				const client = await getClientWithUser();
+				const channel = await hydrate(client, range(1, 25));
+				serveFrom(channel, range(1, 50));
+
+				await channel.watch({ messages: { limit: 25, id_gt: 'm25' } });
+				// stored as an interval of its own, which the next page towards the newest joins
+				expect(channel.messagePaginator.hasMoreHead).toBe(true);
+				await channel.messagePaginator.toHead();
+
+				expect(shownIds(channel)).toEqual(ids(range(1, 50)));
+				expect(channel.messagePaginator.hasMoreHead).toBe(false);
+			});
+
+			it('keeps a jumped-to older interval of an open channel shown across a reconnect', async () => {
+				const client = await getClientWithUser();
+				const channel = await hydrate(client, range(51, 75));
+				channel.activate();
+				serveFrom(channel, range(1, 75));
+				await channel.messagePaginator.jumpToMessage('m10', { pageSize: 20 });
+				const jumpedTo = shownIds(channel);
+				expect(jumpedTo).toContain('m10');
+				expect(jumpedTo).not.toContain('m51');
+
+				// connection recovery reloads an open channel; m76..m125 arrived meanwhile
+				serveFrom(channel, range(1, 125));
+				await channel.reload();
+
+				expect(shownIds(channel)).toEqual(jumpedTo);
+				await channel.messagePaginator.jumpToTheLatestMessage();
+				// the reload asks for as many messages as were loaded, here m26..m125
+				expect(shownIds(channel)).toEqual(ids(range(26, 125)));
+				expect(channel.messagePaginator.hasMoreTail).toBe(true);
+			});
+
+			it('shows the newest page of a channel that is not open, without welding a jumped-to interval to it', async () => {
+				const client = await getClientWithUser();
+				const channel = await hydrate(client, range(51, 75));
+				serveFrom(channel, range(1, 75));
+				await channel.messagePaginator.jumpToMessage('m10', { pageSize: 20 });
+
+				await hydrate(client, range(101, 125));
+
+				expect(shownIds(channel)).toEqual(ids(range(101, 125)));
+				serveFrom(channel, range(1, 125));
+				for (let i = 0; i < 10 && channel.messagePaginator.hasMoreTail; i++) {
+					await channel.messagePaginator.toTail();
+				}
+				expect(shownIds(channel)).toEqual(ids(range(1, 125)));
+			});
+
+			it('keeps a failed message the user sent while the newest page replaces the stale one', async () => {
+				const client = await getClientWithUser();
+				const channel = await hydrate(client, range(1, 25));
+				channel.messagePaginator.ingestItem(
+					formatMessage(
+						message(25, {
+							id: 'failed-message',
+							created_at: convertDateToTimestamp(
+								new Date(Date.UTC(2026, 0, 1, 0, 25, 30)),
+							),
+							status: 'failed',
+						}),
+					),
+				);
+
+				await hydrate(client, range(101, 125));
+
+				expect(shownIds(channel)).toContain('failed-message');
+			});
 		});
 	});
-});
 
-describe('StreamChat.hydrateActiveChannels from the offline DB', () => {
-	// as ChannelManager does: the DB returns the newest `message_limit` messages of each channel
-	const hydrateFromOfflineDb = (client, messages, options) =>
-		client.hydrateActiveChannels(
-			[{ ...mockChannelQueryResponse, messages }],
-			{ offlineMode: true, skipInitialization: [] },
-			options,
-		)[0];
+	describe('a list response reporting newer messages than the newest window holds', () => {
+		const at = (second) => convertDateToTimestamp(`2023-11-14T12:00:0${second}.000Z`);
+		const message = (id, second) => generateMsg({ id, created_at: at(second) });
+		const respond = (client, messages, lastSecond) =>
+			sinon.stub(client, 'queryChannels').resolves({
+				channels: [
+					{
+						...mockChannelQueryResponse,
+						channel: {
+							...mockChannelQueryResponse.channel,
+							last_message_at: at(lastSecond),
+						},
+						messages,
+					},
+				],
+			});
+		// m5–m6 loaded as the newest window, the reader jumped to m1, then the connection dropped
+		const loadJumpedAwayChannel = async (client) => {
+			const stub = respond(client, [message('m5', 5), message('m6', 6)], 6);
+			const [channel] = await client.queryChannelsAndHydrate({ message_limit: 2 });
+			stub.restore();
+			channel.messagePaginator.ingestPage({
+				page: [formatMessage(message('m1', 1))],
+				setActive: true,
+			});
+			channel.watchStatus = ChannelWatchStatus.WasWatching;
+			return channel;
+		};
 
-	it('reads a full cached page as having older messages', async () => {
-		const client = await getClientWithUser();
-		const channel = hydrateFromOfflineDb(client, numberedMessages(91, 100), {
-			message_limit: 10,
+		it('shows the newest page to a channel nobody reads, left on another window', async () => {
+			const client = await getClientWithUser();
+			const channel = await loadJumpedAwayChannel(client);
+			expect(channel.messagePaginator.anchoredHeadItem?.id).toBe('m6');
+
+			// m7–m9 were sent while the connection was down
+			const stub = respond(client, [message('m8', 8), message('m9', 9)], 9);
+			await client.queryChannelsAndHydrate({ message_limit: 2 });
+			stub.restore();
+
+			expect(channel.messagePaginator.anchoredHeadItem?.id).toBe('m9');
+			expect(channel.messagePaginator.items.map((m) => m.id)).toEqual(['m8', 'm9']);
 		});
 
-		expect(channel.state.messagePagination.hasPrev).toBe(true);
+		it('applies the members, read state and pinned messages to an on-screen channel', async () => {
+			const client = await getClientWithUser();
+			const channel = await loadJumpedAwayChannel(client);
+			channel.activate();
+
+			const other = { id: 'other-user' };
+			const stub = sinon.stub(client, 'queryChannels').resolves({
+				channels: [
+					{
+						...mockChannelQueryResponse,
+						channel: { ...mockChannelQueryResponse.channel, last_message_at: at(9) },
+						members: [{ user: other, user_id: other.id }],
+						messages: [message('m8', 8), message('m9', 9)],
+						pinned_messages: [{ ...message('m5', 5), pinned: true, pinned_at: at(7) }],
+						read: [{ user: other, last_read: at(9), unread_messages: 3 }],
+					},
+				],
+			});
+			await client.queryChannelsAndHydrate({ message_limit: 2 });
+			stub.restore();
+
+			expect(channel.messagePaginator.anchoredHeadItem?.id).toBe('m6');
+			expect(channel.state.members[other.id]).toBeDefined();
+			expect(channel.state.read[other.id].unread_messages).toBe(3);
+			expect(channel.pinnedMessagesPaginator.items?.map((m) => m.id)).toEqual(['m5']);
+		});
+
+		it('leaves an on-screen channel to its own reload', async () => {
+			const client = await getClientWithUser();
+			const channel = await loadJumpedAwayChannel(client);
+			channel.activate();
+
+			const stub = respond(client, [message('m8', 8), message('m9', 9)], 9);
+			await client.queryChannelsAndHydrate({ message_limit: 2 });
+			stub.restore();
+
+			expect(channel.messagePaginator.anchoredHeadItem?.id).toBe('m6');
+		});
 	});
 
-	it('reads a short cached page as the start of the channel', async () => {
+	it('seeds each queried channel paginator with its full message page', async () => {
 		const client = await getClientWithUser();
-		const channel = hydrateFromOfflineDb(client, numberedMessages(1, 8), {
-			message_limit: 10,
+		const mockedChannelsQueryResponse = Array.from({ length: 10 }, (_, index) =>
+			generateQueriedChannel({
+				index,
+				messageCount: DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE,
+			}),
+		);
+		sinon
+			.stub(client, 'queryChannels')
+			.resolves({ channels: mockedChannelsQueryResponse });
+		await client.queryChannelsAndHydrate();
+		expect(client.channelManager.values().length).to.be.greaterThan(0);
+		client.channelManager.values().forEach((channel) => {
+			expect(channel.messagePaginator.items).to.have.length(
+				DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE,
+			);
 		});
-
-		expect(channel.state.messagePagination.hasPrev).toBe(false);
+		sinon.restore();
 	});
 
-	it('keeps older messages loadable once the online page arrives', async () => {
+	it('seeds each queried channel paginator with its partial message page', async () => {
 		const client = await getClientWithUser();
-		const channel = hydrateFromOfflineDb(client, numberedMessages(91, 100), {
-			message_limit: 10,
+		const mockedChannelQueryResponse = Array.from({ length: 10 }, (_, index) =>
+			generateQueriedChannel({
+				index,
+				messageCount: DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE - 1,
+			}),
+		);
+		sinon
+			.stub(client, 'queryChannels')
+			.resolves({ channels: mockedChannelQueryResponse });
+		await client.queryChannelsAndHydrate();
+		expect(client.channelManager.values().length).to.be.greaterThan(0);
+		client.channelManager.values().forEach((channel) => {
+			expect(channel.messagePaginator.items).to.have.length(
+				DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE - 1,
+			);
 		});
-
-		const postStub = sinon.stub(client, 'post');
-		postStub.resolves({
-			channels: [{ ...mockChannelQueryResponse, messages: numberedMessages(91, 100) }],
-		});
-		await client.queryChannels({}, {}, { message_limit: 10 });
-		expect(channel.state.messagePagination.hasPrev).toBe(true);
-
-		postStub.resolves({
-			...mockChannelQueryResponse,
-			messages: numberedMessages(66, 90),
-		});
-		await channel.query({ messages: { limit: 25, id_lt: channel.state.messages[0].id } });
-		expect(channel.state.messages.length).toBe(35);
-		expect(channel.state.messagePagination.hasPrev).toBe(true);
+		sinon.restore();
 	});
 });
 
@@ -1564,11 +2130,10 @@ describe('StreamChat.queryThreads', () => {
 		);
 		const apiResponse = { threads: [rawThread], next: undefined };
 
-		const postStub = sinon.stub(client, 'post');
-		postStub.onFirstCall().resolves(apiResponse);
+		sinon.stub(client, 'queryThreads').resolves(apiResponse);
 		const hydratePollCacheSpy = sinon.spy(client.polls, 'hydratePollCache');
 
-		const result = await client.queryThreads();
+		const result = await client.queryThreadsAndHydrate();
 
 		expect(result.threads).to.have.lengthOf(1);
 		expect(result.threads[0].id).to.equal(parentMessage.id);
@@ -1576,7 +2141,34 @@ describe('StreamChat.queryThreads', () => {
 		expect(hydratePollCacheSpy.calledOnce).to.be.true;
 		expect(hydratePollCacheSpy.calledWith([parentMessage])).to.be.true;
 
-		postStub.restore();
+		sinon.restore();
+	});
+
+	it('returns the registered instance of a thread, so activating it keeps it managed', async () => {
+		const client = await getClientWithUser();
+		const parentMessage = generateMsg();
+		const rawThread = generateThreadResponse(
+			mockChannelQueryResponse.channel,
+			parentMessage,
+		);
+		sinon.stub(client, 'queryThreads').resolves({ threads: [rawThread] });
+		sinon.stub(client, 'getThread').resolves({ thread: rawThread });
+
+		const {
+			threads: [registered],
+		} = await client.queryThreadsAndHydrate();
+		registered.activate();
+
+		const {
+			threads: [requeried],
+		} = await client.queryThreadsAndHydrate();
+		const fetched = await client.getThreadAndHydrate({ message_id: parentMessage.id });
+
+		expect(requeried).to.equal(registered);
+		expect(fetched).to.equal(registered);
+		expect(client.threads.get(parentMessage.id)).to.equal(registered);
+
+		sinon.restore();
 	});
 });
 
@@ -1586,7 +2178,7 @@ describe('StreamChat.queryReactions', () => {
 	let postStub;
 	const messageId = 'msg-1';
 	const filter = { type: { $in: ['like', 'love'] } };
-	const sort = [{ created_at: -1 }];
+	const sort = [{ field: 'created_at', direction: -1 }];
 	const options = { limit: 50 };
 
 	const offlineReactions = [
@@ -1606,10 +2198,10 @@ describe('StreamChat.queryReactions', () => {
 		const offlineDb = new MockOfflineDB({ client });
 
 		client.setOfflineDBApi(offlineDb);
-		await client.offlineDb.init(client.userID);
+		await client.offlineDb.init(client.userId);
 
 		dispatchSpy = vi.spyOn(client, 'dispatchEvent');
-		postStub = vi.spyOn(client, 'post').mockResolvedValueOnce(postResponse);
+		postStub = vi.spyOn(client, 'queryReactions').mockResolvedValueOnce(postResponse);
 		client.offlineDb.getReactions.mockResolvedValue(offlineReactions);
 	});
 
@@ -1618,7 +2210,13 @@ describe('StreamChat.queryReactions', () => {
 	});
 
 	it('should query reactions from offlineDb and dispatch offline_reactions.queried event', async () => {
-		const result = await client.queryReactions(messageId, filter, sort, options);
+		const pathParams = { id: messageId };
+		const request = {
+			filter,
+			sort,
+			limit: options.limit,
+		};
+		const result = await client.queryReactionsAndHydrate(pathParams, request);
 
 		expect(client.offlineDb.getReactions).toHaveBeenCalledWith({
 			messageId,
@@ -1640,74 +2238,64 @@ describe('StreamChat.queryReactions', () => {
 		]);
 
 		expect(postStub).toHaveBeenCalledTimes(1);
-		expect(postStub).toHaveBeenCalledWith(
-			`${client.baseURL}/messages/${encodeURIComponent(messageId)}/reactions`,
-			{
-				filter,
-				sort: normalizeQuerySort(sort),
-				limit: 50,
-			},
-		);
+		expect(postStub).toHaveBeenCalledWith(pathParams, request);
 
 		expect(result).to.eql(postResponse);
 	});
 
 	it('should skip querying offlineDb if options.next is true', async () => {
-		await client.queryReactions(messageId, filter, sort, { next: true, limit: 20 });
+		const pathParams = { id: messageId };
+		const request = {
+			filter,
+			sort,
+			next: true,
+			limit: 20,
+		};
+		await client.queryReactionsAndHydrate(pathParams, request);
 
 		expect(client.offlineDb.getReactions).not.toHaveBeenCalled();
-
-		expect(postStub).toHaveBeenCalledWith(
-			`${client.baseURL}/messages/${encodeURIComponent(messageId)}/reactions`,
-			{
-				filter,
-				sort: normalizeQuerySort(sort),
-				next: true,
-				limit: 20,
-			},
-		);
+		expect(postStub).toHaveBeenCalledWith(pathParams, request);
 	});
 
 	it('should not dispatch event if offlineDb returns null', async () => {
 		client.offlineDb.getReactions.mockResolvedValue(null);
 
-		await client.queryReactions(messageId, filter, sort, options);
+		const pathParams = { id: messageId };
+		const request = {
+			filter,
+			sort,
+			limit: 50,
+		};
+		await client.queryReactionsAndHydrate(pathParams, request);
 
 		expect(client.offlineDb.getReactions).toHaveBeenCalledTimes(1);
 		expect(dispatchSpy).not.toHaveBeenCalled();
-		expect(postStub).toHaveBeenCalledWith(
-			`${client.baseURL}/messages/${encodeURIComponent(messageId)}/reactions`,
-			{
-				filter,
-				sort: normalizeQuerySort(sort),
-				limit: 50,
-			},
-		);
+		expect(postStub).toHaveBeenCalledWith(pathParams, request);
 	});
 
 	it('should log a warning if offlineDb.getReactions throws', async () => {
 		client.offlineDb.getReactions.mockRejectedValue(new Error('DB error'));
 		const loggerSpy = vi.fn();
-		client.logger = loggerSpy;
+		chatLoggerSystem.configureLoggers({
+			default: { sink: loggerSpy, level: 'trace' },
+		});
 
-		await client.queryReactions(messageId, filter, sort, options);
+		await client.queryReactionsAndHydrate(
+			{ id: messageId },
+			{ filter, sort, limit: options.limit },
+		);
 
 		expect(loggerSpy).toHaveBeenCalledWith(
 			'warn',
-			'An error has occurred while querying offline reactions',
+			expect.stringContaining('An error occurred while querying offline reactions'),
 			expect.objectContaining({
 				error: expect.any(Error),
 			}),
 		);
 		expect(dispatchSpy).not.toHaveBeenCalled();
-		expect(postStub).toHaveBeenCalledWith(
-			`${client.baseURL}/messages/${encodeURIComponent(messageId)}/reactions`,
-			{
-				filter,
-				sort: normalizeQuerySort(sort),
-				limit: 50,
-			},
-		);
+		expect(postStub).toHaveBeenCalledWith({ id: messageId }, { filter, sort, limit: 50 });
+
+		chatLoggerSystem.restoreDefaults();
 	});
 });
 
@@ -1717,462 +2305,518 @@ describe('message deletion', () => {
 	let client;
 	let loggerSpy;
 	let queueTaskSpy;
-	let clientDeleteSpy;
 
 	beforeEach(async () => {
 		client = await getClientWithUser();
 		const offlineDb = new MockOfflineDB({ client });
 
 		client.setOfflineDBApi(offlineDb);
-		await client.offlineDb.init(client.userID);
+		await client.offlineDb.init(client.userId);
 
-		loggerSpy = vi.spyOn(client, 'logger').mockImplementation(vi.fn());
-		clientDeleteSpy = vi.spyOn(client, 'delete').mockResolvedValue({ message: {} });
+		loggerSpy = vi.fn();
+		chatLoggerSystem.configureLoggers({
+			default: { sink: loggerSpy, level: 'trace' },
+		});
 		queueTaskSpy = vi.spyOn(client.offlineDb, 'queueTask').mockResolvedValue({});
 	});
 
 	afterEach(() => {
+		chatLoggerSystem.restoreDefaults();
 		vi.resetAllMocks();
 	});
 
-	describe('deleteMessage', () => {
-		let _deleteMessageSpy;
+	describe('the full delete (messageOperations.delete) queues through the offline DB', () => {
+		let deleteMessageSpy;
+		const del = (options) =>
+			client.channel('messaging', 'general').messageOperations.delete({
+				localMessage: utils.formatMessage(generateMsg({ id: messageId })),
+				options,
+			});
 
 		beforeEach(() => {
-			_deleteMessageSpy = vi.spyOn(client, '_deleteMessage').mockResolvedValue({});
+			deleteMessageSpy = vi.spyOn(client, 'deleteMessage').mockResolvedValue({});
 		});
 
 		afterEach(() => {
 			vi.resetAllMocks();
 		});
 
-		it.each([
-			['undefined', undefined, {}],
-			['true', true, { hardDelete: true }],
-			['false', false, {}],
-			['{ hardDelete: false }', { hardDelete: false }, {}],
-			['{ hardDelete: true }', { hardDelete: true }, { hardDelete: true }],
-			['{ deleteForMe: true }', { deleteForMe: true }, { deleteForMe: true }],
-			['{ deleteForMe: false }', { deleteForMe: false }, {}],
-			[
-				'{ hardDelete: false, deleteForMe: true }',
-				{ hardDelete: false, deleteForMe: true },
-				{ deleteForMe: true },
-			],
-			[
-				'{ hardDelete: true, deleteForMe: true }',
-				{ hardDelete: true, deleteForMe: true },
-				{ deleteForMe: true },
-			],
-			[
-				'{ hardDelete: false, deleteForMe: false }',
-				{ hardDelete: false, deleteForMe: false },
-				{},
-			],
-			[
-				'{ hardDelete: true, deleteForMe: false }',
-				{ hardDelete: true, deleteForMe: false },
-				{ hardDelete: true },
-			],
-		])('should parse delete message options %s', async (_, options, expectedOptions) => {
-			await client.deleteMessage(messageId, options);
-			if (expectedOptions.hardDelete) {
-				expect(client.offlineDb.hardDeleteMessage).toHaveBeenCalledTimes(1);
-				expect(client.offlineDb.hardDeleteMessage).toHaveBeenCalledWith({
-					id: messageId,
-				});
-				expect(client.offlineDb.softDeleteMessage).not.toHaveBeenCalled();
-			} else {
-				expect(client.offlineDb.softDeleteMessage).toHaveBeenCalledTimes(1);
-				expect(client.offlineDb.softDeleteMessage).toHaveBeenCalledWith({
-					id: messageId,
-					deleteForMe: expectedOptions.deleteForMe,
-				});
-				expect(client.offlineDb.hardDeleteMessage).not.toHaveBeenCalled();
-			}
+		it('queues a soft delete', async () => {
+			await del();
 
 			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
-
-			const taskArg = queueTaskSpy.mock.calls[0][0];
-			expect(taskArg).to.deep.equal({
+			expect(queueTaskSpy).toHaveBeenCalledWith({
 				task: {
 					messageId,
-					payload: [messageId, expectedOptions],
+					payload: [{ id: messageId }, undefined],
 					type: 'delete-message',
 				},
 			});
-			expect(_deleteMessageSpy).not.toHaveBeenCalled();
+			expect(deleteMessageSpy).not.toHaveBeenCalled();
 		});
 
-		it.each([
-			['undefined', undefined, {}],
-			['true', true, { hardDelete: true }],
-			['false', false, {}],
-			['{ hardDelete: false }', { hardDelete: false }, {}],
-			['{ hardDelete: true }', { hardDelete: true }, { hardDelete: true }],
-			['{ deleteForMe: true }', { deleteForMe: true }, { deleteForMe: true }],
-			['{ deleteForMe: false }', { deleteForMe: false }, {}],
-			[
-				'{ hardDelete: false, deleteForMe: true }',
-				{ hardDelete: false, deleteForMe: true },
-				{ deleteForMe: true },
-			],
-			[
-				'{ hardDelete: true, deleteForMe: true }',
-				{ hardDelete: true, deleteForMe: true },
-				{ deleteForMe: true },
-			],
-			[
-				'{ hardDelete: false, deleteForMe: false }',
-				{ hardDelete: false, deleteForMe: false },
-				{},
-			],
-			[
-				'{ hardDelete: true, deleteForMe: false }',
-				{ hardDelete: true, deleteForMe: false },
-				{ hardDelete: true },
-			],
-		])(
-			'should fall back to _deleteMessage if offlineDb is not set and delete options is %s',
-			async (_, options, expectedOptions) => {
-				client.offlineDb = undefined;
+		it('queues a hard delete', async () => {
+			await del({ hard: true });
 
-				await client.deleteMessage(messageId, options);
-
-				expect(_deleteMessageSpy).toHaveBeenCalledTimes(1);
-				expect(_deleteMessageSpy).toHaveBeenCalledWith(messageId, expectedOptions);
-			},
-		);
-
-		it('should log and fall back to _deleteMessage if offline delete throws', async () => {
-			client.offlineDb.softDeleteMessage.mockRejectedValue(new Error('Offline failure'));
-
-			await client.deleteMessage(messageId, false);
-
-			expect(loggerSpy).toHaveBeenCalledTimes(1);
-			expect(queueTaskSpy).not.toHaveBeenCalled();
-			expect(_deleteMessageSpy).toHaveBeenCalledTimes(1);
-			expect(_deleteMessageSpy).toHaveBeenCalledWith(messageId, {});
-		});
-	});
-
-	describe('_deleteMessage', () => {
-		it('should call delete with correct URL and no params when hardDelete is false/undefined', async () => {
-			await client._deleteMessage(messageId);
-
-			expect(clientDeleteSpy).toHaveBeenCalledTimes(1);
-			expect(clientDeleteSpy).toHaveBeenCalledWith(
-				`${client.baseURL}/messages/${encodeURIComponent(messageId)}`,
-				{},
-			);
-		});
-
-		it('should call delete with hard=true param when hardDelete is true', async () => {
-			await client._deleteMessage(messageId, true);
-
-			expect(clientDeleteSpy).toHaveBeenCalledTimes(1);
-			expect(clientDeleteSpy).toHaveBeenCalledWith(
-				`${client.baseURL}/messages/${encodeURIComponent(messageId)}`,
-				{ hard: true },
-			);
-		});
-
-		it.each([
-			['{}', {}],
-			['{ hardDelete: true }', { hardDelete: true }],
-			['{ hardDelete: false }', { hardDelete: false }],
-			['{ deleteForMe: true }', { deleteForMe: true }],
-			['{ deleteForMe: false }', { deleteForMe: false }],
-			[
-				'{ hardDelete: false, deleteForMe: true }',
-				{ hardDelete: false, deleteForMe: true },
-			],
-			[
-				'{ hardDelete: true, deleteForMe: true }',
-				{ hardDelete: true, deleteForMe: true },
-			],
-			[
-				'{ hardDelete: false, deleteForMe: false }',
-				{ hardDelete: false, deleteForMe: false },
-			],
-			[
-				'{ hardDelete: false, deleteForMe: false }',
-				{ hardDelete: false, deleteForMe: false },
-			],
-		])('should parse delete options %s accordingly', async (_, options) => {
-			await client._deleteMessage(messageId, options);
-
-			const expectedParams =
-				Object.values(options).length === 2 && Object.values(options).every((val) => val)
-					? { delete_for_me: true, hard: true }
-					: Object.keys(options).length === 0
-						? {}
-						: options.deleteForMe
-							? { delete_for_me: true }
-							: options.hardDelete
-								? { hard: true }
-								: {};
-			expect(clientDeleteSpy).toHaveBeenCalledTimes(1);
-			expect(clientDeleteSpy).toHaveBeenCalledWith(
-				`${client.baseURL}/messages/${encodeURIComponent(messageId)}`,
-				expectedParams,
-			);
-		});
-
-		it('should call delete with both hard and delete_for_me params when both are true', async () => {
-			await client._deleteMessage(messageId, { deleteForMe: true, hardDelete: true });
-
-			expect(clientDeleteSpy).toHaveBeenCalledTimes(1);
-			expect(clientDeleteSpy).toHaveBeenCalledWith(
-				`${client.baseURL}/messages/${encodeURIComponent(messageId)}`,
-				{ hard: true, delete_for_me: true },
-			);
-		});
-
-		it('should return the response from delete', async () => {
-			clientDeleteSpy.mockResolvedValue({
-				message: { id: messageId },
-			});
-			const result = await client._deleteMessage(messageId);
-
-			expect(result).toStrictEqual({
-				message: { id: messageId },
-			});
-		});
-
-		it('enriches the deleted-for-me message with type="deleted" and deleted_for_me=true', async () => {
-			clientDeleteSpy.mockResolvedValue({
-				message: { id: messageId },
-			});
-			const result = await client._deleteMessage(messageId, { deleteForMe: true });
-
-			expect(result).toStrictEqual({
-				message: { deleted_for_me: true, id: messageId, type: 'deleted' },
-			});
-		});
-	});
-});
-
-describe('user.messages.deleted', () => {
-	let client;
-
-	beforeEach(async () => {
-		client = await getClientWithUser();
-	});
-
-	const bannedUser = { id: 'banned-user' };
-	const otherUser = { id: 'other-user' };
-	const messageSet1 = [
-		{
-			attachments: [
-				{
-					type: 'image',
-					title: 'YouTube',
-					title_link: 'https://www.youtube.com/',
-					text: 'Enjoy the videos and music you love, upload original content, and share it all with friends, family, and the world on YouTube.',
-					image_url: 'https://www.youtube.com/img/desktop/yt_1200.png',
-					thumb_url: 'https://www.youtube.com/img/desktop/yt_1200.png',
-					og_scrape_url: 'https://www.youtube.com/',
+			expect(queueTaskSpy).toHaveBeenCalledWith({
+				task: {
+					messageId,
+					payload: [{ id: messageId }, { hard: true }],
+					type: 'delete-message',
 				},
-			],
-			created_at: '2021-01-01T00:01:00',
-			pinned: true,
-			pinned_at: '2022-01-01T00:01:00',
-			user: bannedUser,
-		},
-		{
-			created_at: '2021-01-01T00:02:00',
-			pinned: true,
-			pinned_at: '2022-01-01T00:02:00',
-			user: otherUser,
-		},
-		{ created_at: '2021-01-01T00:03:00', user: bannedUser },
-	].map(generateMsg);
+			});
+			expect(deleteMessageSpy).not.toHaveBeenCalled();
+		});
 
-	const quoted_message = messageSet1[0];
-	const messageSet2 = [
-		{
-			created_at: '2020-01-01T00:01:00',
-			pinned: true,
-			pinned_at: '2022-01-01T00:03:00',
-			user: bannedUser,
-		},
-		{
-			created_at: '2020-01-01T00:02:00',
-			quoted_message,
-			quoted_message_id: quoted_message.id,
-			user: otherUser,
-		},
-		{ created_at: '2020-01-01T00:03:00', user: bannedUser },
-		{ created_at: '2020-01-01T00:04:00', user: otherUser },
-	].map(generateMsg);
+		it('sends the request directly if offlineDb is not set', async () => {
+			client.offlineDb = undefined;
 
-	const parent_id = messageSet2[0].id;
-	const thread1 = [
-		{ created_at: '2020-01-01T00:01:30', parent_id, user: bannedUser, type: 'reply' },
-		{ created_at: '2020-01-01T00:02:35', parent_id, user: otherUser, type: 'reply' },
-		{ created_at: '2020-01-01T00:03:45', parent_id, user: bannedUser, type: 'reply' },
-		{ created_at: '2020-01-01T00:04:00', parent_id, user: otherUser, type: 'reply' },
-	];
+			await del();
 
-	const pinnedMessages = [messageSet1[0], messageSet1[1], messageSet2[0]];
+			expect(deleteMessageSpy).toHaveBeenCalledTimes(1);
+			expect(deleteMessageSpy).toHaveBeenCalledWith({ id: messageId }, undefined);
+		});
 
-	const setupChannel = (type, id) => {
-		const channel = client.channel(type, id);
-		channel.state.addMessagesSorted(messageSet1);
-		channel.state.addMessagesSorted(messageSet2, false, false, true, 'new');
+		it('logs and sends the request directly if offline queueing throws', async () => {
+			queueTaskSpy.mockRejectedValue(new Error('Offline failure'));
 
-		// pinned messages
-		channel.state.addPinnedMessages(pinnedMessages);
+			await del();
 
-		// thread replies
-		channel.state.addMessagesSorted(thread1);
-
-		expect(channel.state.messageSets).toHaveLength(2);
-		expect(channel.state.messageSets[0].messages).toHaveLength(messageSet1.length);
-		expect(channel.state.messageSets[1].messages).toHaveLength(messageSet2.length);
-		expect(channel.state.pinnedMessages).toHaveLength(pinnedMessages.length);
-		expect(channel.state.threads[parent_id]).toHaveLength(thread1.length);
-
-		return channel;
-	};
-
-	it('ignores channel specific event', () => {
-		const channels = [setupChannel('type', 'id1'), setupChannel('type', 'id2')];
-		const event = {
-			type: 'user.messages.deleted',
-			cid: channels[0].cid,
-			channel_type: channels[0].type,
-			channel_id: channels[0].id,
-			user: bannedUser,
-			hard_delete: true,
-			created_at: '2025-02-01T14:01:30.000Z',
-		};
-		client._handleClientEvent(event);
-
-		channels.forEach((channel) => {
-			expect(channel.state.messageSets[0].messages).toHaveLength(messageSet1.length);
-			expect(channel.state.messageSets[1].messages).toHaveLength(messageSet2.length);
-
-			const check = (message) => {
-				expect(message).toEqual(message);
-			};
-
-			channel.state.messageSets[0].messages.forEach(check);
-			channel.state.messageSets[1].messages.forEach(check);
-			channel.state.pinnedMessages.forEach(check);
-			Object.values(channel.state.threads).forEach((replies) => replies.forEach(check));
+			expect(loggerSpy).toHaveBeenCalledWith(
+				'error',
+				expect.stringContaining('Deleting the message failed.'),
+				expect.anything(),
+			);
+			expect(deleteMessageSpy).toHaveBeenCalledTimes(1);
+			expect(deleteMessageSpy).toHaveBeenCalledWith({ id: messageId }, undefined);
 		});
 	});
 
-	it('removes the messages on hard delete', () => {
-		const channels = [setupChannel('type', 'id1'), setupChannel('type', 'id2')];
+	describe('deleteMessage (the HTTP request)', () => {
+		let sendRequestSpy;
 
-		const event = {
-			type: 'user.messages.deleted',
-			user: bannedUser,
-			hard_delete: true,
-			created_at: '2025-02-01T14:01:30.000Z',
-		};
-		client._handleClientEvent(event);
-		channels.forEach((channel) => {
-			expect(channel.state.messageSets[0].messages).toHaveLength(messageSet1.length);
-			expect(channel.state.messageSets[1].messages).toHaveLength(messageSet2.length);
-
-			const check = (message) => {
-				const deletedMessage = {
-					attachments: [],
-					cid: message.cid,
-					created_at: message.created_at,
-					deleted_at: new Date(event.created_at),
-					id: message.id,
-					latest_reactions: [],
-					mentioned_users: [],
-					own_reactions: [],
-					parent_id: message.parent_id,
-					reply_count: message.reply_count,
-					status: message.status,
-					thread_participants: message.thread_participants,
-					type: 'deleted',
-					updated_at: message.updated_at,
-					user: message.user,
-				};
-				if (message.user.id === bannedUser.id) {
-					expect(message).toStrictEqual(deletedMessage);
-				} else if (message.quoted_message) {
-					expect(message).toStrictEqual({
-						...message,
-						quoted_message: {
-							...deletedMessage,
-							id: message.quoted_message.id,
-							user: message.quoted_message.user,
-							created_at: message.quoted_message.created_at,
-							updated_at: message.quoted_message.updated_at,
-						},
-					});
-				} else {
-					expect(message).toEqual(message);
-				}
-			};
-
-			channel.state.messageSets[0].messages.forEach(check);
-			channel.state.messageSets[1].messages.forEach(check);
-			channel.state.pinnedMessages.forEach(check);
-			Object.values(channel.state.threads).forEach((replies) => replies.forEach(check));
+		beforeEach(() => {
+			sendRequestSpy = vi.spyOn(client.api, 'sendRequest').mockResolvedValue({
+				message: { id: messageId },
+				metadata: {},
+			});
 		});
-	});
 
-	it('removes the messages on soft delete', () => {
-		const channels = [setupChannel('type', 'id1'), setupChannel('type', 'id2')];
+		afterEach(() => {
+			vi.resetAllMocks();
+		});
 
-		const event = {
-			type: 'user.messages.deleted',
-			user: bannedUser,
-			soft_delete: true,
-			created_at: '2025-02-01T14:01:30.000Z',
-		};
-		client._handleClientEvent(event);
-		channels.forEach((channel) => {
-			expect(channel.state.messageSets[0].messages).toHaveLength(messageSet1.length);
-			expect(channel.state.messageSets[1].messages).toHaveLength(messageSet2.length);
+		it('returns the response from the underlying deleteMessage call', async () => {
+			const result = await client.deleteMessage({ id: messageId });
 
-			const check = (message) => {
-				if (message.user.id === bannedUser.id) {
-					expect(message).toStrictEqual({
-						...message,
-						attachments: [],
-						deleted_at: new Date(event.created_at),
-						type: 'deleted',
-					});
-				} else if (message.quoted_message) {
-					expect(message).toStrictEqual({
-						...message,
-						quoted_message: {
-							...message.quoted_message,
-							attachments: [],
-							deleted_at: new Date(event.created_at),
-							type: 'deleted',
-						},
-					});
-				} else {
-					expect(message).toEqual(message);
-				}
-			};
+			expect(sendRequestSpy).toHaveBeenCalledTimes(1);
+			expect(result.message).toMatchObject({ id: messageId });
+		});
 
-			channel.state.messageSets[0].messages.forEach(check);
-			channel.state.messageSets[1].messages.forEach(check);
-			channel.state.pinnedMessages.forEach(check);
-			Object.values(channel.state.threads).forEach((replies) => replies.forEach(check));
+		it('enriches the message with type="deleted" and deleted_for_me=true when delete_for_me is set', async () => {
+			const result = await client.deleteMessage(
+				{ id: messageId },
+				{ delete_for_me: true },
+			);
+
+			expect(result.message).toMatchObject({
+				id: messageId,
+				deleted_for_me: true,
+				type: 'deleted',
+			});
+		});
+
+		it('does not enrich the message when delete_for_me is not set', async () => {
+			const result = await client.deleteMessage({ id: messageId }, { hard: true });
+
+			expect(sendRequestSpy.mock.calls[0][3]).toEqual({ hard: true });
+			expect(result.message).toMatchObject({ id: messageId });
+			expect(result.message).not.toHaveProperty('deleted_for_me');
+			expect(result.message).not.toHaveProperty('type');
+		});
+
+		it('sends the request without queueing it, even with an offline DB', async () => {
+			await client.deleteMessage({ id: messageId });
+
+			expect(queueTaskSpy).not.toHaveBeenCalled();
+			expect(sendRequestSpy).toHaveBeenCalledTimes(1);
 		});
 	});
 });
 
 // Regression coverage for GetStream/stream-chat-js#1736.
 // Hard-deleting a user whose cached messages include a self-quote (a message that
-// quotes another message from the same user) used to throw inside
-// _deleteUserMessages, aborting the entire dispatchEvent chain — downstream
-// listeners and offline-DB writes silently dropped. These tests exercise both
-// event entry points that funnel into _deleteUserMessageReference.
+// quotes another message from the same user) used to throw inside the message-deletion
+// path, aborting the entire dispatchEvent chain — downstream listeners and offline-DB
+// writes silently dropped. These tests exercise both event entry points that funnel into
+// _deleteUserMessageReference.
+describe('user.updated propagates to message + pinned paginators', () => {
+	let client;
+
+	beforeEach(async () => {
+		client = await getClientWithUser();
+	});
+
+	it('reflects the updated user on both messagePaginator and pinnedMessagesPaginator', () => {
+		const author = { id: 'author', name: 'Old Name' };
+		const channel = client.channelManager.ensure({
+			type: 'messaging',
+			id: 'user-updated-1',
+		});
+		const message = generateMsg({ id: 'm1', user: author });
+		const pinned = generateMsg({
+			id: 'p1',
+			cid: channel.cid,
+			user: author,
+			pinned: true,
+			pinned_at: convertDateToTimestamp('2020-01-01T00:00:00.000Z'),
+		});
+
+		channel.messagePaginator.setItems({
+			valueOrFactory: [message],
+			isFirstPage: true,
+			isLastPage: true,
+		});
+		channel.pinnedMessagesPaginator.ingestPage({
+			page: [utils.formatMessage(pinned)],
+			isHead: true,
+			isTail: true,
+			setActive: true,
+		});
+
+		client._handleClientEvent({
+			type: 'user.updated',
+			user: { ...author, name: 'New Name' },
+		});
+
+		expect(channel.messagePaginator.getItem('m1')?.user?.name).toBe('New Name');
+		expect(channel.pinnedMessagesPaginator.getItem('p1')?.user?.name).toBe('New Name');
+	});
+});
+
+describe('user.updated propagates to channel members, watchers and read states', () => {
+	let client;
+	let channel;
+	const bob = { id: 'bob', name: 'Bob' };
+
+	beforeEach(async () => {
+		client = await getClientWithUser();
+		channel = client.channelManager.ensure({
+			type: 'messaging',
+			id: 'user-updated-members',
+		});
+		channel.state.partialNext({
+			members: { bob: { user: bob, user_id: 'bob' } },
+			watchers: { bob },
+			read: { bob: { user: bob, unread_messages: 0 } },
+		});
+		client.state.updateUserReference(bob, channel.cid);
+	});
+
+	it('publishes new member, watcher and read objects in one state update', () => {
+		const before = channel.state.getLatestValue();
+		const listener = vi.fn();
+		const unsubscribe = channel.state.subscribe(listener);
+		listener.mockClear();
+
+		client._handleClientEvent({ type: 'user.updated', user: { ...bob, name: 'Robert' } });
+		unsubscribe();
+
+		expect(listener).toHaveBeenCalledTimes(1);
+		const after = channel.state.getLatestValue();
+		expect(after.members.bob.user.name).toBe('Robert');
+		expect(after.watchers.bob.name).toBe('Robert');
+		expect(after.read.bob.user.name).toBe('Robert');
+		// replaced, not edited in place, so selectors comparing references see the change
+		expect(before.members.bob.user.name).toBe('Bob');
+		expect(before.read.bob.user.name).toBe('Bob');
+	});
+
+	it('gives the read receipts the updated user', () => {
+		channel.state.partialNext({
+			read: { bob: { user: bob, last_read: 3000, unread_messages: 0 } },
+		});
+		channel.messageReceiptsTracker.ingestInitial([{ user: bob, last_read: 3000 }]);
+
+		client._handleClientEvent({ type: 'user.updated', user: { ...bob, name: 'Robert' } });
+
+		expect(channel.messageReceiptsTracker.getUserProgress('bob')?.user.name).toBe(
+			'Robert',
+		);
+	});
+
+	it('leaves the read receipts alone on a presence change', () => {
+		channel.state.partialNext({
+			read: { bob: { user: bob, last_read: 3000, unread_messages: 0 } },
+		});
+		channel.messageReceiptsTracker.ingestInitial([{ user: bob, last_read: 3000 }]);
+		const { revision } = channel.messageReceiptsTracker.snapshotStore.getLatestValue();
+		const readBefore = channel.state.getLatestValue().read.bob;
+
+		client._handleClientEvent({
+			type: 'user.presence.changed',
+			user: { ...bob, online: true },
+		});
+
+		const after = channel.state.getLatestValue();
+		expect(after.members.bob.user.online).toBe(true);
+		expect(after.watchers.bob.online).toBe(true);
+		expect(after.read.bob).toBe(readBefore);
+		expect(channel.messageReceiptsTracker.snapshotStore.getLatestValue().revision).toBe(
+			revision,
+		);
+	});
+
+	it('re-renders a subscriber of channel.state.members', () => {
+		const names = [];
+		const unsubscribe = channel.state.subscribeWithSelector(
+			({ members }) => ({ members }),
+			({ members }) => names.push(members.bob?.user?.name),
+		);
+
+		client._handleClientEvent({ type: 'user.updated', user: { ...bob, name: 'Robert' } });
+		unsubscribe();
+
+		expect(names).toEqual(['Bob', 'Robert']);
+	});
+
+	it('does not publish for a channel that does not contain the user', () => {
+		const other = client.channelManager.ensure({
+			type: 'messaging',
+			id: 'user-updated-other',
+		});
+		client.state.updateUserReference(bob, other.cid);
+		const listener = vi.fn();
+		const unsubscribe = other.state.subscribe(listener);
+		listener.mockClear();
+
+		client._handleClientEvent({ type: 'user.updated', user: { ...bob, name: 'Robert' } });
+		unsubscribe();
+
+		expect(listener).not.toHaveBeenCalled();
+	});
+});
+
+describe('user.updated reaches users who entered a channel after its query', () => {
+	let client;
+	let channel;
+	const bob = { id: 'bob', name: 'Bob' };
+	const renameBob = () =>
+		client.dispatchEvent({ type: 'user.updated', user: { ...bob, name: 'Robert' } });
+
+	beforeEach(async () => {
+		client = await getClientWithUser();
+		channel = client.channelManager.ensure({ type: 'messaging', id: 'joined-later' });
+	});
+
+	it.each([['member.added'], ['member.updated']])('reaches a member from %s', (type) => {
+		client.dispatchEvent({
+			type,
+			cid: channel.cid,
+			member: { user: bob, user_id: 'bob' },
+		});
+
+		renameBob();
+
+		expect(channel.state.getLatestValue().members.bob.user.name).toBe('Robert');
+	});
+
+	it('reaches a member hydrated without a query, as a thread hydrates its channel', () => {
+		channel._hydrateMembers({ members: [{ user: bob, user_id: 'bob' }] });
+
+		renameBob();
+
+		expect(channel.state.getLatestValue().members.bob.user.name).toBe('Robert');
+	});
+
+	it('reaches a watcher from user.watching.start', () => {
+		client.dispatchEvent({ type: 'user.watching.start', cid: channel.cid, user: bob });
+
+		renameBob();
+
+		expect(channel.state.getLatestValue().watchers.bob.name).toBe('Robert');
+	});
+
+	it('reaches the own membership, also when the members page leaves the user out', async () => {
+		const me = client.user;
+		channel._initializeState({
+			members: [],
+			membership: { user: { id: me.id, name: me.name }, user_id: me.id },
+		});
+
+		client.dispatchEvent({
+			type: 'user.presence.changed',
+			user: { ...me, online: true },
+		});
+
+		expect(channel.state.getLatestValue().membership.user.online).toBe(true);
+	});
+
+	it('reaches a joined member on a presence change', () => {
+		client.dispatchEvent({
+			type: 'member.added',
+			cid: channel.cid,
+			member: { user: bob, user_id: 'bob' },
+		});
+
+		client.dispatchEvent({
+			type: 'user.presence.changed',
+			user: { ...bob, online: true },
+		});
+
+		expect(channel.state.getLatestValue().members.bob.user.online).toBe(true);
+	});
+});
+
+describe('user.updated preserves the own-user-only fields on client.user', () => {
+	let client;
+
+	beforeEach(async () => {
+		client = await getClientWithUser({ id: 'own-user' });
+	});
+
+	// Regression: `OwnUserBase` used to be a hand-maintained field list that had drifted from
+	// `OwnUserResponse` — it omitted `latest_hidden_channels`, so every `user.updated` event
+	// deleted that field off `client.user`. The list is derived now; this pins the behaviour.
+	it('keeps own-user fields the event body does not carry, and drops the rest', () => {
+		client.user = {
+			...client.user,
+			// own-user-only — must all survive an event that omits them
+			channel_mutes: [],
+			devices: [],
+			invisible: false,
+			latest_hidden_channels: ['messaging:hidden'],
+			mutes: [],
+			privacy_settings: { read_receipts: { enabled: true } },
+			push_preferences: {},
+			total_unread_count: 3,
+			total_unread_count_by_team: { red: 1 },
+			unread_channels: 1,
+			unread_count: 3,
+			unread_threads: 0,
+			// not an own-user field — the event omitting it means it was cleared server-side
+			image: 'https://example.com/old.png',
+		};
+		client._user = { ...client.user };
+
+		client._handleClientEvent({
+			type: 'user.updated',
+			user: { id: 'own-user', name: 'New Name' },
+		});
+
+		expect(client.user.latest_hidden_channels).toEqual(['messaging:hidden']);
+		expect(client.user.total_unread_count).toBe(3);
+		expect(client.user.total_unread_count_by_team).toEqual({ red: 1 });
+		expect(client.user.unread_threads).toBe(0);
+		expect(client.user.privacy_settings).toEqual({ read_receipts: { enabled: true } });
+		expect(client.user.invisible).toBe(false);
+		expect(client.user.name).toBe('New Name');
+		expect(client.user.image).toBeUndefined();
+	});
+});
+
+describe('user.messages.deleted (client-level, cross-channel)', () => {
+	let client;
+	const bannedUser = { id: 'banned-user' };
+	const otherUser = { id: 'other-user' };
+
+	beforeEach(async () => {
+		client = await getClientWithUser();
+	});
+
+	// Seeds a channel (registered as active by `client.channel`) with one main + one pinned message
+	// from the banned user, plus a pinned message from another user. The client-level loop scans all
+	// active channels, so no explicit user->channel reference registration is needed.
+	const setupChannel = (id) => {
+		const channel = client.channelManager.ensure({ type: 'messaging', id: id });
+		const main = generateMsg({ id: `${id}-m`, cid: channel.cid, user: bannedUser });
+		const pinned = generateMsg({
+			id: `${id}-p`,
+			cid: channel.cid,
+			user: bannedUser,
+			pinned: true,
+			pinned_at: convertDateToTimestamp('2020-01-01T00:00:00.000Z'),
+		});
+		const otherPinned = generateMsg({
+			id: `${id}-op`,
+			cid: channel.cid,
+			user: otherUser,
+			pinned: true,
+			pinned_at: convertDateToTimestamp('2020-01-02T00:00:00.000Z'),
+		});
+		channel.messagePaginator.setItems({
+			valueOrFactory: [main],
+			isFirstPage: true,
+			isLastPage: true,
+		});
+		channel.pinnedMessagesPaginator.ingestPage({
+			page: [pinned, otherPinned].map((m) => utils.formatMessage(m)),
+			isHead: true,
+			isTail: true,
+			setActive: true,
+		});
+		return channel;
+	};
+
+	it('ignores a channel-scoped (cid-carrying) event — the channel owns it', () => {
+		const channel = setupChannel('c1');
+
+		client._handleClientEvent({
+			type: 'user.messages.deleted',
+			cid: channel.cid,
+			user: bannedUser,
+			hard_delete: true,
+			created_at: convertDateToTimestamp('2025-01-01T00:00:00.000Z'),
+		});
+
+		// cid present → the client-level cross-channel loop must be a no-op (no double-delete).
+		expect(channel.messagePaginator.items?.map((m) => m.id)).to.include('c1-m');
+		expect(channel.pinnedMessagesPaginator.items?.map((m) => m.id)).to.include('c1-p');
+	});
+
+	it("soft-deletes the user's main and pinned messages across channels", () => {
+		const channels = [setupChannel('c1'), setupChannel('c2')];
+
+		client._handleClientEvent({
+			type: 'user.messages.deleted',
+			user: bannedUser,
+			soft_delete: true,
+			created_at: convertDateToTimestamp('2025-01-01T00:00:00.000Z'),
+		});
+
+		channels.forEach((channel) => {
+			const id = channel.id;
+			expect(channel.messagePaginator.getItem(`${id}-m`)?.type).to.equal('deleted');
+			expect(channel.pinnedMessagesPaginator.getItem(`${id}-p`)?.type).to.equal(
+				'deleted',
+			);
+			// the other user's pinned message is untouched
+			expect(channel.pinnedMessagesPaginator.getItem(`${id}-op`)?.type).to.not.equal(
+				'deleted',
+			);
+		});
+	});
+
+	it("hard-deletes the user's main and pinned messages across channels", () => {
+		const channels = [setupChannel('c1'), setupChannel('c2')];
+
+		client._handleClientEvent({
+			type: 'user.messages.deleted',
+			user: bannedUser,
+			hard_delete: true,
+			created_at: convertDateToTimestamp('2025-01-01T00:00:00.000Z'),
+		});
+
+		channels.forEach((channel) => {
+			const id = channel.id;
+			expect(channel.messagePaginator.items?.map((m) => m.id)).to.not.include(`${id}-m`);
+			expect(channel.pinnedMessagesPaginator.items?.map((m) => m.id)).to.eql([
+				`${id}-op`,
+			]);
+		});
+	});
+});
+
 describe('user.messages.deleted — quoted_message regression (#1736)', () => {
 	let client;
 	const bannedUser = { id: 'banned-user' };
@@ -2183,17 +2827,24 @@ describe('user.messages.deleted — quoted_message regression (#1736)', () => {
 
 	const setupChannelWithSelfQuote = (type, id) => {
 		const m1 = generateMsg({
-			created_at: '2020-01-01T00:00:01.000Z',
+			created_at: convertDateToTimestamp(new Date('2020-01-01T00:00:01.000Z')),
 			user: bannedUser,
 		});
 		const m2 = generateMsg({
-			created_at: '2020-01-01T00:00:02.000Z',
+			created_at: convertDateToTimestamp(new Date('2020-01-01T00:00:02.000Z')),
 			user: bannedUser,
 			quoted_message: m1,
 			quoted_message_id: m1.id,
 		});
-		const channel = client.channel(type, id);
-		channel.state.addMessagesSorted([m1, m2]);
+		const channel = client.channelManager.ensure({ type: type, id: id });
+		// `client.channel` registers the channel as active; the client-level deletion loop scans all
+		// active channels, and setItems puts the messages in the paginator (the message list source of
+		// truth) so the deletion has something to act on.
+		channel.messagePaginator.setItems({
+			valueOrFactory: [m1, m2],
+			isFirstPage: true,
+			isLastPage: true,
+		});
 		return { channel, m1, m2 };
 	};
 
@@ -2204,18 +2855,16 @@ describe('user.messages.deleted — quoted_message regression (#1736)', () => {
 			type: 'user.messages.deleted',
 			user: bannedUser,
 			hard_delete: true,
-			created_at: '2025-02-01T14:01:30.000Z',
+			created_at: convertDateToTimestamp('2025-02-01T14:01:30.000Z'),
 		};
 
 		expect(() => client._handleClientEvent(event)).not.toThrow();
 
-		const messages = channel.state.messageSets[0].messages;
-		expect(messages).toHaveLength(2);
-		expect(messages.find((m) => m.id === m1.id).type).toBe('deleted');
-		const quoter = messages.find((m) => m.id === m2.id);
-		expect(quoter.type).toBe('deleted');
-		// Hard-delete strips the parent — no quoted_message field remains on it.
-		expect(quoter.quoted_message).toBeUndefined();
+		// Both messages belong to the banned user, so a hard delete drops both from the
+		// active window; the point is that the self-quote (m2 -> m1) does not throw.
+		const items = channel.messagePaginator.items ?? [];
+		expect(items.find((m) => m.id === m1.id)).toBeUndefined();
+		expect(items.find((m) => m.id === m2.id)).toBeUndefined();
 	});
 
 	it('still fires downstream client listeners after the self-quote encounter on hard-delete', () => {
@@ -2228,7 +2877,7 @@ describe('user.messages.deleted — quoted_message regression (#1736)', () => {
 			type: 'user.messages.deleted',
 			user: bannedUser,
 			hard_delete: true,
-			created_at: '2025-02-01T14:01:30.000Z',
+			created_at: convertDateToTimestamp('2025-02-01T14:01:30.000Z'),
 		};
 
 		expect(() => client.dispatchEvent(event)).not.toThrow();
@@ -2240,16 +2889,19 @@ describe('user.messages.deleted — quoted_message regression (#1736)', () => {
 
 		const event = {
 			type: 'user.deleted',
-			user: { ...bannedUser, deleted_at: '2025-02-01T14:01:30.000Z' },
+			user: {
+				...bannedUser,
+				deleted_at: convertDateToTimestamp('2025-02-01T14:01:30.000Z'),
+			},
 			hard_delete: true,
-			created_at: '2025-02-01T14:01:30.000Z',
+			created_at: convertDateToTimestamp('2025-02-01T14:01:30.000Z'),
 		};
 
 		expect(() => client._handleClientEvent(event)).not.toThrow();
 
-		const messages = channel.state.messageSets[0].messages;
-		expect(messages.find((m) => m.id === m1.id).type).toBe('deleted');
-		expect(messages.find((m) => m.id === m2.id).type).toBe('deleted');
+		const items = channel.messagePaginator.items ?? [];
+		expect(items.find((m) => m.id === m1.id)).toBeUndefined();
+		expect(items.find((m) => m.id === m2.id)).toBeUndefined();
 	});
 });
 
@@ -2260,7 +2912,7 @@ describe('dispatchEvent: offlineDb.executeQuerySafely', () => {
 	beforeEach(async () => {
 		client = await getClientWithUser({ id: 'user-abc' });
 		const offlineDb = new MockOfflineDB({ client });
-		await offlineDb.init(client.userID);
+		await offlineDb.init(client.userId);
 		client.setOfflineDBApi(offlineDb);
 
 		executeQuerySafelySpy = vi.spyOn(offlineDb, 'executeQuerySafely');
@@ -2329,7 +2981,7 @@ describe('X-Stream-Client header', () => {
 	});
 
 	it('client-side integration', () => {
-		client.node = false;
+		client.config.setConfig('client', { browser: true });
 		const userAgent = client.getUserAgent();
 
 		expect(userAgent).toMatchInlineSnapshot(
@@ -2397,118 +3049,16 @@ describe('X-Stream-Client header', () => {
 
 		expect(client.getUserAgent()).toBe(first);
 	});
-
-	describe('getHookEvents', () => {
-		let clientGetSpy;
-
-		beforeEach(() => {
-			clientGetSpy = vi.spyOn(client, 'get').mockResolvedValue({});
-		});
-
-		it('should call get with correct URL and no params when no products specified', async () => {
-			await client.getHookEvents();
-
-			expect(clientGetSpy).toHaveBeenCalledTimes(1);
-			expect(clientGetSpy).toHaveBeenCalledWith(`${client.baseURL}/hook/events`, {});
-		});
-
-		it('should call get with correct URL and empty params when empty products array specified', async () => {
-			await client.getHookEvents([]);
-
-			expect(clientGetSpy).toHaveBeenCalledTimes(1);
-			expect(clientGetSpy).toHaveBeenCalledWith(`${client.baseURL}/hook/events`, {});
-		});
-
-		it('should call get with product params when products specified', async () => {
-			await client.getHookEvents(['chat', 'video']);
-
-			expect(clientGetSpy).toHaveBeenCalledTimes(1);
-			expect(clientGetSpy).toHaveBeenCalledWith(`${client.baseURL}/hook/events`, {
-				product: 'chat,video',
-			});
-		});
-
-		it('should call get with single product param', async () => {
-			await client.getHookEvents(['chat']);
-
-			expect(clientGetSpy).toHaveBeenCalledTimes(1);
-			expect(clientGetSpy).toHaveBeenCalledWith(`${client.baseURL}/hook/events`, {
-				product: 'chat',
-			});
-		});
-
-		it('should return the response from get', async () => {
-			const mockResponse = {
-				events: [
-					{
-						name: 'message.new',
-						description: 'When a new message is added',
-						products: ['chat'],
-					},
-					{
-						name: 'call.created',
-						description: 'The call was created',
-						products: ['video'],
-					},
-				],
-			};
-			clientGetSpy.mockResolvedValue(mockResponse);
-
-			const result = await client.getHookEvents(['chat', 'video']);
-
-			expect(result).toEqual(mockResponse);
-		});
-	});
-});
-
-describe('markChannelsDelivered', () => {
-	let client;
-	const user = { id: 'user' };
-
-	beforeEach(() => {
-		client = new StreamChat('', '');
-
-		vi.spyOn(client, 'post').mockResolvedValue({
-			ok: true,
-		});
-	});
-
-	afterEach(() => {
-		vi.restoreAllMocks();
-	});
-
-	it('prevents triggering the request with empty payload', async () => {
-		await client.markChannelsDelivered();
-		expect(client.post).not.toHaveBeenCalled();
-
-		await client.markChannelsDelivered({});
-		expect(client.post).not.toHaveBeenCalled();
-
-		await client.markChannelsDelivered({ latest_delivered_messages: [] });
-		expect(client.post).not.toHaveBeenCalled();
-
-		await client.markChannelsDelivered({ user, user_id: user.id });
-		expect(client.post).not.toHaveBeenCalled();
-	});
-
-	it('triggers the request with at least on channel to report', async () => {
-		const delivered = [{ cid: 'cid', id: 'message-id' }];
-		await client.markChannelsDelivered({ latest_delivered_messages: delivered });
-		expect(client.post).toHaveBeenCalledWith(
-			'https://chat.stream-io-api.com/channels/delivered',
-			{ latest_delivered_messages: delivered },
-		);
-	});
 });
 
 // Regression coverage for GetStream/stream-chat-react#2599.
 // When the current user is removed from a channel the server sends a
 // `notification.removed_from_channel` event. Previously the client only evicted
-// channels from `activeChannels` on deletion, so a removed-from channel lingered:
+// channels from the channel store on deletion, so a removed-from channel lingered:
 // later `message.new` / `notification.message_new` events were still delivered to
-// it, and on reconnect `recoverState()` re-watched it (because it re-watches every
-// cid still in `activeChannels`), re-promoting it in downstream lists.
-describe('activeChannels eviction when the current user is removed (#2599)', () => {
+// it, and connection recovery refreshed it, re-promoting it in downstream lists.
+// Eviction is what keeps it out of both paths.
+describe('channel store eviction when the current user is removed (#2599)', () => {
 	let client;
 	const currentUserId = 'current-user';
 
@@ -2523,25 +3073,25 @@ describe('activeChannels eviction when the current user is removed (#2599)', () 
 		channel_id: channel.id,
 	});
 
-	it('evicts the channel from activeChannels and disconnects it on notification.removed_from_channel', () => {
-		const channel = client.channel('messaging', 'ch-removed');
-		const disconnectSpy = vi.spyOn(channel, '_disconnect');
-		expect(client.activeChannels[channel.cid]).to.equal(channel);
+	it('evicts the channel from the channel store and disconnects it on notification.removed_from_channel', () => {
+		const channel = client.channelManager.ensure({ type: 'messaging', id: 'ch-removed' });
+		expect(client.channelManager.get(channel.cid)).to.equal(channel);
 
 		client.dispatchEvent(removedFromChannelEvent(channel));
 
-		expect(disconnectSpy).toHaveBeenCalledTimes(1);
-		expect(client.activeChannels[channel.cid]).to.be.undefined;
+		expect(channel.pendingDisposal).to.equal(true);
+		expect(client.channelManager.get(channel.cid)).to.be.undefined;
+		expect(client.channelManager.get(channel.cid)).to.be.undefined;
 	});
 
 	it('evicts regardless of channel type (does not special-case the channel type)', () => {
 		const channels = [
-			client.channel('livestream', 'stream-1'),
-			client.channel('team', 'team-1'),
-			client.channel('gaming', 'game-1'),
+			client.channelManager.ensure({ type: 'livestream', id: 'stream-1' }),
+			client.channelManager.ensure({ type: 'team', id: 'team-1' }),
+			client.channelManager.ensure({ type: 'gaming', id: 'game-1' }),
 		];
 		channels.forEach((channel) => {
-			expect(client.activeChannels[channel.cid]).to.equal(channel);
+			expect(client.channelManager.get(channel.cid)).to.equal(channel);
 		});
 
 		channels.forEach((channel) => {
@@ -2549,12 +3099,12 @@ describe('activeChannels eviction when the current user is removed (#2599)', () 
 		});
 
 		channels.forEach((channel) => {
-			expect(client.activeChannels[channel.cid]).to.be.undefined;
+			expect(client.channelManager.get(channel.cid)).to.be.undefined;
 		});
 	});
 
 	it('stops routing channel events (message.new) to the channel once it is evicted', () => {
-		const channel = client.channel('messaging', 'ch-events');
+		const channel = client.channelManager.ensure({ type: 'messaging', id: 'ch-events' });
 		const handleChannelEventSpy = vi.spyOn(channel, '_handleChannelEvent');
 		const messageNewEvent = {
 			type: 'message.new',
@@ -2576,27 +3126,32 @@ describe('activeChannels eviction when the current user is removed (#2599)', () 
 		// new messages and got re-promoted in the ChannelList).
 		client.dispatchEvent(messageNewEvent);
 		expect(handleChannelEventSpy).not.toHaveBeenCalled();
-		expect(client.activeChannels[channel.cid]).to.be.undefined;
+		expect(client.channelManager.get(channel.cid)).to.be.undefined;
 	});
 
-	it('does not re-watch the evicted channel on recoverState', async () => {
-		const removed = client.channel('messaging', 'removed');
-		const kept = client.channel('messaging', 'kept');
-		const queryChannelsStub = vi.spyOn(client, 'queryChannels').mockResolvedValue([]);
+	it('does not reload the evicted channel on connection recovery', async () => {
+		const removed = client.channelManager.ensure({ type: 'messaging', id: 'removed' });
+		const kept = client.channelManager.ensure({ type: 'messaging', id: 'kept' });
+		// Recovery only reloads channels a consumer declared it is reading.
+		removed.activate();
+		kept.activate();
+		const removedReload = vi.spyOn(removed, 'reload').mockResolvedValue(undefined);
+		const keptReload = vi.spyOn(kept, 'reload').mockResolvedValue(undefined);
 
 		client.dispatchEvent(removedFromChannelEvent(removed));
 
-		await client.recoverState();
+		await client.connectionRecovery.recover();
 
-		expect(queryChannelsStub).toHaveBeenCalledTimes(1);
-		const [filters] = queryChannelsStub.mock.calls[0];
-		expect(filters.cid.$in).to.contain(kept.cid);
-		expect(filters.cid.$in).not.to.contain(removed.cid);
+		expect(keptReload).toHaveBeenCalledTimes(1);
+		expect(removedReload).not.toHaveBeenCalled();
 	});
 
 	it('does not evict when another user is removed (member.removed for a different user)', () => {
-		const channel = client.channel('messaging', 'ch-other-member');
-		const disconnectSpy = vi.spyOn(channel, '_disconnect');
+		const channel = client.channelManager.ensure({
+			type: 'messaging',
+			id: 'ch-other-member',
+		});
+		const disconnectSpy = vi.spyOn(channel, 'disconnect');
 
 		client.dispatchEvent({
 			type: 'member.removed',
@@ -2608,14 +3163,15 @@ describe('activeChannels eviction when the current user is removed (#2599)', () 
 		});
 
 		expect(disconnectSpy).not.toHaveBeenCalled();
-		expect(client.activeChannels[channel.cid]).to.equal(channel);
+		expect(client.channelManager.get(channel.cid)).to.equal(channel);
 	});
 
 	it('still evicts on channel.deleted and notification.channel_deleted (no regression)', () => {
-		const deleted = client.channel('messaging', 'deleted-1');
-		const notifDeleted = client.channel('messaging', 'deleted-2');
-		const deletedDisconnect = vi.spyOn(deleted, '_disconnect');
-		const notifDeletedDisconnect = vi.spyOn(notifDeleted, '_disconnect');
+		const deleted = client.channelManager.ensure({ type: 'messaging', id: 'deleted-1' });
+		const notifDeleted = client.channelManager.ensure({
+			type: 'messaging',
+			id: 'deleted-2',
+		});
 
 		client.dispatchEvent({
 			type: 'channel.deleted',
@@ -2630,9 +3186,350 @@ describe('activeChannels eviction when the current user is removed (#2599)', () 
 			channel_id: notifDeleted.id,
 		});
 
-		expect(deletedDisconnect).toHaveBeenCalledTimes(1);
-		expect(notifDeletedDisconnect).toHaveBeenCalledTimes(1);
-		expect(client.activeChannels[deleted.cid]).to.be.undefined;
-		expect(client.activeChannels[notifDeleted.cid]).to.be.undefined;
+		expect(deleted.pendingDisposal).to.equal(true);
+		expect(notifDeleted.pendingDisposal).to.equal(true);
+		expect(client.channelManager.get(deleted.cid)).to.be.undefined;
+		expect(client.channelManager.get(notifDeleted.cid)).to.be.undefined;
+		expect(client.channelManager.get(deleted.cid)).to.be.undefined;
+		expect(client.channelManager.get(notifDeleted.cid)).to.be.undefined;
+	});
+});
+
+describe('Client pinMessage / unpinMessage', () => {
+	let client;
+	let updateMessagePartial;
+
+	beforeEach(async () => {
+		client = await getClientWithUser({ id: 'user' });
+		updateMessagePartial = vi.spyOn(client, 'updateMessagePartial').mockResolvedValue({});
+	});
+
+	it('pins without expiry at the current time by default', async () => {
+		await client.pinMessage({ id: 'm1' });
+
+		expect(updateMessagePartial).toHaveBeenCalledWith(
+			{ id: 'm1' },
+			{ set: { pinned: true, pin_expires: null, pinned_at: null } },
+			undefined,
+		);
+	});
+
+	it('sends the given expiry and pin time', async () => {
+		const pinExpires = new Date('2077-01-01T00:00:00.000Z');
+
+		await client.pinMessage(
+			{ id: 'm1' },
+			{ pin_expires: pinExpires, pinned_at: '2026-01-01T00:00:00Z' },
+		);
+
+		expect(updateMessagePartial).toHaveBeenCalledWith(
+			{ id: 'm1' },
+			{
+				set: { pinned: true, pin_expires: pinExpires, pinned_at: '2026-01-01T00:00:00Z' },
+			},
+			undefined,
+		);
+	});
+
+	it('unpins', async () => {
+		await client.unpinMessage({ id: 'm1' });
+
+		expect(updateMessagePartial).toHaveBeenCalledWith(
+			{ id: 'm1' },
+			{ set: { pinned: false } },
+			undefined,
+		);
+	});
+
+	it('rejects a message without an id', () => {
+		expect(() => client.pinMessage({})).toThrow(/specify the message id/);
+		expect(() => client.unpinMessage({})).toThrow(/specify the message id/);
+	});
+});
+
+describe('Client moderation flagMessage / flagUser', () => {
+	let client;
+	let flag;
+
+	beforeEach(async () => {
+		client = await getClientWithUser({ id: 'user' });
+		flag = vi.spyOn(client.moderation, 'flag').mockResolvedValue({});
+	});
+
+	it('flags a message by id, with the reason and options', async () => {
+		await client.moderation.flagMessage({
+			message_id: 'm1',
+			reason: 'spam',
+			custom: { note: 'x' },
+		});
+
+		expect(flag).toHaveBeenCalledWith(
+			{
+				entity_type: 'stream:chat:v1:message',
+				entity_id: 'm1',
+				reason: 'spam',
+				custom: { note: 'x' },
+			},
+			undefined,
+		);
+	});
+
+	it('flags a user by id', async () => {
+		await client.moderation.flagUser({ user_id: 'u1' });
+
+		expect(flag).toHaveBeenCalledWith(
+			{ entity_type: 'stream:user', entity_id: 'u1', reason: undefined },
+			undefined,
+		);
+	});
+});
+
+describe('Client polls.queryPolls', () => {
+	it('sends the request as client.queryPolls does', async () => {
+		const client = await getClientWithUser({ id: 'user' });
+		const queryPolls = vi
+			.spyOn(client, 'queryPolls')
+			.mockResolvedValue({ polls: [], next: 'next-page' });
+		const request = {
+			filter: { is_closed: true },
+			sort: [{ field: 'created_at', direction: -1 }],
+			limit: 5,
+		};
+
+		const { next } = await client.polls.queryPolls(request);
+
+		expect(queryPolls).toHaveBeenCalledWith(request, undefined);
+		expect(next).toBe('next-page');
+	});
+});
+
+describe('Client WSFallback', () => {
+	const userToken =
+		'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYW1pbiJ9.1R88K_f1CC2yrR6j1_OzMEbasfS_dxRSNbundEDBlJI';
+	const wsFailure = () =>
+		Object.assign(new Error('initial WS connection could not be established'), {
+			isWSFailure: true,
+		});
+	let client;
+	let socketConnect;
+
+	/**
+	 * Answers the long-poll at the axios layer, so the generated `longPoll()` path runs: connects
+	 * with `connectionId`, holds polls until aborted.
+	 */
+	const fakeLongPoll = (connectionId = 'new_id') => {
+		const calls = [];
+		const respond = (data) => Promise.resolve({ data, status: 200, headers: {} });
+		vi.spyOn(client.axiosInstance, 'request').mockImplementation((config) => {
+			calls.push({
+				url: config.url,
+				params: config.params,
+				timeout: config.timeout,
+				authorization: config.headers?.Authorization,
+			});
+			if (config.params?.json) {
+				return respond({
+					event: { type: 'connection.ok', connection_id: connectionId },
+				});
+			}
+			if (config.params?.close) return respond({});
+			return new Promise((_, reject) =>
+				config.signal?.addEventListener('abort', () => reject(new CanceledError())),
+			);
+		});
+		return calls;
+	};
+
+	beforeEach(() => {
+		client = new StreamChat('key', { client: { allowServerSideConnect: true } });
+		client.config.set({ client: { wsConnection: { enableWSFallback: true } } });
+		// As the real socket does: arms the connection id before failing.
+		socketConnect = vi
+			.spyOn(StableWSConnection.prototype, 'connect')
+			.mockImplementation(async () => {
+				client.connectionIdManager.arm();
+				throw wsFailure();
+			});
+	});
+
+	afterEach(async () => {
+		await client.disconnectUser();
+		vi.unstubAllGlobals();
+	});
+
+	it('should try wsFallback if WebSocket fails', async () => {
+		const calls = fakeLongPoll();
+
+		const health = await client.connectUser({ id: 'amin' }, userToken);
+
+		expect(calls[0]).toMatchObject({
+			url: expect.stringMatching(/\/api\/v2\/longpoll$/),
+			// authenticated by the Authorization header, so the message carries only a placeholder
+			params: {
+				json: expect.objectContaining({ token: 'anonymous', products: ['chat'] }),
+			},
+			timeout: 8000,
+		});
+		expect(calls[1]).toMatchObject({
+			params: { connection_id: 'new_id' },
+			timeout: 30000,
+		});
+
+		expect(health).toMatchObject({ type: 'connection.ok', connection_id: 'new_id' });
+		// the socket's own connect timeout, not a shortened one
+		expect(socketConnect).toHaveBeenCalledWith(undefined);
+		expect(client.wsConnection.fallback.state).toBe(WSFallbackConnectionState.Connected);
+		expect(client.wsConnection.isHealthy).toBe(true);
+		expect(client.connectionIdManager.connectionId).toBe('new_id');
+
+		await client.disconnectUser();
+		expect(client.wsConnection.fallback.state).toBe(
+			WSFallbackConnectionState.Disconnected,
+		);
+		expect(client.wsConnection.isHealthy).toBe(false);
+		// the close still carries the id, although the socket's disconnect dropped it first
+		expect(calls.at(-1)).toMatchObject({
+			params: { close: true, connection_id: 'new_id' },
+		});
+	});
+
+	it('should fire connection.fallback_activated and connection.ok events', async () => {
+		fakeLongPoll();
+		const dispatchEvent = vi.spyOn(client, 'dispatchEvent');
+
+		await client.connectUser({ id: 'amin' }, userToken);
+
+		expect(dispatchEvent).toHaveBeenCalledWith(
+			expect.objectContaining({
+				type: 'connection.fallback_activated',
+				mode: 'longpoll',
+			}),
+		);
+		expect(dispatchEvent).toHaveBeenCalledWith(
+			expect.objectContaining({ type: 'connection.ok', connection_id: 'new_id' }),
+		);
+	});
+
+	it('should make a watch issued during the WebSocket attempt wait for the long-poll id', async () => {
+		fakeLongPoll();
+
+		const connecting = client.connectUser({ id: 'amin' }, userToken);
+		const waiter = client.connectionIdManager.getConnectionId();
+		await connecting;
+
+		await expect(waiter).resolves.toBe('new_id');
+	});
+
+	it('should close the long-poll connection id on closeConnection', async () => {
+		const calls = fakeLongPoll();
+		await client.connectUser({ id: 'amin' }, userToken);
+
+		await client.closeConnection();
+
+		expect(calls.at(-1)).toMatchObject({
+			url: expect.stringMatching(/\/api\/v2\/longpoll$/),
+			params: { close: true, connection_id: 'new_id' },
+		});
+		expect(client.wsConnection.isHealthy).toBe(false);
+	});
+
+	it('should keep using the fallback after closeConnection -> openConnection', async () => {
+		fakeLongPoll();
+		await client.connectUser({ id: 'amin' }, userToken);
+		const fallback = client.wsConnection.fallback;
+
+		await client.closeConnection();
+		await client.openConnection();
+
+		expect(client.wsConnection.fallback).toBe(fallback);
+		expect(socketConnect).toHaveBeenCalledTimes(1);
+		expect(client.wsConnection.fallback.state).toBe(WSFallbackConnectionState.Connected);
+	});
+
+	it('should connect a token provider on the kept long-poll after disconnectUser', async () => {
+		const calls = fakeLongPoll();
+		await client.connectUser({ id: 'amin' }, userToken);
+		await client.disconnectUser();
+
+		const health = await client.connectUser({ id: 'amin' }, async () => userToken);
+
+		expect(health).toMatchObject({ type: 'connection.ok', connection_id: 'new_id' });
+		expect(socketConnect).toHaveBeenCalledTimes(1);
+		expect(client.wsConnection.fallback.state).toBe(WSFallbackConnectionState.Connected);
+		expect(calls.filter((call) => call.params?.json).at(-1)).toMatchObject({
+			authorization: userToken,
+		});
+	});
+
+	it('should route network status to the long-poll', async () => {
+		fakeLongPoll();
+		await client.connectUser({ id: 'amin' }, userToken);
+		const socketApply = vi.spyOn(client.wsConnection.connection, '_applyNetworkStatus');
+		client.networkConnection.setStatusReporter(null);
+
+		client.networkConnection.setStatus(false);
+		expect(client.wsConnection.fallback.state).toBe(WSFallbackConnectionState.Closed);
+		expect(client.wsConnection.isHealthy).toBe(false);
+
+		client.networkConnection.setStatus(true);
+		await vi.waitFor(() =>
+			expect(client.wsConnection.fallback.state).toBe(
+				WSFallbackConnectionState.Connected,
+			),
+		);
+		expect(client.wsConnection.isHealthy).toBe(true);
+		expect(socketApply).not.toHaveBeenCalled();
+	});
+
+	it('should report the long-poll connect as in flight', async () => {
+		fakeLongPoll();
+		await client.connectUser({ id: 'amin' }, userToken);
+		await client.closeConnection();
+
+		const reopening = client.openConnection();
+		expect(client.wsConnection.isConnecting).toBe(true);
+		// a second call hands back the attempt in flight instead of starting another
+		expect(client.openConnection()).toBe(reopening);
+
+		await reopening;
+		expect(client.wsConnection.isConnecting).toBe(false);
+	});
+
+	it('should ignore fallback if flag is false', async () => {
+		fakeLongPoll();
+		client.wsConnection.updateConfig({ enableWSFallback: false });
+
+		await expect(client.connectUser({ id: 'amin' }, userToken)).rejects.toThrow(
+			/initial WS connection could not be established/,
+		);
+
+		expect(socketConnect).toHaveBeenCalledTimes(1);
+		expect(client.wsConnection.fallback).toBeUndefined();
+		expect(client.axiosInstance.request).not.toHaveBeenCalled();
+	});
+
+	it('should ignore fallback if a network reporter says the device is offline', async () => {
+		fakeLongPoll();
+		client.networkConnection.setStatusReporter(null);
+		client.networkConnection.setStatus(false);
+
+		await expect(client.connectUser({ id: 'amin' }, userToken)).rejects.toThrow(
+			/initial WS connection could not be established/,
+		);
+
+		expect(client.wsConnection.fallback).toBeUndefined();
+	});
+
+	it('should fall back anyway when the offline reading only mirrors the WebSocket', async () => {
+		fakeLongPoll();
+		// the host default without a network API: its "offline" only means the socket is down
+		expect(client.networkConnection.usesDefaultWSConnectionNetworkStatusReporter).toBe(
+			true,
+		);
+		client.networkConnection.state.partialNext({ isOnline: false });
+
+		await client.connectUser({ id: 'amin' }, userToken);
+
+		expect(client.wsConnection.fallback.state).toBe(WSFallbackConnectionState.Connected);
 	});
 });

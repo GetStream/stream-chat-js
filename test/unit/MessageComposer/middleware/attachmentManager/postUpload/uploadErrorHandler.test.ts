@@ -10,6 +10,7 @@ import { getClientWithUser } from '../../../../test-utils/getClient';
 
 vi.mock('../../../../../src/utils', () => ({
   generateUUIDv4: vi.fn().mockReturnValue('test-uuid'),
+  getEnv: vi.fn(),
 }));
 
 const setupHandlerParams = (initialState: AttachmentPostUploadMiddlewareState) => {
@@ -29,7 +30,7 @@ const setup = () => {
   const client = getClientWithUser({ id: 'user-id' });
   const composer = new MessageComposer({
     client,
-    compositionContext: client.channel('type', 'id'),
+    compositionContext: client.channelManager.ensure({ type: 'type', id: 'id' }),
   });
   return { composer, middleware: createUploadErrorHandlerMiddleware(composer) };
 };
@@ -104,7 +105,10 @@ describe('createUploadErrorHandlerMiddleware', () => {
       message: 'Error uploading attachment',
       origin: {
         emitter: 'AttachmentManager',
-        context: { attachment },
+        context: {
+          attachment,
+          composer,
+        },
       },
       options: {
         type: 'api:attachment:upload:failed',

@@ -1,23 +1,29 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { StreamChat } from '../../src';
 import type { Event } from '../../src';
+import { chatLoggerSystem } from '../../src/logger';
 import { getClientWithUser } from './test-utils/getClient';
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 // what matters is that the error object reached the reporter, not how the
 // message was worded or where in the argument list it landed
-const reportedErrors = (spy: ReturnType<typeof vi.spyOn>) => spy.mock.calls.flat();
+const reportedErrors = (sink: ReturnType<typeof vi.fn>) =>
+  sink.mock.calls.flatMap(([, , ...data]) =>
+    data.flatMap((entry) =>
+      entry && typeof entry === 'object' ? Object.values(entry) : entry,
+    ),
+  );
 
 describe('client event listener isolation', () => {
-  let consoleError: ReturnType<typeof vi.spyOn>;
+  let sink: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
-    consoleError = vi.spyOn(console, 'error').mockImplementation(() => null);
+    sink = vi.fn();
+    chatLoggerSystem.configureLoggers({ default: { sink, level: 'trace' } });
   });
 
   afterEach(() => {
-    consoleError.mockRestore();
+    chatLoggerSystem.restoreDefaults();
   });
 
   it('keeps calling later listeners when one throws synchronously', () => {
@@ -33,7 +39,7 @@ describe('client event listener isolation', () => {
     expect(second).toHaveBeenCalledTimes(1);
   });
 
-  it('reports a synchronous throw to console.error when no logger is configured', () => {
+  it('reports a synchronous throw through the logger', () => {
     const client = getClientWithUser();
     const error = new Error('listener boom');
 
@@ -42,7 +48,11 @@ describe('client event listener isolation', () => {
     });
     client.dispatchEvent({ type: 'message.new' } as Event);
 
-    expect(reportedErrors(consoleError)).toContain(error);
+    expect(sink).toHaveBeenCalledWith(
+      'error',
+      expect.stringContaining('Unhandled error in event listener'),
+      expect.objectContaining({ error }),
+    );
   });
 
   it('captures a rejection from an async listener', async () => {
@@ -60,12 +70,13 @@ describe('client event listener isolation', () => {
     process.off('unhandledRejection', onUnhandled);
 
     expect(rejections).toHaveLength(0);
-    expect(reportedErrors(consoleError)).toContain(error);
+    expect(reportedErrors(sink)).toContain(error);
   });
 
-  it('reports through a configured logger at error level', () => {
-    const logger = vi.fn();
-    const client = new StreamChat('key', { logger });
+  it('reports through the client scope at error level', () => {
+    const clientSink = vi.fn();
+    chatLoggerSystem.configureLoggers({ client: { sink: clientSink, level: 'trace' } });
+    const client = getClientWithUser();
     const error = new Error('listener boom');
 
     client.on('message.new', () => {
@@ -73,13 +84,11 @@ describe('client event listener isolation', () => {
     });
     client.dispatchEvent({ type: 'message.new' } as Event);
 
-    expect(logger).toHaveBeenCalledWith(
+    expect(clientSink).toHaveBeenCalledWith(
       'error',
-      expect.any(String),
+      expect.stringContaining('Unhandled error in event listener'),
       expect.objectContaining({ error }),
     );
-    // a configured logger takes over, no duplicate console output
-    expect(consoleError).not.toHaveBeenCalled();
   });
 
   it('does not invoke a listener that subscribes during dispatch', () => {
@@ -115,8 +124,8 @@ describe('client event listener isolation', () => {
 
   it('still runs post-listener callbacks and channel listeners after a throw', () => {
     const client = getClientWithUser();
-    const channel = client.channel('messaging', 'evicted');
-    client.activeChannels[channel.cid] = channel;
+    const channel = client.channelManager.ensure({ type: 'messaging', id: 'evicted' });
+    client.channelManager.getOrCreateChannel(channel.cid, () => channel);
 
     const channelListener = vi.fn();
     channel.on('notification.removed_from_channel', channelListener);
@@ -131,25 +140,26 @@ describe('client event listener isolation', () => {
 
     expect(channelListener).toHaveBeenCalledTimes(1);
     // postListenerCallbacks evict the channel; a throwing listener must not skip them
-    expect(client.activeChannels[channel.cid]).toBeUndefined();
+    expect(client.channelManager.get(channel.cid)).toBeUndefined();
   });
 });
 
 describe('channel event listener isolation', () => {
-  let consoleError: ReturnType<typeof vi.spyOn>;
+  let sink: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
-    consoleError = vi.spyOn(console, 'error').mockImplementation(() => null);
+    sink = vi.fn();
+    chatLoggerSystem.configureLoggers({ default: { sink, level: 'trace' } });
   });
 
   afterEach(() => {
-    consoleError.mockRestore();
+    chatLoggerSystem.restoreDefaults();
   });
 
   it('keeps calling later channel listeners when one throws', () => {
     const client = getClientWithUser();
-    const channel = client.channel('messaging', 'isolation');
-    client.activeChannels[channel.cid] = channel;
+    const channel = client.channelManager.ensure({ type: 'messaging', id: 'isolation' });
+    client.channelManager.getOrCreateChannel(channel.cid, () => channel);
     const second = vi.fn();
 
     channel.on('message.new', () => {
@@ -165,8 +175,11 @@ describe('channel event listener isolation', () => {
 
   it('captures a rejection from an async channel listener', async () => {
     const client = getClientWithUser();
-    const channel = client.channel('messaging', 'isolation-async');
-    client.activeChannels[channel.cid] = channel;
+    const channel = client.channelManager.ensure({
+      type: 'messaging',
+      id: 'isolation-async',
+    });
+    client.channelManager.getOrCreateChannel(channel.cid, () => channel);
     const error = new Error('channel async boom');
     const rejections: unknown[] = [];
     const onUnhandled = (reason: unknown) => rejections.push(reason);
@@ -180,6 +193,6 @@ describe('channel event listener isolation', () => {
     process.off('unhandledRejection', onUnhandled);
 
     expect(rejections).toHaveLength(0);
-    expect(reportedErrors(consoleError)).toContain(error);
+    expect(reportedErrors(sink)).toContain(error);
   });
 });

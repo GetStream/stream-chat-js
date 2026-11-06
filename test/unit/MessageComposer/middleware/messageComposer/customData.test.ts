@@ -11,6 +11,7 @@ import type {
   MessageDraftComposerMiddlewareValueState,
 } from '../../../../../src/messageComposer/middleware/messageComposer/types';
 import { MiddlewareStatus } from '../../../../../src';
+import { convertDateToTimestamp } from '../../../test-utils/time';
 
 const setup = (initialState: MessageComposerMiddlewareState) => {
   return {
@@ -44,9 +45,9 @@ describe('Custom Data Middleware', () => {
   let composer: MessageComposer;
 
   beforeEach(() => {
-    client = new StreamChat('apiKey', 'apiSecret');
+    client = new StreamChat('apiKey');
     client.user = { id: 'user-id', name: 'Test User' };
-    channel = client.channel('channelType', 'channelId');
+    channel = client.channelManager.ensure({ type: 'channelType', id: 'channelId' });
     composer = new MessageComposer({
       client,
       compositionContext: channel,
@@ -65,8 +66,8 @@ describe('Custom Data Middleware', () => {
           text: '',
           type: 'regular',
           status: 'sending',
-          created_at: new Date(),
-          updated_at: new Date(),
+          created_at: convertDateToTimestamp(new Date()),
+          updated_at: convertDateToTimestamp(new Date()),
           attachments: [],
           mentioned_users: [],
           reaction_groups: null,
@@ -78,8 +79,39 @@ describe('Custom Data Middleware', () => {
 
       const result = await middleware.handlers.compose(setup(state));
 
-      expect(result.state.message).toEqual(expect.objectContaining(data));
-      expect(result.state.localMessage).toEqual(expect.objectContaining(data));
+      // Under `custom`: the API drops custom fields sent at the top level.
+      expect(result.state.message.custom).toEqual(data);
+      expect(result.state.localMessage.custom).toEqual(data);
+      expect(result.state.message).not.toHaveProperty('key');
+      expect(result.state.localMessage).not.toHaveProperty('key');
+    });
+
+    it('keeps the custom fields an earlier middleware set', async () => {
+      composer.customDataManager.setMessageData({ key: 'value' });
+      const middleware = createCustomDataCompositionMiddleware(composer);
+      const state: MessageComposerMiddlewareState = {
+        message: { id: '1', type: 'regular', custom: { existing: 1, key: 'old' } },
+        localMessage: {
+          id: '1',
+          text: '',
+          type: 'regular',
+          status: 'sending',
+          created_at: convertDateToTimestamp(new Date()),
+          updated_at: convertDateToTimestamp(new Date()),
+          attachments: [],
+          mentioned_users: [],
+          reaction_groups: null,
+          pinned_at: null,
+          deleted_at: null,
+          custom: { existing: 1, key: 'old' },
+        },
+        sendOptions: {},
+      };
+
+      const result = await middleware.handlers.compose(setup(state));
+
+      expect(result.state.message.custom).toEqual({ existing: 1, key: 'value' });
+      expect(result.state.localMessage.custom).toEqual({ existing: 1, key: 'value' });
     });
 
     it('should add empty custom data if no data is set', async () => {
@@ -91,8 +123,8 @@ describe('Custom Data Middleware', () => {
           text: '',
           type: 'regular',
           status: 'sending',
-          created_at: new Date(),
-          updated_at: new Date(),
+          created_at: convertDateToTimestamp(new Date()),
+          updated_at: convertDateToTimestamp(new Date()),
           attachments: [],
           mentioned_users: [],
           reaction_groups: null,
@@ -124,7 +156,20 @@ describe('Custom Data Middleware', () => {
 
       const result = await middleware.handlers.compose(setupDraft(state));
 
-      expect(result.state.draft).toEqual(expect.objectContaining(data));
+      expect(result.state.draft.custom).toEqual(data);
+      expect(result.state.draft).not.toHaveProperty('key');
+    });
+
+    it('keeps the custom fields an earlier middleware set in the draft', async () => {
+      composer.customDataManager.setMessageData({ key: 'value' });
+      const middleware = createDraftCustomDataCompositionMiddleware(composer);
+      const state: MessageDraftComposerMiddlewareValueState = {
+        draft: { id: '1', text: '', type: 'regular', custom: { existing: 1 } },
+      };
+
+      const result = await middleware.handlers.compose(setupDraft(state));
+
+      expect(result.state.draft.custom).toEqual({ existing: 1, key: 'value' });
     });
 
     it('should add empty custom data if no data is set', async () => {

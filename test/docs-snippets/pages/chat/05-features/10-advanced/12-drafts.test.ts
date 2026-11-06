@@ -17,14 +17,18 @@ describe('_default/05-features/10-advanced/12-drafts.md', () => {
 
   const createChannel = async () => {
     const channelId = uniqueId('channel');
-    const channel = client.channel('messaging', channelId, { members: [userId] });
+    const channel = client.channel('messaging', channelId, {
+      members: [{ user_id: userId }],
+    });
     cleanup.channels.push(`messaging:${channelId}`);
     await channel.create();
     return channel;
   };
 
   const sendParent = async (channel: Channel) => {
-    const { message } = await channel.sendMessage({ text: 'parent message' });
+    const { message } = await channel.sendMessage({
+      message: { text: 'parent message' },
+    });
     return message.id;
   };
 
@@ -44,18 +48,17 @@ describe('_default/05-features/10-advanced/12-drafts.md', () => {
 
     // #region snippet docs="chat/_default/05-features/10-advanced/12-drafts.md" heading="Creating a draft message" tab="JavaScript" index=1
     const draft = await channel.createDraft({
-      text: 'this is a draft message',
+      message: { text: 'this is a draft message' },
     });
 
     // Update the draft
     const updatedDraft = await channel.createDraft({
-      text: 'this is an updated draft message',
+      message: { text: 'this is an updated draft message' },
     });
 
     // Create a draft on a thread
     const threadDraft = await channel.createDraft({
-      text: 'this is a draft message',
-      parent_id: parentMessageId,
+      message: { text: 'this is a draft message', parent_id: parentMessageId },
     });
     // #endregion snippet
 
@@ -74,8 +77,10 @@ describe('_default/05-features/10-advanced/12-drafts.md', () => {
   it('deletes a draft message', async () => {
     const channel = await createChannel();
     const parentMessageId = await sendParent(channel);
-    await channel.createDraft({ text: 'channel draft' });
-    await channel.createDraft({ text: 'thread draft', parent_id: parentMessageId });
+    await channel.createDraft({ message: { text: 'channel draft' } });
+    await channel.createDraft({
+      message: { text: 'thread draft', parent_id: parentMessageId },
+    });
 
     // #region snippet docs="chat/_default/05-features/10-advanced/12-drafts.md" heading="Deleting a draft message" tab="JavaScript" index=1
     // Channel draft
@@ -95,8 +100,10 @@ describe('_default/05-features/10-advanced/12-drafts.md', () => {
   it('loads a draft message', async () => {
     const channel = await createChannel();
     const parentMessageId = await sendParent(channel);
-    await channel.createDraft({ text: 'channel draft' });
-    await channel.createDraft({ text: 'thread draft', parent_id: parentMessageId });
+    await channel.createDraft({ message: { text: 'channel draft' } });
+    await channel.createDraft({
+      message: { text: 'thread draft', parent_id: parentMessageId },
+    });
 
     // #region snippet docs="chat/_default/05-features/10-advanced/12-drafts.md" heading="Loading a draft message" tab="JavaScript" index=1
     // Channel draft
@@ -117,9 +124,9 @@ describe('_default/05-features/10-advanced/12-drafts.md', () => {
     const channel2 = await createChannel();
     const otherChannel = await createChannel();
     // Sequential, so `created_at: -1` puts channel2's draft before channel1's.
-    await channel1.createDraft({ text: 'draft 1' });
-    await channel2.createDraft({ text: 'draft 2' });
-    await otherChannel.createDraft({ text: 'other draft' });
+    await channel1.createDraft({ message: { text: 'draft 1' } });
+    await channel2.createDraft({ message: { text: 'draft 2' } });
+    await otherChannel.createDraft({ message: { text: 'other draft' } });
     const channel1Cid = channel1.cid;
     const channel2Cid = channel2.cid;
     const querySpy = vi.spyOn(client, 'queryDrafts');
@@ -134,11 +141,13 @@ describe('_default/05-features/10-advanced/12-drafts.md', () => {
       filter: {
         channel_cid: { $in: [channel1Cid, channel2Cid] },
       },
-      sort: [{ created_at: -1 }],
+      sort: [{ field: 'created_at', direction: -1 }],
     });
     // #endregion snippet
 
-    expect(querySpy.mock.calls[1][0]?.sort).toEqual([{ created_at: -1 }]);
+    expect(querySpy.mock.calls[1][0]?.sort).toEqual([
+      { field: 'created_at', direction: -1 },
+    ]);
     querySpy.mockRestore();
     expect(response.drafts.map((d) => d.channel_cid)).toEqual(
       expect.arrayContaining([channel1Cid, channel2Cid, otherChannel.cid]),
@@ -151,7 +160,7 @@ describe('_default/05-features/10-advanced/12-drafts.md', () => {
     // The opposite direction proves the sort is applied.
     const ascending = await client.queryDrafts({
       filter: { channel_cid: { $in: [channel1Cid, channel2Cid] } },
-      sort: [{ created_at: 1 }],
+      sort: [{ field: 'created_at', direction: 1 }],
     });
     expect(ascending.drafts.map((d) => d.channel_cid)).toEqual([
       channel1Cid,
@@ -163,7 +172,9 @@ describe('_default/05-features/10-advanced/12-drafts.md', () => {
     const channel = await createChannel();
     for (let i = 0; i < 7; i++) {
       const parentId = await sendParent(channel);
-      await channel.createDraft({ text: `thread draft ${i}`, parent_id: parentId });
+      await channel.createDraft({
+        message: { text: `thread draft ${i}`, parent_id: parentId },
+      });
     }
 
     // #region snippet docs="chat/_default/05-features/10-advanced/12-drafts.md" heading="Pagination" tab="JavaScript" index=1
@@ -201,7 +212,7 @@ describe('_default/05-features/10-advanced/12-drafts.md', () => {
       });
       // #endregion snippet
 
-      await channel.createDraft({ text: 'draft for the event' });
+      await channel.createDraft({ message: { text: 'draft for the event' } });
       await retry(() => {
         expect(logSpy).toHaveBeenCalledWith('channel_cid', channel.cid);
         return Promise.resolve();

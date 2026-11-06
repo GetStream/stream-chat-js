@@ -1,24 +1,20 @@
 import { Reminder } from './Reminder';
+import { deepFreezeConfig } from '../configuration/utils/deepFreezeConfig';
 import { DEFAULT_STOP_REFRESH_BOUNDARY_MS } from './ReminderTimer';
-import { StateStore } from '../store';
+import { StateStore } from '@stream-io/state-store';
+import { ConfigController } from '../configuration/ConfigController';
 import { ReminderPaginator } from '../pagination';
 import { WithSubscriptions } from '../utils/WithSubscriptions';
 import type { ReminderResponseBaseOrResponse } from './Reminder';
 import type { StreamChat } from '../client';
-import type {
-  CreateReminderOptions,
-  Event,
-  EventTypes,
-  LocalMessage,
-  MessageResponse,
-  ReminderResponse,
-} from '../types';
+import type { ChatApi } from '../gen/chat/ChatApi';
+import type { Event, EventPayload, LocalMessage, MessageResponse } from '../types';
 
 const oneMinute = 60 * 1000;
 const oneHour = 60 * oneMinute;
 const oneDay = 24 * oneHour;
 
-export const DEFAULT_REMINDER_MANAGER_CONFIG: ReminderManagerConfig = {
+export const DEFAULT_REMINDER_MANAGER_CONFIG: ReminderManagerConfig = deepFreezeConfig({
   scheduledOffsetsMs: [
     2 * oneMinute,
     30 * oneMinute,
@@ -28,7 +24,7 @@ export const DEFAULT_REMINDER_MANAGER_CONFIG: ReminderManagerConfig = {
     oneDay,
   ],
   stopTimerRefreshBoundaryMs: DEFAULT_STOP_REFRESH_BOUNDARY_MS,
-};
+});
 
 const isReminderExistsError = (error: Error) =>
   error.message.match('already has reminder created for this message_id');
@@ -38,14 +34,9 @@ const isReminderDoesNotExistError = (error: Error) =>
 
 type MessageId = string;
 
-export type ReminderEvent = {
-  cid: string;
-  created_at: string;
-  message_id: MessageId;
-  reminder: ReminderResponse;
-  type: EventTypes;
-  user_id: string;
-};
+export type ReminderEvent = EventPayload<
+  `reminder.${string}` | 'notification.reminder_due'
+>;
 
 export type ReminderManagerState = {
   reminders: Map<MessageId, Reminder>;
@@ -63,36 +54,54 @@ export type ReminderManagerOptions = {
 
 export class ReminderManager extends WithSubscriptions {
   private client: StreamChat;
-  configState: StateStore<ReminderManagerConfig>;
+  private readonly configController: ConfigController<ReminderManagerConfig>;
+
+  get configState(): StateStore<ReminderManagerConfig> {
+    return this.configController.state;
+  }
   state: StateStore<ReminderManagerState>;
   paginator: ReminderPaginator;
 
   constructor({ client, config }: ReminderManagerOptions) {
     super();
     this.client = client;
-    this.configState = new StateStore({
-      scheduledOffsetsMs:
-        config?.scheduledOffsetsMs ?? DEFAULT_REMINDER_MANAGER_CONFIG.scheduledOffsetsMs,
-      stopTimerRefreshBoundaryMs:
-        config?.stopTimerRefreshBoundaryMs ??
-        DEFAULT_REMINDER_MANAGER_CONFIG.stopTimerRefreshBoundaryMs,
+    this.configController = new ConfigController<ReminderManagerConfig>({
+      defaults: DEFAULT_REMINDER_MANAGER_CONFIG,
+      constructorOptions: config,
+      // Live timers hold the boundary, so a change is pushed to them.
+      onChanged: (next, previous) => {
+        if (next.stopTimerRefreshBoundaryMs === previous.stopTimerRefreshBoundaryMs)
+          return;
+        this.reminders.forEach((reminder) => {
+          reminder.timer.stopRefreshBoundaryMs = next.stopTimerRefreshBoundaryMs;
+        });
+      },
     });
     this.state = new StateStore({ reminders: new Map<MessageId, Reminder>() });
     this.paginator = new ReminderPaginator(client);
   }
 
-  // Config API START //
+  get config(): Readonly<ReminderManagerConfig> {
+    return this.configState.getLatestValue();
+  }
+
+  /**
+   * Merges a partial configuration into the resolved config.
+   *
+   * @param config - Fields to merge into the resolved config.
+   */
   updateConfig(config: Partial<ReminderManagerConfig>) {
-    if (
-      typeof config.stopTimerRefreshBoundaryMs === 'number' &&
-      config.stopTimerRefreshBoundaryMs !== this.stopTimerRefreshBoundaryMs
-    ) {
-      this.reminders.forEach((reminder) => {
-        reminder.timer.stopRefreshBoundaryMs =
-          config?.stopTimerRefreshBoundaryMs as number;
-      });
-    }
-    this.configState.partialNext(config);
+    this.configController.patch(config);
+  }
+
+  /**
+   * Re-derives the configuration from the declarative slice.
+   *
+   * @param config - The declarative slice. Leave it out to rebuild from the defaults and the
+   *   constructor's `config`.
+   */
+  initializeConfig(config?: Partial<ReminderManagerConfig>) {
+    this.configController.initialize(config);
   }
 
   get stopTimerRefreshBoundaryMs() {
@@ -102,9 +111,7 @@ export class ReminderManager extends WithSubscriptions {
   get scheduledOffsetsMs() {
     return this.configState.getLatestValue().scheduledOffsetsMs;
   }
-  // Config API END //
 
-  // State API START //
   get reminders() {
     return this.state.getLatestValue().reminders;
   }
@@ -119,9 +126,6 @@ export class ReminderManager extends WithSubscriptions {
     data: ReminderResponseBaseOrResponse;
     overwrite?: boolean;
   }) => {
-    if (!this.client._cacheEnabled()) {
-      return;
-    }
     const cachedReminder = this.getFromState(data.message_id);
     if (!cachedReminder) {
       const reminder = new Reminder({
@@ -153,9 +157,7 @@ export class ReminderManager extends WithSubscriptions {
       }
     });
   };
-  // State API END //
 
-  // Timers API START //
   initTimers = () => {
     this.reminders.forEach((reminder) => reminder.initTimer());
   };
@@ -163,10 +165,9 @@ export class ReminderManager extends WithSubscriptions {
   clearTimers = () => {
     this.reminders.forEach((reminder) => reminder.clearTimer());
   };
-  // Timers API END //
 
-  // WS event handling START //
   static isReminderWsEventPayload = (event: Event): event is ReminderEvent =>
+    'reminder' in event &&
     !!event.reminder &&
     (event.type.startsWith('reminder.') || event.type === 'notification.reminder_due');
 
@@ -186,14 +187,17 @@ export class ReminderManager extends WithSubscriptions {
     this.client.on('reminder.created', (event) => {
       if (!ReminderManager.isReminderWsEventPayload(event)) return;
       const { reminder } = event;
-      this.upsertToState({ data: reminder });
+      // TODO: OAPI discrepancy?
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      this.upsertToState({ data: reminder! });
     }).unsubscribe;
 
   private subscribeReminderUpdated = () =>
     this.client.on('reminder.updated', (event) => {
       if (!ReminderManager.isReminderWsEventPayload(event)) return;
       const { reminder } = event;
-      this.upsertToState({ data: reminder });
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      this.upsertToState({ data: reminder! });
     }).unsubscribe;
 
   private subscribeReminderDeleted = () =>
@@ -245,54 +249,50 @@ export class ReminderManager extends WithSubscriptions {
         }
       },
     );
-  // WS event handling END //
 
-  // API calls START //
-  upsertReminder = async (options: CreateReminderOptions) => {
-    const { messageId } = options;
-    if (this.getFromState(messageId)) {
+  upsertReminder = async (...args: Parameters<ChatApi['createReminder']>) => {
+    const [{ message_id }] = args;
+    if (this.getFromState(message_id)) {
       try {
-        return await this.updateReminder(options);
+        return await this.updateReminder(...args);
       } catch (error) {
         if (isReminderDoesNotExistError(error as Error)) {
-          return await this.createReminder(options);
+          return await this.createReminder(...args);
         }
         throw error;
       }
     } else {
       try {
-        return await this.createReminder(options);
+        return await this.createReminder(...args);
       } catch (error) {
         if (isReminderExistsError(error as Error)) {
-          return await this.updateReminder(options);
+          return await this.updateReminder(...args);
         }
         throw error;
       }
     }
   };
 
-  createReminder = async (options: CreateReminderOptions) => {
-    const { reminder } = await this.client.createReminder(options);
-    return this.upsertToState({ data: reminder, overwrite: false });
+  createReminder = async (...args: Parameters<ChatApi['createReminder']>) => {
+    const response = await this.client.createReminder(...args);
+    return this.upsertToState({ data: response.reminder, overwrite: false });
   };
 
-  updateReminder = async (options: CreateReminderOptions) => {
-    const { reminder } = await this.client.updateReminder(options);
-    return this.upsertToState({ data: reminder });
+  updateReminder = async (...args: Parameters<ChatApi['updateReminder']>) => {
+    const response = await this.client.updateReminder(...args);
+    return this.upsertToState({ data: response.reminder });
   };
 
   deleteReminder = async (messageId: MessageId) => {
-    await this.client.deleteReminder(messageId);
+    await this.client.deleteReminder({ message_id: messageId });
     this.removeFromState(messageId);
   };
 
   queryNextReminders = async () => {
-    await this.paginator.next();
+    await this.paginator.toTail();
   };
 
   queryPreviousReminders = async () => {
-    await this.paginator.prev();
+    await this.paginator.toHead();
   };
-
-  // API calls END //
 }

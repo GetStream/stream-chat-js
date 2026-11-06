@@ -1,6 +1,10 @@
-import { StateStore } from '../store';
-import type { MessageResponse } from '../types';
+import { StateStore } from '@stream-io/state-store';
+import type { Unsubscribe } from '@stream-io/state-store';
+import type { StreamChat } from '../client';
 import type { SearchSource } from './BaseSearchSource';
+import { ConfigController } from '../configuration/ConfigController';
+import { applyInstanceConfiguration } from '../configuration/utils/applyInstanceConfiguration';
+import { deepFreezeConfig } from '../configuration/utils/deepFreezeConfig';
 
 export type SearchControllerState = {
   isActive: boolean;
@@ -8,40 +12,107 @@ export type SearchControllerState = {
   sources: SearchSource[];
 };
 
-export type InternalSearchControllerState = {
-  // FIXME: focusedMessage should live in a MessageListController class that does not exist yet.
-  //  This state prop should be then removed
-  focusedMessage?: MessageResponse;
-};
-
 export type SearchControllerConfig = {
-  // The controller will make sure there is always exactly one active source. Enabled by default.
+  /** Keeps exactly one source active. Defaults to `true`. */
   keepSingleActiveSource: boolean;
 };
 
 export type SearchControllerOptions = {
+  /**
+   * Needed to take part in `client.config`. Without it the controller still works, but the
+   * declarative `searchController` key and its setup function are not applied.
+   */
+  client?: StreamChat;
   config?: Partial<SearchControllerConfig>;
   sources?: SearchSource[];
 };
 
-export class SearchController {
-  /**
-   * Not intended for direct use by integrators, might be removed without notice resulting in
-   * broken integrations.
-   */
-  _internalState: StateStore<InternalSearchControllerState>;
-  state: StateStore<SearchControllerState>;
-  config: SearchControllerConfig;
+export const DEFAULT_SEARCH_CONTROLLER_CONFIG: SearchControllerConfig = deepFreezeConfig({
+  keepSingleActiveSource: true,
+});
 
-  constructor({ config, sources }: SearchControllerOptions = {}) {
+export class SearchController {
+  state: StateStore<SearchControllerState>;
+
+  private readonly configController: ConfigController<SearchControllerConfig>;
+  private readonly client?: StreamChat;
+  private unsubscribeConfiguration?: Unsubscribe;
+
+  get configState(): StateStore<SearchControllerConfig> {
+    return this.configController.state;
+  }
+
+  constructor({ client, config, sources }: SearchControllerOptions = {}) {
     this.state = new StateStore<SearchControllerState>({
       isActive: false,
       searchQuery: '',
       sources: sources ?? [],
     });
-    this._internalState = new StateStore<InternalSearchControllerState>({});
-    this.config = { keepSingleActiveSource: true, ...config };
+    this.configController = new ConfigController<SearchControllerConfig>({
+      defaults: DEFAULT_SEARCH_CONTROLLER_CONFIG,
+      constructorOptions: config,
+    });
+
+    this.client = client;
+    this.subscribeConfiguration();
   }
+
+  private subscribeConfiguration() {
+    const { client } = this;
+    if (!client || this.unsubscribeConfiguration) return;
+    this.unsubscribeConfiguration = applyInstanceConfiguration({
+      args: { searchController: this },
+      config: client.config,
+      key: 'searchController',
+      applyConfig: (slice) => this.initializeConfig(slice),
+      reinitializeConfig: () =>
+        this.initializeConfig(client.config.getConfig('searchController') ?? undefined),
+    });
+  }
+
+  /**
+   * Takes again what {@link SearchController.dispose} released: the configuration subscription and
+   * what each source holds outside itself. A no-op for what is already held, so a UI can call it on
+   * every mount.
+   */
+  registerSubscriptions() {
+    this.subscribeConfiguration();
+    this.sources.forEach((source) => source.registerSubscriptions?.());
+  }
+
+  /**
+   * Releases the configuration subscription (running the setup function's teardown) and what each
+   * source holds outside itself. {@link SearchController.registerSubscriptions} takes them again.
+   */
+  dispose() {
+    this.unsubscribeConfiguration?.();
+    this.unsubscribeConfiguration = undefined;
+    this.sources.forEach((source) => source.dispose?.());
+  }
+
+  get config(): Readonly<SearchControllerConfig> {
+    return this.configState.getLatestValue();
+  }
+
+  /**
+   * Merges a partial configuration into the resolved config.
+   *
+   * @param config - Fields to merge into the resolved config.
+   */
+  updateConfig(config: Partial<SearchControllerConfig>) {
+    this.configController.patch(config);
+  }
+
+  /**
+   * Re-derives the configuration from the declarative slice.
+   *
+   * @param config - The declarative slice. Leave it out to rebuild from the defaults and the
+   *   constructor's `config`.
+   */
+  initializeConfig(config?: Partial<SearchControllerConfig>) {
+    this.configController.initialize(config);
+  }
+
   get hasNext() {
     return this.sources.some((source) => source.hasNext);
   }

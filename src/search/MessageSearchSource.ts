@@ -2,32 +2,29 @@ import { BaseSearchSource, type SearchQueryOptions } from './BaseSearchSource';
 import type {
   ChannelFilters,
   ChannelOptions,
-  ChannelSort,
   MessageFilters,
   MessageResponse,
-  SearchMessageSort,
-  SearchOptions,
+  SearchPayload,
+  SortParamRequest,
 } from '../types';
 import type { StreamChat } from '../client';
 import type { SearchSourceOptions } from './types';
 import { FilterBuilder, type FilterBuilderOptions } from '../pagination';
+import type { Channel } from '../channel';
 
 type CustomContext = Record<string, unknown>;
 
-// Built-in contexts per builder
 type BuiltInContexts = {
   messageSearchChannel: { searchQuery?: string };
   messageSearch: { searchQuery?: string };
   channelQuery: { cids?: string[] };
 };
 
-// Merge Built-in with user-provided Custom context
 type MergeContext<
   B extends Record<string, unknown>,
   C extends CustomContext | undefined,
 > = B & (C extends object ? C : {});
 
-// User can provide custom context for each builder
 type MessageSearchSourceContexts = Partial<{
   messageSearchChannelContext: Record<string, unknown>;
   messageSearchContext: Record<string, unknown>;
@@ -59,10 +56,14 @@ export type MessageSearchSourceOptions = SearchSourceOptions & {
   messageSearchChannelFilters?: ChannelFilters;
   /** Static base filters for the message search itself. */
   messageSearchFilters?: MessageFilters;
-  messageSearchSort?: SearchMessageSort;
+  messageSearchSort?: SortParamRequest[];
   /** Static base filters for the follow-up query that hydrates unknown channels. */
   channelQueryFilters?: ChannelFilters;
-  channelQuerySort?: ChannelSort;
+  channelQuerySort?: SortParamRequest[];
+  /**
+   * Options for the follow-up query that hydrates unknown channels. They are not watched unless
+   * `watch: true`: a result is a preview, and opening one watches its channel.
+   */
   channelQueryOptions?: Omit<ChannelOptions, 'limit' | 'offset'>;
 };
 
@@ -72,16 +73,16 @@ export class MessageSearchSource<
   readonly type = 'messages';
   private client: StreamChat;
 
-  messageSearchChannelFilters: ChannelFilters | undefined;
+  messageSearchChannelFilters: SearchPayload['filter_conditions'] | undefined;
   messageSearchFilters: MessageFilters | undefined;
-  messageSearchSort: SearchMessageSort | undefined;
+  messageSearchSort: SortParamRequest[] | undefined;
 
   channelQueryFilters: ChannelFilters | undefined;
-  channelQuerySort: ChannelSort | undefined;
+  channelQuerySort: SortParamRequest[] | undefined;
   channelQueryOptions: Omit<ChannelOptions, 'limit' | 'offset'> | undefined;
 
   messageSearchChannelFilterBuilder: FilterBuilder<
-    ChannelFilters,
+    SearchPayload['filter_conditions'],
     MergeContext<
       BuiltInContexts['messageSearchChannel'],
       TContexts['messageSearchChannelContext']
@@ -95,6 +96,8 @@ export class MessageSearchSource<
     ChannelFilters,
     MergeContext<BuiltInContexts['channelQuery'], TContexts['channelQueryContext']>
   >;
+
+  private removeClaim?: () => void;
 
   constructor(
     client: StreamChat,
@@ -135,7 +138,8 @@ export class MessageSearchSource<
       initialFilterConfig: {
         text: {
           enabled: true,
-          generate: ({ searchQuery }) => (searchQuery ? { text: searchQuery } : null),
+          generate: ({ searchQuery }) =>
+            searchQuery ? { text: { $autocomplete: searchQuery } } : null,
         },
         ...filterBuilderOptions?.messageSearch?.initialFilterConfig,
       },
@@ -154,14 +158,56 @@ export class MessageSearchSource<
         ...filterBuilderOptions?.channelQuery?.initialFilterConfig,
       },
     });
+
+    // Subscribed to the source's own state, so it goes away with the source.
+    this.state.subscribeWithSelector(
+      ({ isActive }) => ({ isActive }),
+      () => this.registerSubscriptions(),
+    );
+  }
+
+  /**
+   * While active, the channels the results come from count as used in the channel store (see
+   * `EntityStore.addClaim`), so they stay the instances the results open. Follows `isActive`;
+   * `SearchController.registerSubscriptions()` also calls it to re-register after `dispose()`.
+   */
+  registerSubscriptions() {
+    if (!this.isActive) {
+      this.dispose();
+      return;
+    }
+    this.removeClaim ??= this.client.channelManager.channelStore.addClaim({
+      heldBy: () => this.resultChannels(),
+      name: 'message-search',
+    });
+  }
+
+  /**
+   * Removes the channel-store claim, so the results' channels are no longer held and a dropped
+   * source can be collected.
+   */
+  dispose() {
+    this.removeClaim?.();
+    this.removeClaim = undefined;
+  }
+
+  private resultChannels() {
+    const channels = new Set<Channel>();
+    for (const message of this.items ?? []) {
+      const channel = message.cid
+        ? this.client.channelManager.get(message.cid)
+        : undefined;
+      if (channel) channels.add(channel);
+    }
+    return channels;
   }
 
   protected async query(searchQuery: string, queryOptions: SearchQueryOptions = {}) {
-    if (!this.client.userID || this.next === null) return { items: [] };
+    if (!this.client.userId || this.next === null) return { items: [] };
 
     const channelFilters = this.messageSearchChannelFilterBuilder.buildFilters({
       baseFilters: {
-        ...(this.client.userID ? { members: { $in: [this.client.userID] } } : {}),
+        ...(this.client.userId ? { members: { $in: [this.client.userId] } } : {}),
         ...this.messageSearchChannelFilters,
       },
       context: { searchQuery } as Partial<
@@ -182,31 +228,37 @@ export class MessageSearchSource<
       >,
     });
 
-    const sort: SearchMessageSort = {
-      created_at: -1,
-      ...this.messageSearchSort,
-    };
-
-    const options: SearchOptions = {
-      limit: this.pageSize,
-      next: this.next,
-      sort,
-    };
+    const customSort = this.messageSearchSort ?? [];
+    const createdAtSort = customSort.find(({ field }) => field === 'created_at');
+    const sort: SortParamRequest[] = [
+      { field: 'created_at', direction: createdAtSort?.direction ?? -1 },
+      ...customSort.filter(({ field }) => field !== 'created_at'),
+    ];
 
     const { next, results } = await this.client.search(
-      channelFilters,
-      messageFilters,
-      options,
+      {
+        payload: {
+          filter_conditions: channelFilters,
+          message_filter_conditions: messageFilters,
+          limit: this.pageSize,
+          next: this.next,
+          sort,
+        },
+      },
       queryOptions,
     );
-    const items = results.map(({ message }) => message);
 
-    // a newer query already replaced this one - skip the cid scan and the hydration request
+    const items = results
+      .map(({ message }) => message)
+      .filter((m): m is NonNullable<typeof m> => Boolean(m));
+
+    // Superseded by a newer query: skip the hydration.
     if (queryOptions.signal?.aborted) return { items, next };
 
     const cids = Array.from(
       items.reduce((acc, message) => {
-        if (message.cid && !this.client.activeChannels[message.cid]) acc.add(message.cid);
+        if (message.cid && !this.client.channelManager.get(message.cid))
+          acc.add(message.cid);
         return acc;
       }, new Set<string>()),
     );
@@ -218,15 +270,30 @@ export class MessageSearchSource<
           MergeContext<BuiltInContexts['channelQuery'], TContexts['channelQueryContext']>
         >,
       });
-      await this.client.queryChannels(
-        channelQueryFilters,
+      await this.client.queryChannelsAndHydrate(
         {
-          last_message_at: -1,
-          ...this.channelQuerySort,
+          filter_conditions: channelQueryFilters,
+          sort: [{ direction: -1, field: 'last_message_at' }],
+          watch: false,
+          ...this.channelQueryOptions,
         },
-        this.channelQueryOptions,
+        {},
         queryOptions,
       );
+    }
+
+    if (queryOptions.signal?.aborted) return { items, next };
+
+    // The hydration query can miss a result's channel (hidden or filtered out): store it from the
+    // message's channel data, unwatched, so every result has a channel to open.
+    for (const message of items) {
+      if (!message.cid) continue;
+      const stored = this.client.channelManager.get(message.cid);
+      if (stored && !stored.pendingDisposal) continue;
+      const [type, id] = message.cid.split(':');
+      if (!type || !id) continue;
+      const channel = this.client.channelManager.ensure({ id, type });
+      if (message.channel) channel.data = message.channel;
     }
 
     return { items, next };

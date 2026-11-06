@@ -1,4 +1,5 @@
-import type { Attachment, FileUploadConfig, GiphyData } from '../types';
+import type { CustomAttachmentData } from '../custom_types';
+import type { Attachment, FileReferenceBase, FileUploadConfig } from '../types';
 
 export type LocalAttachment = AnyLocalAttachment | LocalUploadAttachment;
 
@@ -46,8 +47,34 @@ export type LocalAttachmentCast<A, L = Record<string, unknown>> = A & {
   localMetadata: L & BaseLocalAttachmentMetadata;
 };
 
+/**
+ * Local metadata of any attachment. Only `id` is required: an attachment with nothing to upload (a
+ * custom-type or `giphy` one) leaves out the upload fields, and the composer sends it as it is.
+ * `file` and `uploadState` come as {@link LocalAttachmentFileFields} or
+ * {@link LocalAttachmentNoFileFields}.
+ */
 export type LocalAttachmentMetadata<CustomLocalMetadata = Record<string, unknown>> =
-  CustomLocalMetadata & BaseLocalAttachmentMetadata & LocalImageAttachmentUploadMetadata;
+  CustomLocalMetadata &
+    BaseLocalAttachmentMetadata &
+    Partial<Omit<LocalImageAttachmentUploadMetadata, 'file' | 'uploadState'>> &
+    (LocalAttachmentFileFields | LocalAttachmentNoFileFields);
+
+/**
+ * A local file comes with its upload state: the composer never sends a file with no upload state.
+ */
+export type LocalAttachmentFileFields = Pick<
+  LocalAttachmentUploadMetadata,
+  'file' | 'uploadState'
+>;
+
+/**
+ * No local file: an attachment with nothing to upload (no `uploadState`), or an upload restored from
+ * a sent message or a draft (`uploadState` without its file).
+ */
+export type LocalAttachmentNoFileFields = {
+  file?: undefined;
+  uploadState?: AttachmentLoadingState;
+};
 
 export type UploadedAttachment =
   | AudioAttachment
@@ -57,54 +84,31 @@ export type UploadedAttachment =
   | VoiceRecordingAttachment;
 
 export type VoiceRecordingAttachment = Attachment & {
-  asset_url: string;
   type: 'voiceRecording';
-  duration?: number;
-  file_size?: number;
-  mime_type?: string;
-  title?: string;
-  waveform_data?: Array<number>;
+  custom: CustomAttachmentData & {
+    duration?: number;
+    waveform_data?: Array<number>;
+  };
 };
 
 export type FileAttachment = Attachment & {
   type: 'file';
-  asset_url?: string;
-  file_size?: number;
-  mime_type?: string;
-  title?: string;
 };
 
 export type AudioAttachment = Attachment & {
   type: 'audio';
-  asset_url?: string;
-  file_size?: number;
-  mime_type?: string;
-  title?: string;
 };
 
 export type VideoAttachment = Attachment & {
   type: 'video';
-  asset_url?: string;
-  file_size?: number;
-  mime_type?: string;
-  thumb_url?: string;
-  title?: string;
 };
 
 export type ImageAttachment = Attachment & {
   type: 'image';
-  fallback?: string;
-  image_url?: string;
-  original_height?: number;
-  original_width?: number;
 };
 
 export type GiphyAttachment = Attachment & {
   type: 'giphy';
-  giphy?: GiphyData;
-  title?: string;
-  title_link?: string;
-  thumbnail_url?: string;
 };
 
 export type BaseLocalAttachmentMetadata = {
@@ -113,25 +117,22 @@ export type BaseLocalAttachmentMetadata = {
 
 export type LocalAttachmentUploadMetadata = {
   file: File | FileReference;
-  /**
-   * Local preview URI, typically a Blob URL from `URL.createObjectURL(file)`
-   * or (for React Native `FileReference`) the provided `uri`.
-   */
+  /** Local preview URI: a Blob URL for a `File`, or the `uri` of a React Native `FileReference`. */
   previewUri?: string;
   uploadState: AttachmentLoadingState;
   /**
-   * Mirrors {@link UploadRecord.uploadConfirmationPending}: every byte has been sent, but the server has
-   * not confirmed yet - not returned response to the upload request. Render an indeterminate indicator rather than a full bar.
+   * Mirrors {@link UploadRecord.uploadConfirmationPending}: every byte is sent but the server has not
+   * confirmed. Render an indeterminate indicator rather than a full bar.
    */
   uploadConfirmationPending?: boolean;
-  uploadPermissionCheck?: UploadPermissionCheckResult; // added new
-  /** 0–100 while uploading when progress tracking is enabled; undefined otherwise or when indeterminate */
+  uploadPermissionCheck?: UploadPermissionCheckResult;
+  /** 0 to 100 while uploading with progress tracking on; `undefined` otherwise or when indeterminate. */
   uploadProgress?: number;
 };
 
 export type LocalImageAttachmentUploadMetadata = LocalAttachmentUploadMetadata & {
   /**
-   * @deprecated `previewUri` is now available on `LocalAttachmentUploadMetadata`.
+   * @deprecated Use `LocalAttachmentUploadMetadata.previewUri` instead.
    */
   previewUri?: string;
 };
@@ -157,16 +158,16 @@ export type UploadPermissionCheckResult = {
 export type FileLike = File | Blob;
 
 // todo: make sure that RN SDK passes MIME type in the type field
-export type FileReference = Pick<File, 'name' | 'size' | 'type'> & {
-  uri: string;
-  // For images
-  height?: number;
-  width?: number;
+export type FileReference = FileReferenceBase &
+  Pick<File, 'name' | 'size'> & {
+    // Images
+    height?: number;
+    width?: number;
 
-  // For voice recordings
-  duration?: number;
-  waveform_data?: number[];
+    // Voice recordings
+    duration?: number;
+    waveform_data?: number[];
 
-  // This is specially needed for video in camera roll
-  thumb_url?: string;
-};
+    // Needed for video in the camera roll
+    thumb_url?: string;
+  };

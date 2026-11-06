@@ -6,15 +6,19 @@ import {
 } from '../../../src/constants';
 import type { LocalUploadAttachment } from '../../../src';
 import {
+  AttachmentManager,
   AttachmentManagerConfig,
   DraftResponse,
   FileReference,
   LocalMessage,
+  MessageComposer,
   StreamChat,
 } from '../../../src';
-import { AppSettings } from '../../../src';
+import { AppResponseFields } from '../../../src';
 import * as Utils from '../../../src/utils';
 import { beforeEach } from 'node:test';
+import { convertDateToTimestamp } from '../test-utils/time';
+import { MockOfflineDB } from '../offline-support/MockOfflineDB';
 
 /**
  * Utility to generate a  file
@@ -89,7 +93,7 @@ const setup = ({
   composition,
   config,
 }: {
-  appSettings?: Partial<AppSettings>;
+  appSettings?: Partial<AppResponseFields>;
   composition?: DraftResponse | LocalMessage;
   config?: Partial<AttachmentManagerConfig>;
 } = {}) => {
@@ -97,7 +101,7 @@ const setup = ({
   vi.clearAllMocks();
 
   // Setup mocks
-  const mockClient = new StreamChat('apiKey', 'apiSecret');
+  const mockClient = new StreamChat('apiKey');
   mockClient.appSettingsPromise = Promise.resolve(
     appSettings ? { app: appSettings } : defaultAppSettings,
   );
@@ -108,14 +112,25 @@ const setup = ({
 
   mockClient.user = { id: 'user-id', name: 'Test User' };
 
-  const mockChannel = mockClient.channel('channelType', 'channelId');
+  const mockChannel = mockClient.channelManager.ensure({
+    type: 'channelType',
+    id: 'channelId',
+  });
   mockChannel.getClient = vi.fn().mockReturnValue(mockClient);
-  mockChannel.sendFile = vi
-    .fn()
-    .mockResolvedValue({ file: 'test-file-url', thumb_url: 'thumb_url-file' });
-  mockChannel.sendImage = vi
-    .fn()
-    .mockResolvedValue({ file: 'test-image-url', thumb_url: 'thumb_url-image' });
+  // `duration` and `metadata` are on every generated response and must be stripped before the
+  // result reaches `doUploadRequest`'s callers.
+  mockChannel.uploadFile = vi.fn().mockResolvedValue({
+    duration: '1.2ms',
+    metadata: { response_code: 201 },
+    file: 'test-file-url',
+    thumb_url: 'thumb_url-file',
+  });
+  mockChannel.uploadImage = vi.fn().mockResolvedValue({
+    duration: '1.2ms',
+    metadata: { response_code: 201 },
+    file: 'test-image-url',
+    thumb_url: 'thumb_url-image',
+  });
   mockChannel.data = { own_capabilities: ['upload-file'] };
   // Use the channel's messageComposer so client.uploadManager (resolves via channelCid) hits this composer.
   const messageComposer = mockChannel.messageComposer;
@@ -158,7 +173,7 @@ describe('AttachmentManager', () => {
           ],
         },
         channel_cid: 'channel-cid',
-        created_at: new Date().toISOString(),
+        created_at: convertDateToTimestamp(new Date().toISOString()),
       };
 
       // ts-expect-error mocked channel
@@ -184,11 +199,11 @@ describe('AttachmentManager', () => {
         id: 'test-message-id',
         text: '',
         type: 'regular',
-        created_at: new Date(),
+        created_at: convertDateToTimestamp(new Date()),
         deleted_at: null,
         pinned_at: null,
         status: 'pending',
-        updated_at: new Date(),
+        updated_at: convertDateToTimestamp(new Date()),
         attachments: [
           {
             type: 'image',
@@ -229,6 +244,9 @@ describe('AttachmentManager', () => {
       expect(attachmentManager.config).toEqual({
         ...config,
         acceptedFiles: [],
+        customCdn: false,
+        enabled: true,
+        pendingUploadsEnabled: false,
         trackUploadProgress: true,
       });
     });
@@ -271,6 +289,43 @@ describe('AttachmentManager', () => {
       expect(attachmentManager.hasUploadPermission).toBe(false);
     });
 
+    it('is true without the upload-file capability when files go to storage outside Stream', () => {
+      // The capability governs Stream's upload endpoint. On storage Stream does not host there is
+      // nothing for it to permit or refuse, so it must not decide.
+      const {
+        messageComposer: { attachmentManager },
+        mockChannel,
+      } = setup({ config: { customCdn: true } });
+      mockChannel.data = { ...mockChannel.data, own_capabilities: [] };
+
+      expect(attachmentManager.usesStreamStorage).toBe(false);
+      expect(attachmentManager.hasUploadPermission).toBe(false);
+      expect(attachmentManager.isUploadEnabled).toBe(true);
+    });
+
+    it('still requires the capability for a custom request without customCdn', () => {
+      // A custom upload function is not a statement about the destination — see `usesStreamStorage`.
+      const {
+        messageComposer: { attachmentManager },
+        mockChannel,
+      } = setup({
+        config: { doUploadRequest: () => Promise.resolve({ file: 'https://x/f' }) },
+      });
+      mockChannel.data = { ...mockChannel.data, own_capabilities: [] };
+
+      expect(attachmentManager.usesStreamStorage).toBe(true);
+      expect(attachmentManager.isUploadEnabled).toBe(false);
+    });
+
+    it('is false when attachments are disabled, whatever the destination', () => {
+      // The asymmetry: storage outside Stream escapes the permission, never the integrator's own switch.
+      const {
+        messageComposer: { attachmentManager },
+      } = setup({ config: { customCdn: true, enabled: false } });
+
+      expect(attachmentManager.isUploadEnabled).toBe(false);
+    });
+
     it('should return false for isUploadEnabled when no upload slots are available', () => {
       // Create a message with maximum number of attachments
       const composition: DraftResponse = {
@@ -283,7 +338,7 @@ describe('AttachmentManager', () => {
           }),
         },
         channel_cid: 'channel-cid',
-        created_at: new Date().toISOString(),
+        created_at: convertDateToTimestamp(new Date().toISOString()),
       };
 
       // Initialize with message containing maximum attachments
@@ -410,7 +465,7 @@ describe('AttachmentManager', () => {
           ],
         },
         channel_cid: 'channel-cid',
-        created_at: new Date().toISOString(),
+        created_at: convertDateToTimestamp(new Date().toISOString()),
       };
 
       // Initialize with message containing attachments
@@ -1422,22 +1477,81 @@ describe('AttachmentManager', () => {
       const noSizeResult = await getUploadConfigCheck(blob);
       expect(noSizeResult).toEqual({ uploadBlocked: false });
     });
+
+    describe('when the app settings cannot be fetched', () => {
+      const file = generateFile({ name: 'test.gif', type: 'image/gif' });
+
+      const setupFailedFetch = () => {
+        const result = setup();
+        const { mockClient } = result;
+        const error = new Error('Network Error');
+        mockClient.appSettingsPromise = undefined;
+        mockClient.getAppSettings = vi.fn().mockRejectedValue(error);
+        const offlineDb = new MockOfflineDB({ client: mockClient });
+        mockClient.setOfflineDBApi(offlineDb);
+        return { ...result, error, offlineDb };
+      };
+
+      it('checks against the offline database copy', async () => {
+        const {
+          messageComposer: { attachmentManager },
+          offlineDb,
+        } = setupFailedFetch();
+        offlineDb.getAppSettings.mockResolvedValue(defaultAppSettings);
+
+        const result = await attachmentManager.getUploadConfigCheck(file);
+
+        expect(offlineDb.getAppSettings).toHaveBeenCalledWith({ userId: 'user-id' });
+        expect(result).toEqual({
+          uploadBlocked: true,
+          reason: 'allowed_file_extensions',
+        });
+      });
+
+      it('checks against the offline database copy when a cached request failed', async () => {
+        const {
+          messageComposer: { attachmentManager },
+          mockClient,
+          offlineDb,
+        } = setupFailedFetch();
+        const rejected = Promise.reject(new Error('Network Error'));
+        rejected.catch(() => null);
+        mockClient.appSettingsPromise = rejected;
+        offlineDb.getAppSettings.mockResolvedValue(defaultAppSettings);
+
+        const result = await attachmentManager.getUploadConfigCheck(file);
+
+        expect(result).toEqual({
+          uploadBlocked: true,
+          reason: 'allowed_file_extensions',
+        });
+      });
+
+      it('rethrows the fetch error without an offline database copy', async () => {
+        const {
+          error,
+          messageComposer: { attachmentManager },
+          offlineDb,
+        } = setupFailedFetch();
+        offlineDb.getAppSettings.mockResolvedValue(null);
+
+        await expect(attachmentManager.getUploadConfigCheck(file)).rejects.toBe(error);
+      });
+
+      it('rethrows the fetch error when the offline database read fails', async () => {
+        const {
+          error,
+          messageComposer: { attachmentManager },
+          offlineDb,
+        } = setupFailedFetch();
+        offlineDb.getAppSettings.mockRejectedValue(new Error('DB Error'));
+
+        await expect(attachmentManager.getUploadConfigCheck(file)).rejects.toBe(error);
+      });
+    });
   });
 
-  describe('uploadAttachment', () => {
-    it('should upload files successfully', async () => {
-      const {
-        messageComposer: { attachmentManager },
-      } = setup();
-      const file = new File([''], 'test.jpg', { type: 'image/jpeg' });
-
-      await attachmentManager.uploadAttachment(
-        await attachmentManager.fileToLocalUploadAttachment(file),
-      );
-
-      expect(attachmentManager.successfulUploadsCount).toBe(1);
-    });
-
+  describe('uploadFile', () => {
     it('revokes blob: previewUri when upload succeeds', async () => {
       const {
         messageComposer: { attachmentManager },
@@ -1449,9 +1563,8 @@ describe('AttachmentManager', () => {
       const revokeObjectURLSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation();
 
       const file = new File(['x'], 'test.jpg', { type: 'image/jpeg' });
-      const localAttachment = await attachmentManager.fileToLocalUploadAttachment(file);
 
-      const uploaded = await attachmentManager.uploadAttachment(localAttachment);
+      const uploaded = await attachmentManager.uploadFile(file);
 
       expect(createObjectURLSpy).toHaveBeenCalledWith(file);
       expect(revokeObjectURLSpy).toHaveBeenCalledWith('blob:test-image');
@@ -1474,10 +1587,8 @@ describe('AttachmentManager', () => {
         size: 4321,
         uri: 'file://test.pdf',
       };
-      const localAttachment =
-        await attachmentManager.fileToLocalUploadAttachment(fileReference);
 
-      const uploaded = await attachmentManager.uploadAttachment(localAttachment);
+      const uploaded = await attachmentManager.uploadFile(fileReference);
 
       expect(revokeObjectURLSpy).not.toHaveBeenCalled();
       expect(uploaded.localMetadata.previewUri).toBeUndefined();
@@ -1485,101 +1596,12 @@ describe('AttachmentManager', () => {
       revokeObjectURLSpy.mockRestore();
     });
 
-    it('should handle upload failures', async () => {
-      const {
-        messageComposer: { attachmentManager },
-        mockChannel,
-        mockClient,
-      } = setup();
-      mockChannel.sendImage.mockRejectedValueOnce(new Error('Upload failed'));
-      const file = new File([''], 'test.jpg', { type: 'image/jpeg' });
-
-      await expect(
-        attachmentManager.uploadAttachment(
-          await attachmentManager.fileToLocalUploadAttachment(file),
-        ),
-      ).resolves.toEqual({
-        fallback: 'test.jpg',
-        file_size: 0,
-        localMetadata: {
-          uploadConfirmationPending: false,
-          id: expect.any(String),
-          file,
-          uploadState: 'failed',
-          previewUri: expect.any(String),
-          uploadPermissionCheck: {
-            uploadBlocked: false,
-          },
-        },
-        mime_type: 'image/jpeg',
-        type: 'image',
-      });
-
-      expect(attachmentManager.failedUploadsCount).toBe(1);
-      expect(mockClient.notifications.addError).toHaveBeenCalledWith({
-        message: 'Error uploading attachment',
-        origin: {
-          emitter: 'AttachmentManager',
-          context: {
-            attachment: expect.any(Object),
-            failedAttachment: expect.any(Object),
-          },
-        },
-        options: {
-          type: 'api:attachment:upload:failed',
-          metadata: { reason: 'Upload failed' },
-          originalError: expect.any(Error),
-        },
-      });
-    });
-
-    it('should register notification for blocked file', async () => {
-      const {
-        messageComposer: { attachmentManager },
-        mockClient,
-      } = setup();
-
-      // Create a blocked attachment
-      const blockedAttachment = {
-        type: 'image',
-        localMetadata: {
-          id: 'test-id',
-          file: new File([''], 'test.jpg', { type: 'image/jpeg' }),
-        },
-      };
-
-      // Mock getUploadConfigCheck to return blocked
-      vi.spyOn(attachmentManager, 'getUploadConfigCheck').mockResolvedValue({
-        uploadBlocked: true,
-        reason: 'size_limit',
-      });
-
-      await attachmentManager.uploadAttachment(blockedAttachment);
-
-      // Verify notification was added
-      expect(mockClient.notifications.addError).toHaveBeenCalledWith({
-        message: 'The attachment upload was blocked',
-        origin: {
-          emitter: 'AttachmentManager',
-          context: {
-            attachment: blockedAttachment,
-            blockedAttachment: expect.any(Object),
-          },
-        },
-        options: {
-          type: 'validation:attachment:upload:blocked',
-          metadata: { reason: 'size_limit' },
-        },
-      });
-    });
-
     it.each([
       ['an axios cancellation', new axios.Cancel('canceled')],
       ['a DOMException AbortError', new DOMException('Upload aborted', 'AbortError')],
     ])('does not notify when the upload was cancelled by %s', async (_label, error) => {
       // Cancelling from the composer aborts the request via `UploadManager`, so the rejection
-      // that lands here is the user's own doing. This path notifies directly instead of going
-      // through `createUploadErrorHandlerMiddleware`, so it needs its own guard.
+      // that lands here is the user's own doing.
       const {
         messageComposer: { attachmentManager },
         mockClient,
@@ -1587,61 +1609,27 @@ describe('AttachmentManager', () => {
 
       attachmentManager.setCustomUploadFn(vi.fn().mockRejectedValue(error));
 
-      const attachment = {
-        type: 'image',
-        localMetadata: {
-          id: 'test-id',
-          file: new File([''], 'test.jpg', { type: 'image/jpeg' }),
-          uploadState: 'pending',
-        },
-      };
-      vi.spyOn(attachmentManager, 'ensureLocalUploadAttachment').mockResolvedValue(
-        attachment,
+      const result = await attachmentManager.uploadFile(
+        new File([''], 'test.jpg', { type: 'image/jpeg' }),
       );
 
-      const result = await attachmentManager.uploadAttachment(attachment);
-
-      expect(result?.localMetadata.uploadState).toBe('failed');
+      expect(result.localMetadata.uploadState).toBe('failed');
       expect(mockClient.notifications.addError).not.toHaveBeenCalled();
     });
 
-    it('should use custom upload function when provided', async () => {
+    it('returns an attachment the fileUploadFilter rejects without uploading it', async () => {
       const {
         messageComposer: { attachmentManager },
         mockChannel,
-      } = setup();
+      } = setup({ config: { fileUploadFilter: () => false } });
 
-      // Create a custom upload function
-      const customUploadFn = vi.fn().mockResolvedValue({ file: 'custom-upload-url' });
-
-      // Set the custom upload function
-      attachmentManager.setCustomUploadFn(customUploadFn);
-
-      // Create a file to upload
-      const file = new File([''], 'test.jpg', { type: 'image/jpeg' });
-
-      const attachment = {
-        type: 'image',
-        localMetadata: {
-          id: 'test-id',
-          file,
-          uploadState: 'pending',
-        },
-      };
-
-      vi.spyOn(attachmentManager, 'ensureLocalUploadAttachment').mockResolvedValue(
-        attachment,
+      const result = await attachmentManager.uploadFile(
+        new File([''], 'test.jpg', { type: 'image/jpeg' }),
       );
 
-      // Upload the attachment
-      await attachmentManager.uploadAttachment(attachment);
-
-      // Verify the custom upload function was called with progress callback when tracking is on
-      expect(customUploadFn).toHaveBeenCalledWith(
-        file,
-        expect.objectContaining({ onProgress: expect.any(Function) }),
-      );
-      expect(mockChannel.sendImage).not.toHaveBeenCalled();
+      expect(result.localMetadata.uploadState).toBe('pending');
+      expect(mockChannel.uploadImage).not.toHaveBeenCalled();
+      expect(attachmentManager.attachments).toHaveLength(0);
     });
   });
 
@@ -1660,15 +1648,10 @@ describe('AttachmentManager', () => {
       } = setup({ config: { trackUploadProgress: false } });
       const file = new File([''], 'test.jpg', { type: 'image/jpeg' });
 
-      await attachmentManager.uploadAttachment(
-        await attachmentManager.fileToLocalUploadAttachment(file),
-      );
+      await attachmentManager.uploadFile(file);
 
-      expect(mockChannel.sendImage).toHaveBeenCalledWith(
-        file,
-        undefined,
-        undefined,
-        undefined,
+      expect(mockChannel.uploadImage).toHaveBeenCalledWith(
+        { file },
         { signal: expect.any(AbortSignal) },
       );
     });
@@ -1678,11 +1661,11 @@ describe('AttachmentManager', () => {
         messageComposer: { attachmentManager },
         mockChannel,
       } = setup({ config: { trackUploadProgress: false } });
-      mockChannel.sendImage.mockImplementation(() => new Promise(() => {}));
+      mockChannel.uploadImage.mockImplementation(() => new Promise(() => {}));
 
       const file = new File([''], 'test.jpg', { type: 'image/jpeg' });
-      const local = await attachmentManager.fileToLocalUploadAttachment(file);
-      void attachmentManager.uploadAttachment(local);
+      const local = AttachmentManager.toLocalUploadAttachment(file);
+      void attachmentManager.uploadFile(local);
 
       await vi.waitFor(() => {
         expect(attachmentManager.uploadsInProgressCount).toBe(1);
@@ -1697,11 +1680,11 @@ describe('AttachmentManager', () => {
         messageComposer: { attachmentManager },
         mockChannel,
       } = setup();
-      mockChannel.sendImage.mockImplementation(() => new Promise(() => {}));
+      mockChannel.uploadImage.mockImplementation(() => new Promise(() => {}));
 
       const file = new File([''], 'test.jpg', { type: 'image/jpeg' });
-      const local = await attachmentManager.fileToLocalUploadAttachment(file);
-      void attachmentManager.uploadAttachment(local);
+      const local = AttachmentManager.toLocalUploadAttachment(file);
+      void attachmentManager.uploadFile(local);
 
       await vi.waitFor(() => {
         expect(attachmentManager.uploadsInProgressCount).toBe(1);
@@ -1725,7 +1708,7 @@ describe('AttachmentManager', () => {
       expect(customUploadFn).toHaveBeenCalledWith(file, {
         abortSignal: expect.any(AbortSignal),
       });
-      expect(mockChannel.sendImage).not.toHaveBeenCalled();
+      expect(mockChannel.uploadImage).not.toHaveBeenCalled();
     });
 
     it('when true, custom doUploadRequest receives onProgress and updates attachment when invoked', async () => {
@@ -1741,20 +1724,8 @@ describe('AttachmentManager', () => {
       attachmentManager.setCustomUploadFn(customUploadFn);
 
       const file = new File([''], 'test.jpg', { type: 'image/jpeg' });
-      const attachment = {
-        type: 'image' as const,
-        localMetadata: {
-          id: 'test-id',
-          file,
-          uploadState: 'pending' as const,
-        },
-      };
 
-      vi.spyOn(attachmentManager, 'ensureLocalUploadAttachment').mockResolvedValue(
-        attachment,
-      );
-
-      await attachmentManager.uploadAttachment(attachment);
+      await attachmentManager.uploadFile(file);
 
       expect(customUploadFn).toHaveBeenCalledWith(
         file,
@@ -1768,7 +1739,7 @@ describe('AttachmentManager', () => {
           localMetadata: expect.objectContaining({ uploadProgress: 42 }),
         }),
       );
-      expect(mockChannel.sendImage).not.toHaveBeenCalled();
+      expect(mockChannel.uploadImage).not.toHaveBeenCalled();
     });
 
     it('aborts default upload axios signal when attachment is removed during upload', async () => {
@@ -1776,25 +1747,25 @@ describe('AttachmentManager', () => {
         messageComposer: { attachmentManager },
         mockChannel,
       } = setup();
-      mockChannel.sendImage.mockImplementation(() => new Promise(() => {}));
+      mockChannel.uploadImage.mockImplementation(() => new Promise(() => {}));
 
       const file = new File([''], 'test.jpg', { type: 'image/jpeg' });
-      const local = await attachmentManager.fileToLocalUploadAttachment(file);
-      void attachmentManager.uploadAttachment(local);
+      const local = AttachmentManager.toLocalUploadAttachment(file);
+      void attachmentManager.uploadFile(local);
 
       await vi.waitFor(() => {
-        expect(mockChannel.sendImage).toHaveBeenCalled();
+        expect(mockChannel.uploadImage).toHaveBeenCalled();
       });
 
-      const axiosOpts = mockChannel.sendImage.mock.calls[0][4] as {
+      const requestOpts = mockChannel.uploadImage.mock.calls[0][1] as {
         signal?: AbortSignal;
       };
-      expect(axiosOpts?.signal).toBeInstanceOf(AbortSignal);
-      expect(axiosOpts!.signal!.aborted).toBe(false);
+      expect(requestOpts?.signal).toBeInstanceOf(AbortSignal);
+      expect(requestOpts!.signal!.aborted).toBe(false);
 
       attachmentManager.removeAttachments([local.localMetadata.id!]);
 
-      expect(axiosOpts!.signal!.aborted).toBe(true);
+      expect(requestOpts!.signal!.aborted).toBe(true);
     });
 
     it('aborts custom upload abortSignal when attachment is removed during upload', async () => {
@@ -1810,8 +1781,8 @@ describe('AttachmentManager', () => {
       attachmentManager.setCustomUploadFn(customUploadFn);
 
       const file = new File([''], 'test.jpg', { type: 'image/jpeg' });
-      const local = await attachmentManager.fileToLocalUploadAttachment(file);
-      void attachmentManager.uploadAttachment(local);
+      const local = AttachmentManager.toLocalUploadAttachment(file);
+      void attachmentManager.uploadFile(local);
 
       await vi.waitFor(() => {
         expect(customUploadFn).toHaveBeenCalled();
@@ -1822,7 +1793,7 @@ describe('AttachmentManager', () => {
       attachmentManager.removeAttachments([local.localMetadata.id!]);
 
       expect(capturedSignal!.aborted).toBe(true);
-      expect(mockChannel.sendImage).not.toHaveBeenCalled();
+      expect(mockChannel.uploadImage).not.toHaveBeenCalled();
     });
 
     it('on retry from failed state, onProgress keeps updating uploadProgress while uploading', async () => {
@@ -1832,10 +1803,9 @@ describe('AttachmentManager', () => {
       } = setup();
 
       const file = new File([''], 'test.jpg', { type: 'image/jpeg' });
-      mockChannel.sendImage.mockRejectedValueOnce(new Error('Upload failed'));
+      mockChannel.uploadImage.mockRejectedValueOnce(new Error('Upload failed'));
 
-      const local = await attachmentManager.fileToLocalUploadAttachment(file);
-      await attachmentManager.uploadAttachment(local);
+      await attachmentManager.uploadFile(file);
 
       const failedAttachment = attachmentManager.attachments[0];
       expect(failedAttachment.localMetadata.uploadState).toBe('failed');
@@ -1852,7 +1822,7 @@ describe('AttachmentManager', () => {
       });
       attachmentManager.setCustomUploadFn(customUploadFn);
 
-      const uploadPromise = attachmentManager.uploadAttachment(
+      const uploadPromise = attachmentManager.uploadFile(
         failedAttachment as LocalUploadAttachment,
       );
 
@@ -1875,7 +1845,7 @@ describe('AttachmentManager', () => {
   });
 
   describe('doDefaultUploadRequest', () => {
-    it('passes onUploadProgress to sendImage when onProgress is provided (File)', async () => {
+    it('passes onUploadProgress to uploadImage when onProgress is provided (File)', async () => {
       const {
         messageComposer: { attachmentManager },
         mockChannel,
@@ -1885,18 +1855,15 @@ describe('AttachmentManager', () => {
 
       await attachmentManager.doDefaultUploadRequest(file, { onProgress });
 
-      expect(mockChannel.sendImage).toHaveBeenCalledTimes(1);
-      expect(mockChannel.sendFile).not.toHaveBeenCalled();
-      expect(mockChannel.sendImage).toHaveBeenCalledWith(
-        file,
-        undefined,
-        undefined,
-        undefined,
+      expect(mockChannel.uploadImage).toHaveBeenCalledTimes(1);
+      expect(mockChannel.uploadFile).not.toHaveBeenCalled();
+      expect(mockChannel.uploadImage).toHaveBeenCalledWith(
+        { file },
         { onUploadProgress: expect.any(Function) },
       );
     });
 
-    it('passes onUploadProgress to sendFile when onProgress is provided (File)', async () => {
+    it('passes onUploadProgress to uploadFile when onProgress is provided (File)', async () => {
       const {
         messageComposer: { attachmentManager },
         mockChannel,
@@ -1906,18 +1873,15 @@ describe('AttachmentManager', () => {
 
       await attachmentManager.doDefaultUploadRequest(file, { onProgress });
 
-      expect(mockChannel.sendFile).toHaveBeenCalledTimes(1);
-      expect(mockChannel.sendImage).not.toHaveBeenCalled();
-      expect(mockChannel.sendFile).toHaveBeenCalledWith(
-        file,
-        undefined,
-        undefined,
-        undefined,
+      expect(mockChannel.uploadFile).toHaveBeenCalledTimes(1);
+      expect(mockChannel.uploadImage).not.toHaveBeenCalled();
+      expect(mockChannel.uploadFile).toHaveBeenCalledWith(
+        { file },
         { onUploadProgress: expect.any(Function) },
       );
     });
 
-    it('passes onUploadProgress to sendImage when onProgress is provided (FileReference)', async () => {
+    it('passes onUploadProgress to uploadImage when onProgress is provided (FileReference)', async () => {
       const {
         messageComposer: { attachmentManager },
         mockChannel,
@@ -1932,16 +1896,13 @@ describe('AttachmentManager', () => {
 
       await attachmentManager.doDefaultUploadRequest(fileRef, { onProgress });
 
-      expect(mockChannel.sendImage).toHaveBeenCalledWith(
-        fileRef.uri,
-        fileRef.name,
-        fileRef.type,
-        undefined,
+      expect(mockChannel.uploadImage).toHaveBeenCalledWith(
+        { file: fileRef },
         { onUploadProgress: expect.any(Function) },
       );
     });
 
-    it('passes onUploadProgress to sendFile when onProgress is provided (FileReference)', async () => {
+    it('passes onUploadProgress to uploadFile when onProgress is provided (FileReference)', async () => {
       const {
         messageComposer: { attachmentManager },
         mockChannel,
@@ -1956,16 +1917,13 @@ describe('AttachmentManager', () => {
 
       await attachmentManager.doDefaultUploadRequest(fileRef, { onProgress });
 
-      expect(mockChannel.sendFile).toHaveBeenCalledWith(
-        fileRef.uri,
-        fileRef.name,
-        fileRef.type,
-        undefined,
+      expect(mockChannel.uploadFile).toHaveBeenCalledWith(
+        { file: fileRef },
         { onUploadProgress: expect.any(Function) },
       );
     });
 
-    it('omits axios options when onProgress is not provided', async () => {
+    it('omits request options when neither onProgress nor abortSignal is provided', async () => {
       const {
         messageComposer: { attachmentManager },
         mockChannel,
@@ -1976,23 +1934,11 @@ describe('AttachmentManager', () => {
       await attachmentManager.doDefaultUploadRequest(image);
       await attachmentManager.doDefaultUploadRequest(pdf);
 
-      expect(mockChannel.sendImage).toHaveBeenCalledWith(
-        image,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-      );
-      expect(mockChannel.sendFile).toHaveBeenCalledWith(
-        pdf,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-      );
+      expect(mockChannel.uploadImage).toHaveBeenCalledWith({ file: image }, {});
+      expect(mockChannel.uploadFile).toHaveBeenCalledWith({ file: pdf }, {});
     });
 
-    it('passes axios signal when abortSignal is provided without onProgress', async () => {
+    it('passes the abort signal when abortSignal is provided without onProgress', async () => {
       const {
         messageComposer: { attachmentManager },
         mockChannel,
@@ -2004,16 +1950,13 @@ describe('AttachmentManager', () => {
         abortSignal: controller.signal,
       });
 
-      expect(mockChannel.sendImage).toHaveBeenCalledWith(
-        file,
-        undefined,
-        undefined,
-        undefined,
+      expect(mockChannel.uploadImage).toHaveBeenCalledWith(
+        { file },
         { signal: controller.signal },
       );
     });
 
-    it('maps lengthComputable upload progress to rounded percent for sendImage', async () => {
+    it('maps lengthComputable upload progress to rounded percent for uploadImage', async () => {
       const {
         messageComposer: { attachmentManager },
         mockChannel,
@@ -2023,21 +1966,21 @@ describe('AttachmentManager', () => {
 
       await attachmentManager.doDefaultUploadRequest(file, { onProgress });
 
-      const axiosOpts = vi.mocked(mockChannel.sendImage).mock.calls[0][4] as {
+      const requestOpts = vi.mocked(mockChannel.uploadImage).mock.calls[0][1] as {
         onUploadProgress: (e: {
           loaded: number;
           total?: number;
           lengthComputable?: boolean;
         }) => void;
       };
-      axiosOpts.onUploadProgress({
+      requestOpts.onUploadProgress({
         loaded: 333,
         total: 1000,
         lengthComputable: true,
       });
       expect(onProgress).toHaveBeenCalledWith(33);
 
-      axiosOpts.onUploadProgress({
+      requestOpts.onUploadProgress({
         loaded: 100,
         total: 100,
         lengthComputable: true,
@@ -2045,7 +1988,7 @@ describe('AttachmentManager', () => {
       expect(onProgress).toHaveBeenLastCalledWith(100);
     });
 
-    it('maps lengthComputable upload progress to rounded percent for sendFile', async () => {
+    it('maps lengthComputable upload progress to rounded percent for uploadFile', async () => {
       const {
         messageComposer: { attachmentManager },
         mockChannel,
@@ -2055,14 +1998,14 @@ describe('AttachmentManager', () => {
 
       await attachmentManager.doDefaultUploadRequest(file, { onProgress });
 
-      const axiosOpts = vi.mocked(mockChannel.sendFile).mock.calls[0][4] as {
+      const requestOpts = vi.mocked(mockChannel.uploadFile).mock.calls[0][1] as {
         onUploadProgress: (e: {
           loaded: number;
           total?: number;
           lengthComputable?: boolean;
         }) => void;
       };
-      axiosOpts.onUploadProgress({
+      requestOpts.onUploadProgress({
         loaded: 1,
         total: 3,
         lengthComputable: true,
@@ -2080,7 +2023,7 @@ describe('AttachmentManager', () => {
 
       await attachmentManager.doDefaultUploadRequest(file, { onProgress });
 
-      const axiosOpts = vi.mocked(mockChannel.sendImage).mock.calls[0][4] as {
+      const requestOpts = vi.mocked(mockChannel.uploadImage).mock.calls[0][1] as {
         onUploadProgress: (e: {
           loaded: number;
           total?: number;
@@ -2089,7 +2032,7 @@ describe('AttachmentManager', () => {
       };
 
       onProgress.mockClear();
-      axiosOpts.onUploadProgress({
+      requestOpts.onUploadProgress({
         loaded: 50,
         total: 100,
         lengthComputable: false,
@@ -2097,7 +2040,7 @@ describe('AttachmentManager', () => {
       expect(onProgress).toHaveBeenCalledWith(undefined);
 
       onProgress.mockClear();
-      axiosOpts.onUploadProgress({
+      requestOpts.onUploadProgress({
         loaded: 50,
         total: 100,
         lengthComputable: true,
@@ -2105,7 +2048,7 @@ describe('AttachmentManager', () => {
       expect(onProgress).toHaveBeenCalledWith(50);
 
       onProgress.mockClear();
-      axiosOpts.onUploadProgress({
+      requestOpts.onUploadProgress({
         loaded: 50,
         lengthComputable: true,
       });
@@ -2114,6 +2057,64 @@ describe('AttachmentManager', () => {
   });
 
   describe('uploadFiles', () => {
+    it('refuses a custom request without customCdn when the capability is missing', async () => {
+      // **Behaviour change.** The permission bypass added for custom upload functions keyed on the mere
+      // presence of `doUploadRequest`, which waived Stream's capability for integrators who were still
+      // uploading to Stream. It is now keyed on `customCdn`, so this case is governed again. Nothing covered
+      // the old bypass, so this is also the first test either way round.
+      const {
+        messageComposer: { attachmentManager },
+        mockChannel,
+      } = setup({
+        config: { doUploadRequest: () => Promise.resolve({ file: 'https://x/f' }) },
+      });
+      mockChannel.data = { ...mockChannel.data, own_capabilities: [] };
+      const file = new File([''], 'test.jpg', { type: 'image/jpeg' });
+
+      await attachmentManager.uploadFiles([file]);
+
+      expect(attachmentManager.attachments).toHaveLength(0);
+    });
+
+    it('uploads without the capability once customCdn is declared', async () => {
+      const doUploadRequest = vi.fn(() =>
+        Promise.resolve({ file: 'https://cdn.example/f' }),
+      );
+      const {
+        messageComposer: { attachmentManager },
+        mockChannel,
+      } = setup({ config: { customCdn: true, doUploadRequest } });
+      mockChannel.data = { ...mockChannel.data, own_capabilities: [] };
+      const file = new File([''], 'test.jpg', { type: 'image/jpeg' });
+
+      await attachmentManager.uploadFiles([file]);
+
+      expect(doUploadRequest).toHaveBeenCalled();
+      expect(attachmentManager.successfulUploadsCount).toBe(1);
+    });
+
+    it('refuses when attachments are disabled, even for storage outside Stream', async () => {
+      // Declaring `customCdn` waives Stream's `upload-file` permission, because those bytes never reach
+      // Stream. `config.enabled` is the integrator's *own* switch, so it has to survive that waiver —
+      // otherwise turning attachments off would keep working for exactly the people who configured the
+      // SDK most deliberately.
+      const {
+        messageComposer: { attachmentManager },
+      } = setup({
+        config: {
+          customCdn: true,
+          doUploadRequest: () => Promise.resolve({ file: 'https://cdn.example/f' }),
+          enabled: false,
+        },
+      });
+      const file = new File([''], 'test.jpg', { type: 'image/jpeg' });
+
+      await attachmentManager.uploadFiles([file]);
+
+      expect(attachmentManager.successfulUploadsCount).toBe(0);
+      expect(attachmentManager.attachments).toHaveLength(0);
+    });
+
     it('should upload files successfully', async () => {
       const {
         messageComposer: { attachmentManager },
@@ -2131,24 +2132,24 @@ describe('AttachmentManager', () => {
         mockChannel,
         mockClient,
       } = setup();
-      mockChannel.sendImage.mockRejectedValueOnce(new Error('Upload failed'));
+      mockChannel.uploadImage.mockRejectedValueOnce(new Error('Upload failed'));
       const file = new File([''], 'test.jpg', { type: 'image/jpeg' });
 
       await expect(attachmentManager.uploadFiles([file])).resolves.toEqual([
         {
           fallback: 'test.jpg',
-          file_size: 0,
+          custom: { file_size: 0, mime_type: 'image/jpeg' },
           localMetadata: {
             uploadConfirmationPending: false,
             id: expect.any(String),
             file,
             uploadState: 'failed',
+            uploadProgress: undefined,
             previewUri: expect.any(String),
             uploadPermissionCheck: {
               uploadBlocked: false,
             },
           },
-          mime_type: 'image/jpeg',
           type: 'image',
         },
       ]);
@@ -2160,6 +2161,7 @@ describe('AttachmentManager', () => {
           emitter: 'AttachmentManager',
           context: {
             attachment: expect.any(Object),
+            composer: expect.any(MessageComposer),
           },
         },
         options: {
@@ -2191,6 +2193,7 @@ describe('AttachmentManager', () => {
           emitter: 'AttachmentManager',
           context: {
             blockedAttachment,
+            composer: expect.any(MessageComposer),
           },
         },
         options: {
@@ -2221,7 +2224,22 @@ describe('AttachmentManager', () => {
         file,
         expect.objectContaining({ onProgress: expect.any(Function) }),
       );
-      expect(mockChannel.sendImage).not.toHaveBeenCalled();
+      expect(mockChannel.uploadImage).not.toHaveBeenCalled();
+    });
+
+    it('marks an upload rejected with a non-Error as failed', async () => {
+      const {
+        messageComposer: { attachmentManager },
+        mockChannel,
+      } = setup();
+      mockChannel.uploadImage.mockRejectedValueOnce('not an Error');
+
+      await attachmentManager.uploadFiles([
+        new File([''], 'test.jpg', { type: 'image/jpeg' }),
+      ]);
+
+      expect(attachmentManager.attachments).toHaveLength(1);
+      expect(attachmentManager.failedUploadsCount).toBe(1);
     });
 
     it('should respect maxNumberOfFilesPerMessage', async () => {
@@ -2240,192 +2258,317 @@ describe('AttachmentManager', () => {
     });
   });
 
-  describe('ensureLocalUploadAttachment', () => {
-    it('should add error notification when file is missing', async () => {
+  describe('uploadFile with an existing attachment', () => {
+    const uploadTwoFilesFailingTheFirst = async () => {
+      const setupResult = setup();
       const {
         messageComposer: { attachmentManager },
+        mockChannel,
+      } = setupResult;
+      mockChannel.uploadImage.mockRejectedValueOnce(new Error('Upload failed'));
+      const [failed] = await attachmentManager.uploadFiles([
+        new File([''], 'first.jpg', { type: 'image/jpeg' }),
+        new File([''], 'second.pdf', { type: 'application/pdf' }),
+      ]);
+      return { ...setupResult, failed };
+    };
+
+    it('retries a failed upload in place, keeping its id and position', async () => {
+      const {
+        failed,
+        messageComposer: { attachmentManager },
+        mockChannel,
+      } = await uploadTwoFilesFailingTheFirst();
+      expect(attachmentManager.attachments[0].localMetadata).toMatchObject({
+        id: failed.localMetadata.id,
+        uploadState: 'failed',
+      });
+
+      const retried = await attachmentManager.uploadFile(failed);
+
+      expect(mockChannel.uploadImage).toHaveBeenCalledTimes(2);
+      expect(retried.localMetadata).toMatchObject({
+        id: failed.localMetadata.id,
+        uploadState: 'finished',
+      });
+      expect(retried).toMatchObject({ image_url: 'test-image-url' });
+      expect(attachmentManager.attachments).toHaveLength(2);
+      expect(attachmentManager.attachments[0].localMetadata.id).toBe(
+        failed.localMetadata.id,
+      );
+      expect(attachmentManager.attachments[0].localMetadata.uploadState).toBe('finished');
+      expect(attachmentManager.failedUploadsCount).toBe(0);
+    });
+
+    it('runs the pre- and post-upload middleware on a retry', async () => {
+      const {
+        failed,
+        messageComposer: { attachmentManager },
+      } = await uploadTwoFilesFailingTheFirst();
+      const prepare = vi.fn(({ next, state }) =>
+        next({
+          ...state,
+          attachment: { ...state.attachment, fallback: 'prepared.jpg' },
+        }),
+      );
+      const postProcess = vi.fn(({ next, state }) =>
+        next({
+          ...state,
+          attachment: { ...state.attachment, title: 'post-processed' },
+        }),
+      );
+      attachmentManager.preUploadMiddlewareExecutor.use({
+        id: 'test/prepare',
+        handlers: { prepare },
+      });
+      attachmentManager.postUploadMiddlewareExecutor.use({
+        id: 'test/post-process',
+        handlers: { postProcess },
+      });
+
+      await attachmentManager.uploadFile(failed);
+
+      expect(prepare).toHaveBeenCalledTimes(1);
+      expect(prepare.mock.calls[0][0].state.attachment.localMetadata.id).toBe(
+        failed.localMetadata.id,
+      );
+      expect(postProcess).toHaveBeenCalledTimes(1);
+      expect(attachmentManager.attachments[0]).toMatchObject({
+        fallback: 'prepared.jpg',
+        title: 'post-processed',
+        localMetadata: { id: failed.localMetadata.id, uploadState: 'finished' },
+      });
+    });
+
+    it('leaves a retry that fails again in place as failed and notifies', async () => {
+      const {
+        failed,
+        messageComposer: { attachmentManager },
+        mockChannel,
         mockClient,
-      } = setup();
-      // Access the private method using any type
-      const ensureLocalUploadAttachment = (attachmentManager as any)
-        .ensureLocalUploadAttachment;
+      } = await uploadTwoFilesFailingTheFirst();
+      mockChannel.uploadImage.mockRejectedValueOnce(new Error('Upload failed again'));
+      vi.mocked(mockClient.notifications.addError).mockClear();
 
-      await ensureLocalUploadAttachment({
-        localMetadata: {
-          id: 'test-id',
-          // Missing file property
-        },
-      });
+      const retried = await attachmentManager.uploadFile(failed);
 
-      expect(mockClient.notifications.addError).toHaveBeenCalledWith({
-        message: 'File is required for upload attachment',
-        options: {
-          type: 'validation:attachment:file:missing',
-        },
-        origin: {
-          emitter: 'AttachmentManager',
-          context: {
-            attachment: {
-              localMetadata: {
-                id: 'test-id',
-              },
-            },
-          },
-        },
+      expect(retried.localMetadata).toMatchObject({
+        id: failed.localMetadata.id,
+        uploadState: 'failed',
       });
+      expect(attachmentManager.attachments).toHaveLength(2);
+      expect(attachmentManager.attachments[0].localMetadata).toMatchObject({
+        previewUri: failed.localMetadata.previewUri,
+        uploadState: 'failed',
+      });
+      expect(mockClient.notifications.addError).toHaveBeenCalledTimes(1);
+      expect(mockClient.notifications.addError).toHaveBeenCalledWith(
+        expect.objectContaining({
+          options: expect.objectContaining({
+            metadata: { reason: 'Upload failed again' },
+            type: 'api:attachment:upload:failed',
+          }),
+        }),
+      );
     });
 
-    it('should add error notification when id is missing', async () => {
+    it('marks a retry rejected with a non-Error as failed and notifies', async () => {
       const {
+        failed,
         messageComposer: { attachmentManager },
+        mockChannel,
         mockClient,
-      } = setup();
-      const ensureLocalUploadAttachment = (attachmentManager as any)
-        .ensureLocalUploadAttachment;
+      } = await uploadTwoFilesFailingTheFirst();
+      mockChannel.uploadImage.mockRejectedValueOnce('not an Error');
+      vi.mocked(mockClient.notifications.addError).mockClear();
 
-      const file = new File([''], 'test.jpg', { type: 'image/jpeg' });
-      await ensureLocalUploadAttachment({
-        localMetadata: {
-          file,
-          // Missing id property
-        },
+      await attachmentManager.uploadFile(failed);
+
+      expect(attachmentManager.attachments).toHaveLength(2);
+      expect(attachmentManager.attachments[0].localMetadata).toMatchObject({
+        id: failed.localMetadata.id,
+        uploadState: 'failed',
       });
+      expect(mockClient.notifications.addError).toHaveBeenCalledWith(
+        expect.objectContaining({
+          options: expect.objectContaining({
+            metadata: { reason: 'unknown error' },
+            type: 'api:attachment:upload:failed',
+          }),
+        }),
+      );
+    });
 
-      expect(mockClient.notifications.addError).toHaveBeenCalledWith({
-        message: 'Local upload attachment missing local id',
-        options: {
-          type: 'validation:attachment:id:missing',
-        },
-        origin: {
-          emitter: 'AttachmentManager',
-          context: {
-            attachment: {
-              localMetadata: {
-                file,
-              },
-            },
+    it('marks a retry cancelled with a non-Error as failed without a notification', async () => {
+      const {
+        failed,
+        messageComposer: { attachmentManager },
+        mockChannel,
+        mockClient,
+      } = await uploadTwoFilesFailingTheFirst();
+      // `axios.isCancel` recognises any value carrying `__CANCEL__`, not only `Error`s.
+      mockChannel.uploadImage.mockRejectedValueOnce({ __CANCEL__: true });
+      vi.mocked(mockClient.notifications.addError).mockClear();
+
+      await attachmentManager.uploadFile(failed);
+
+      expect(attachmentManager.attachments[0].localMetadata).toMatchObject({
+        id: failed.localMetadata.id,
+        uploadState: 'failed',
+      });
+      expect(mockClient.notifications.addError).not.toHaveBeenCalled();
+    });
+
+    it('leaves a retry the fileUploadFilter rejects unchanged without uploading it', async () => {
+      const { failed, messageComposer, mockChannel } =
+        await uploadTwoFilesFailingTheFirst();
+      const { attachmentManager } = messageComposer;
+      messageComposer.updateConfig({ attachments: { fileUploadFilter: () => false } });
+
+      const result = await attachmentManager.uploadFile(failed);
+
+      expect(mockChannel.uploadImage).toHaveBeenCalledTimes(1);
+      expect(result.localMetadata.id).toBe(failed.localMetadata.id);
+      expect(attachmentManager.attachments[0].localMetadata).toMatchObject({
+        id: failed.localMetadata.id,
+        uploadState: 'failed',
+      });
+    });
+
+    it('uploads regardless of isUploadEnabled', async () => {
+      const {
+        failed,
+        messageComposer: { attachmentManager },
+      } = await uploadTwoFilesFailingTheFirst();
+      vi.spyOn(attachmentManager, 'isUploadEnabled', 'get').mockReturnValue(false);
+
+      const retried = await attachmentManager.uploadFile(failed);
+
+      expect(retried.localMetadata.uploadState).toBe('finished');
+    });
+
+    it('marks a retry the server upload config blocks as blocked in place', async () => {
+      const {
+        failed,
+        messageComposer: { attachmentManager },
+        mockChannel,
+        mockClient,
+      } = await uploadTwoFilesFailingTheFirst();
+      vi.spyOn(attachmentManager, 'getUploadConfigCheck').mockResolvedValue({
+        reason: 'size_limit',
+        uploadBlocked: true,
+      });
+      vi.mocked(mockClient.notifications.addError).mockClear();
+
+      await attachmentManager.uploadFile(failed);
+
+      expect(mockChannel.uploadImage).toHaveBeenCalledTimes(1);
+      expect(attachmentManager.attachments).toHaveLength(2);
+      expect(attachmentManager.attachments[0].localMetadata).toMatchObject({
+        id: failed.localMetadata.id,
+        uploadState: 'blocked',
+      });
+      expect(mockClient.notifications.addError).toHaveBeenCalledTimes(1);
+      expect(mockClient.notifications.addError).toHaveBeenCalledWith(
+        expect.objectContaining({
+          options: {
+            metadata: { reason: 'size_limit' },
+            type: 'validation:attachment:upload:blocked',
           },
-        },
-      });
-    });
-
-    it('should return undefined when file is filtered out', async () => {
-      const {
-        messageComposer: { attachmentManager },
-      } = setup();
-      const ensureLocalUploadAttachment = (attachmentManager as any)
-        .ensureLocalUploadAttachment;
-
-      // Set a fileUploadFilter that blocks all files
-      attachmentManager.fileUploadFilter = () => false;
-
-      const file = new File([''], 'test.jpg', { type: 'image/jpeg' });
-      const result = await ensureLocalUploadAttachment({
-        localMetadata: {
-          id: 'test-id',
-          file,
-        },
-      });
-
-      expect(result).toBeUndefined();
-    });
-
-    it('should call fileToLocalUploadAttachment when file passes filter', async () => {
-      const {
-        messageComposer: { attachmentManager },
-      } = setup();
-      const ensureLocalUploadAttachment = (attachmentManager as any)
-        .ensureLocalUploadAttachment;
-      const fileToLocalUploadAttachment = vi.spyOn(
-        attachmentManager,
-        'fileToLocalUploadAttachment',
+        }),
       );
-
-      attachmentManager.fileUploadFilter = () => true;
-
-      const file = new File([''], 'test.jpg', { type: 'image/jpeg' });
-      await ensureLocalUploadAttachment({
-        localMetadata: {
-          id: 'test-id',
-          file,
-        },
-      });
-
-      expect(fileToLocalUploadAttachment).toHaveBeenCalledWith(file);
     });
 
-    it('should return the result from fileToLocalUploadAttachment', async () => {
+    it('revokes the preview of a retry that succeeds', async () => {
+      const createObjectURLSpy = vi
+        .spyOn(URL, 'createObjectURL')
+        .mockReturnValue('blob:first');
+      const revokeObjectURLSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation();
       const {
+        failed,
         messageComposer: { attachmentManager },
-      } = setup();
-      const ensureLocalUploadAttachment = (attachmentManager as any)
-        .ensureLocalUploadAttachment;
+      } = await uploadTwoFilesFailingTheFirst();
+      expect(failed.localMetadata.previewUri).toBe('blob:first');
+      revokeObjectURLSpy.mockClear();
 
-      // Set a fileUploadFilter that allows all files
-      attachmentManager.fileUploadFilter = () => true;
+      const retried = await attachmentManager.uploadFile(failed);
 
-      const expectedAttachment = {
-        type: 'image',
-        image_url: 'test-url',
-        localMetadata: {
-          id: 'test-id',
-          file: new File([''], 'test.jpg', { type: 'image/jpeg' }),
-          uploadState: 'finished',
-        },
-      };
-      vi.spyOn(attachmentManager, 'fileToLocalUploadAttachment').mockReturnValue(
-        expectedAttachment,
-      );
+      expect(revokeObjectURLSpy).toHaveBeenCalledWith('blob:first');
+      expect(retried.localMetadata.previewUri).toBeUndefined();
 
-      const file = new File([''], 'test.jpg', { type: 'image/jpeg' });
-      const result = await ensureLocalUploadAttachment({
-        localMetadata: {
-          id: 'test-id',
-          file,
-        },
-      });
-
-      expect(result).toEqual(expectedAttachment);
+      createObjectURLSpy.mockRestore();
+      revokeObjectURLSpy.mockRestore();
     });
 
-    it('should preserve original ID if it exists', async () => {
+    it.each([
+      ['file', { id: 'attachment-id' }, 'validation:attachment:file:missing'],
+      [
+        'local id',
+        { file: new File([''], 'test.jpg', { type: 'image/jpeg' }) },
+        'validation:attachment:id:missing',
+      ],
+    ])(
+      'returns an attachment without a %s unchanged and notifies',
+      async (_, localMetadata, notificationType) => {
+        const {
+          messageComposer: { attachmentManager },
+          mockChannel,
+          mockClient,
+        } = setup();
+        const attachment = {
+          localMetadata: { ...localMetadata, uploadState: 'failed' },
+          type: 'image',
+        } as unknown as LocalUploadAttachment;
+
+        const result = await attachmentManager.uploadFile(attachment);
+
+        expect(result).toBe(attachment);
+        expect(mockChannel.uploadImage).not.toHaveBeenCalled();
+        expect(attachmentManager.attachments).toHaveLength(0);
+        expect(mockClient.notifications.addError).toHaveBeenCalledWith({
+          message: expect.any(String),
+          origin: {
+            emitter: 'AttachmentManager',
+            context: { attachment, composer: expect.any(MessageComposer) },
+          },
+          options: { type: notificationType },
+        });
+      },
+    );
+
+    it('uploads a prebuilt attachment with its own fields', async () => {
       const {
         messageComposer: { attachmentManager },
-      } = setup();
-      const ensureLocalUploadAttachment = (attachmentManager as any)
-        .ensureLocalUploadAttachment;
-
-      // Set a fileUploadFilter that allows all files
-      attachmentManager.fileUploadFilter = () => true;
-
-      // Create an attachment with an ID
-      const originalId = 'original-test-id';
-      const file = new File([''], 'test.jpg', { type: 'image/jpeg' });
-
-      const newAttachment = {
-        type: 'image',
-        image_url: 'test-url',
-        localMetadata: {
-          id: 'new-test-id', // Different ID
-          file: new File([''], 'test.jpg', { type: 'image/jpeg' }),
-          uploadState: 'finished',
+        mockChannel,
+      } = setup({ appSettings: {} });
+      const file = new File([''], 'recording.mp3', { type: 'audio/mp3' });
+      const recording = {
+        asset_url: 'blob:recording',
+        custom: {
+          duration: 2,
+          file_size: 0,
+          mime_type: 'audio/mp3',
+          waveform_data: [0.5],
         },
-      };
+        localMetadata: { file, id: 'recording-id' },
+        title: 'recording.mp3',
+        type: 'voiceRecording',
+      } as unknown as LocalUploadAttachment;
 
-      vi.spyOn(attachmentManager, 'fileToLocalUploadAttachment').mockReturnValue(
-        newAttachment,
-      );
+      const uploaded = await attachmentManager.uploadFile(recording);
 
-      // Call with original ID
-      const result = await ensureLocalUploadAttachment({
-        localMetadata: {
-          id: originalId,
-          file,
-        },
+      expect(mockChannel.uploadFile).toHaveBeenCalledTimes(1);
+      expect(uploaded).toMatchObject({
+        asset_url: 'test-file-url',
+        custom: { duration: 2, waveform_data: [0.5] },
+        localMetadata: { id: 'recording-id', uploadState: 'finished' },
+        type: 'voiceRecording',
       });
-
-      // Verify the original ID was preserved
-      expect(result.localMetadata.id).toBe(originalId);
+      expect(attachmentManager.attachments).toHaveLength(1);
+      expect(attachmentManager.attachments[0]).toMatchObject({
+        custom: { waveform_data: [0.5] },
+        localMetadata: { id: 'recording-id', uploadState: 'finished' },
+      });
     });
   });
 
@@ -2447,8 +2590,7 @@ describe('AttachmentManager', () => {
       const file = new File([fileContent], 'test.jpg', { type: 'image/jpeg' });
       const result = await attachmentManager.fileToLocalUploadAttachment(file);
       expect(result).toMatchObject({
-        file_size: 1234,
-        mime_type: 'image/jpeg',
+        custom: { file_size: 1234, mime_type: 'image/jpeg' },
         type: 'image',
         localMetadata: expect.objectContaining({
           file,
@@ -2484,8 +2626,7 @@ describe('AttachmentManager', () => {
 
       expect(createObjectURLSpy).toHaveBeenCalledWith(file);
       expect(result).toMatchObject({
-        file_size: 3,
-        mime_type: 'application/pdf',
+        custom: { file_size: 3, mime_type: 'application/pdf' },
         type: 'file',
         localMetadata: expect.objectContaining({
           file,
@@ -2520,8 +2661,7 @@ describe('AttachmentManager', () => {
       };
       const result = await attachmentManager.fileToLocalUploadAttachment(fileReference);
       expect(result).toMatchObject({
-        file_size: 1234,
-        mime_type: 'image/jpeg',
+        custom: { file_size: 1234, mime_type: 'image/jpeg' },
         type: 'image',
         localMetadata: expect.objectContaining({
           file: fileReference,
@@ -2561,8 +2701,7 @@ describe('AttachmentManager', () => {
       };
       const result = await attachmentManager.fileToLocalUploadAttachment(fileReference);
       expect(result).toMatchObject({
-        file_size: 4321,
-        mime_type: 'video/mp4',
+        custom: { file_size: 4321, mime_type: 'video/mp4' },
         type: 'video',
         localMetadata: expect.objectContaining({
           file: fileReference,
@@ -2570,7 +2709,6 @@ describe('AttachmentManager', () => {
           uploadState: 'pending',
         }),
         title: 'test.mp4',
-        duration: 12.34,
         thumb_url: 'file://thumb.jpg',
       });
       expect(result.localMetadata.previewUri).toBe('file://test.mp4');

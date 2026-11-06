@@ -1,4 +1,5 @@
 import type { MiddlewareHandlerParams } from '../../../../middleware';
+import { CORE_NOTIFICATION_TYPE } from '../../../../notifications';
 import type { MessageComposer } from '../../../messageComposer';
 import type {
   AttachmentPreUploadMiddleware,
@@ -21,10 +22,10 @@ export const createBlockedAttachmentUploadNotificationMiddleware = (
           message: `The attachment upload was blocked`,
           origin: {
             emitter: 'AttachmentManager',
-            context: { blockedAttachment: attachment },
+            context: { blockedAttachment: attachment, composer },
           },
           options: {
-            type: 'validation:attachment:upload:blocked',
+            type: CORE_NOTIFICATION_TYPE.attachmentUploadBlocked,
             metadata: {
               reason: attachment.localMetadata.uploadPermissionCheck?.reason,
             },

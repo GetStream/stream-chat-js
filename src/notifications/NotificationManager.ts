@@ -1,4 +1,5 @@
-import { StateStore } from '../store';
+import { StateStore } from '@stream-io/state-store';
+import { isEqual } from '../utils/mergeWith/mergeWithCore';
 import { generateUUIDv4 } from '../utils';
 import type {
   AddNotificationPayload,
@@ -7,16 +8,54 @@ import type {
   NotificationState,
 } from './types';
 import { mergeWith } from '../utils/mergeWith';
+import { ConfigController } from '../configuration/ConfigController';
+import type { DeepPartial } from '../types.utility';
 import { DEFAULT_NOTIFICATION_MANAGER_CONFIG } from './configuration';
 
 export class NotificationManager {
   store: StateStore<NotificationState>;
-  private timeouts: Map<string, NodeJS.Timeout> = new Map();
-  config: NotificationManagerConfig;
+  private timeouts: Map<string, ReturnType<typeof setTimeout>> = new Map();
+
+  private readonly configController: ConfigController<NotificationManagerConfig>;
+  get configState(): StateStore<NotificationManagerConfig> {
+    return this.configController.state;
+  }
 
   constructor(config: Partial<NotificationManagerConfig> = {}) {
     this.store = new StateStore<NotificationState>({ notifications: [] });
-    this.config = mergeWith(DEFAULT_NOTIFICATION_MANAGER_CONFIG, config);
+    this.configController = new ConfigController<NotificationManagerConfig>({
+      defaults: DEFAULT_NOTIFICATION_MANAGER_CONFIG,
+      constructorOptions: config,
+      // `durations` is nested: naming one severity keeps the others.
+      mergeSlice: 'deep',
+    });
+  }
+
+  get config(): Readonly<NotificationManagerConfig> {
+    return this.configState.getLatestValue();
+  }
+
+  /**
+   * Merges a partial configuration into the resolved config.
+   *
+   * @param config - Fields to merge into the resolved config.
+   */
+  updateConfig(config: Partial<NotificationManagerConfig>) {
+    // Compares the merged result, so a patch naming one severity is not a change to the others.
+    this.configState.next((current) => {
+      const next = mergeWith({ ...current }, config as object);
+      return isEqual(current, next) ? current : next;
+    });
+  }
+
+  /**
+   * Rebuilds the config from the defaults, `config` and the constructor options instead of merging
+   * into the current value, so a `sortComparator` set through `updateConfig` is dropped.
+   *
+   * @param config - The declarative slice. Defaults to `{}`.
+   */
+  initializeConfig(config: DeepPartial<NotificationManagerConfig> = {}) {
+    this.configController.initialize(config as Partial<NotificationManagerConfig>);
   }
 
   get notifications() {
@@ -111,6 +150,13 @@ export class NotificationManager {
     }, duration);
 
     this.timeouts.set(id, timeout);
+  }
+
+  /** Like {@link startTimeout}, but a no-op when a countdown is already running. */
+  ensureTimeout(id: string, durationOverride?: number): void {
+    if (this.timeouts.has(id)) return;
+
+    this.startTimeout(id, durationOverride);
   }
 
   remove(id: string): void {

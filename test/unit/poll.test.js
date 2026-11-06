@@ -2,15 +2,16 @@ import sinon from 'sinon';
 import { Poll, StreamChat } from '../../src';
 
 import { describe, it, afterEach, beforeEach, expect, vi } from 'vitest';
+import { convertDateToTimestamp } from './test-utils/time';
 
 const pollId = 'WD4SBRJvLoGwB4oAoCQGM';
 
 const user1 = {
 	id: 'admin',
 	role: 'admin',
-	created_at: '2022-03-08T09:46:56.840739Z',
-	updated_at: '2024-09-13T13:53:32.883409Z',
-	last_active: '2024-10-23T08:14:23.299448386Z',
+	created_at: convertDateToTimestamp('2022-03-08T09:46:56.840739Z'),
+	updated_at: convertDateToTimestamp('2024-09-13T13:53:32.883409Z'),
+	last_active: convertDateToTimestamp('2024-10-23T08:14:23.299448386Z'),
 	banned: false,
 	online: true,
 	mutes: null,
@@ -24,8 +25,8 @@ const user1Votes = [
 		option_id: '85610252-7d50-429c-8183-51a7eba46246',
 		user_id: user1.id,
 		user: user1,
-		created_at: '2024-10-22T15:58:27.756166Z',
-		updated_at: '2024-10-22T15:58:27.756166Z',
+		created_at: convertDateToTimestamp('2024-10-22T15:58:27.756166Z'),
+		updated_at: convertDateToTimestamp('2024-10-22T15:58:27.756166Z'),
 	},
 	{
 		poll_id: pollId,
@@ -33,17 +34,17 @@ const user1Votes = [
 		option_id: 'dc22dcd6-4fc8-4c92-92c2-bfd63245724c',
 		user_id: user1.id,
 		user: user1,
-		created_at: '2024-10-22T15:58:25.886491Z',
-		updated_at: '2024-10-22T15:58:25.886491Z',
+		created_at: convertDateToTimestamp('2024-10-22T15:58:25.886491Z'),
+		updated_at: convertDateToTimestamp('2024-10-22T15:58:25.886491Z'),
 	},
 ];
 
 const user2 = {
 	id: 'SmithAnne',
 	role: 'user',
-	created_at: '2022-01-27T08:28:28.412254Z',
-	updated_at: '2024-09-26T10:12:23.427141Z',
-	last_active: '2024-10-23T08:01:43.157632831Z',
+	created_at: convertDateToTimestamp('2022-01-27T08:28:28.412254Z'),
+	updated_at: convertDateToTimestamp('2024-09-26T10:12:23.427141Z'),
+	last_active: convertDateToTimestamp('2024-10-23T08:01:43.157632831Z'),
 	banned: false,
 	online: true,
 	nickname: 'Ann',
@@ -58,8 +59,8 @@ const user2Votes = [
 		option_id: '7312e983-b042-4596-b5ce-f9e82deb363f',
 		user_id: user2.id,
 		user: user2,
-		created_at: '2024-10-22T16:00:50.2493Z',
-		updated_at: '2024-10-22T16:00:50.2493Z',
+		created_at: convertDateToTimestamp('2024-10-22T16:00:50.2493Z'),
+		updated_at: convertDateToTimestamp('2024-10-22T16:00:50.2493Z'),
 	},
 	{
 		poll_id: pollId,
@@ -67,8 +68,8 @@ const user2Votes = [
 		option_id: '85610252-7d50-429c-8183-51a7eba46246',
 		user_id: user2.id,
 		user: user2,
-		created_at: '2024-10-22T16:00:54.410474Z',
-		updated_at: '2024-10-22T16:00:54.410474Z',
+		created_at: convertDateToTimestamp('2024-10-22T16:00:54.410474Z'),
+		updated_at: convertDateToTimestamp('2024-10-22T16:00:54.410474Z'),
 	},
 ];
 
@@ -80,8 +81,8 @@ const user1Answer = {
 	answer_text: 'comment1',
 	user_id: user1.id,
 	user: user1,
-	created_at: '2024-10-23T13:12:57.944913Z',
-	updated_at: '2024-10-23T13:12:57.944913Z',
+	created_at: convertDateToTimestamp('2024-10-23T13:12:57.944913Z'),
+	updated_at: convertDateToTimestamp('2024-10-23T13:12:57.944913Z'),
 };
 
 const user2Answer = {
@@ -92,8 +93,8 @@ const user2Answer = {
 	answer_text: 'comment2',
 	user_id: user2.id,
 	user: user2,
-	created_at: '2024-10-23T13:12:57.944913Z',
-	updated_at: '2024-10-23T13:12:57.944913Z',
+	created_at: convertDateToTimestamp('2024-10-23T13:12:57.944913Z'),
+	updated_at: convertDateToTimestamp('2024-10-23T13:12:57.944913Z'),
 };
 
 const pollResponse = {
@@ -139,14 +140,14 @@ const pollResponse = {
 	own_votes: [...user1Votes, user1Answer],
 	created_by_id: user1.id,
 	created_by: user1,
-	created_at: '2024-10-22T15:28:20.580523Z',
-	updated_at: '2024-10-22T15:28:20.580523Z',
+	created_at: convertDateToTimestamp('2024-10-22T15:28:20.580523Z'),
+	updated_at: convertDateToTimestamp('2024-10-22T15:28:20.580523Z'),
 };
 
 // const client = sinon.createStubInstance(StreamChat);
 const client = new StreamChat('apiKey');
 client.user = user1;
-client.userID = user1.id;
+
 describe('Poll', () => {
 	afterEach(() => {
 		sinon.reset();
@@ -321,8 +322,8 @@ describe('Poll', () => {
 			option_id: 'dc22dcd6-4fc8-4c92-92c2-bfd63245724c',
 			user_id: user2.id,
 			user: user2,
-			created_at: '2024-10-23T15:58:27.756166Z',
-			updated_at: '2024-10-23T15:58:27.756166Z',
+			created_at: convertDateToTimestamp('2024-10-23T15:58:27.756166Z'),
+			updated_at: convertDateToTimestamp('2024-10-23T15:58:27.756166Z'),
 		};
 
 		const vote_count = originalState.vote_count + 1;
@@ -363,7 +364,7 @@ describe('Poll', () => {
 	});
 
 	it('should add own vote when handleVoteCasted is called', () => {
-		client.userID = user1.id;
+		client.user = user1;
 		const poll = new Poll({ client, poll: pollResponse });
 		const originalState = poll.data;
 		const castedVote = {
@@ -372,8 +373,8 @@ describe('Poll', () => {
 			option_id: 'ba933470-c0da-4b6f-a4d2-d2176ac0d4a8',
 			user_id: user1.id,
 			user: user1,
-			created_at: '2024-10-23T15:58:27.756166Z',
-			updated_at: '2024-10-23T15:58:27.756166Z',
+			created_at: convertDateToTimestamp('2024-10-23T15:58:27.756166Z'),
+			updated_at: convertDateToTimestamp('2024-10-23T15:58:27.756166Z'),
 		};
 
 		const vote_count = originalState.vote_count + 1;
@@ -422,8 +423,8 @@ describe('Poll', () => {
 			is_answer: true,
 			user_id: user2.id,
 			user: user2,
-			created_at: '2024-10-23T15:58:27.756166Z',
-			updated_at: '2024-10-23T15:58:27.756166Z',
+			created_at: convertDateToTimestamp('2024-10-23T15:58:27.756166Z'),
+			updated_at: convertDateToTimestamp('2024-10-23T15:58:27.756166Z'),
 		};
 
 		poll.handleVoteCasted({
@@ -443,7 +444,7 @@ describe('Poll', () => {
 	});
 
 	it('should add own answer when handleVoteCasted is called', () => {
-		client.userID = user1.id;
+		client.user = user1;
 		const poll = new Poll({ client, poll: pollResponse });
 		const originalState = poll.data;
 		const castedVote = {
@@ -453,8 +454,8 @@ describe('Poll', () => {
 			is_answer: true,
 			user_id: user1.id,
 			user: user1,
-			created_at: '2024-10-23T15:58:27.756166Z',
-			updated_at: '2024-10-23T15:58:27.756166Z',
+			created_at: convertDateToTimestamp('2024-10-23T15:58:27.756166Z'),
+			updated_at: convertDateToTimestamp('2024-10-23T15:58:27.756166Z'),
 		};
 
 		poll.handleVoteCasted({
@@ -483,7 +484,7 @@ describe('Poll', () => {
 			option_id: changedToOptionId,
 			user_id: user2.id,
 			user: user2,
-			created_at: '2024-10-23T15:58:27.756166Z',
+			created_at: convertDateToTimestamp('2024-10-23T15:58:27.756166Z'),
 		};
 
 		const vote_counts_by_option = {
@@ -517,7 +518,7 @@ describe('Poll', () => {
 	});
 
 	it('should change own vote when handleVoteChanged is called', () => {
-		client.userID = user1.id;
+		client.user = user1;
 		const poll = new Poll({ client, poll: pollResponse });
 		const originalState = poll.data;
 		const changedToOptionId = 'dc22dcd6-4fc8-4c92-92c2-bfd63245724c';
@@ -527,7 +528,7 @@ describe('Poll', () => {
 			option_id: changedToOptionId,
 			user_id: user1.id,
 			user: user1,
-			created_at: '2024-10-23T15:58:27.756166Z',
+			created_at: convertDateToTimestamp('2024-10-23T15:58:27.756166Z'),
 		};
 
 		const vote_counts_by_option = {
@@ -564,7 +565,7 @@ describe('Poll', () => {
 	});
 
 	it('should change an answer when handleVoteChanged is called', () => {
-		client.userID = user2.id;
+		client.user = user2;
 		const poll = new Poll({ client, poll: pollResponse });
 		const originalState = poll.data;
 		const changedAnswer = {
@@ -589,7 +590,7 @@ describe('Poll', () => {
 	});
 
 	it('should change own answer when handleVoteChanged is called', () => {
-		client.userID = user1.id;
+		client.user = user1;
 		const poll = new Poll({ client, poll: pollResponse });
 		const originalState = poll.data;
 		const changedAnswer = {
@@ -614,7 +615,7 @@ describe('Poll', () => {
 	});
 
 	it('should remove a vote when handleVoteRemoved is called', () => {
-		client.userID = user1.id;
+		client.user = user1;
 		const poll = new Poll({ client, poll: pollResponse });
 		const originalState = poll.data;
 		const vote_counts_by_option = {
@@ -653,7 +654,7 @@ describe('Poll', () => {
 	});
 
 	it('should remove own vote when handleVoteRemoved is called', () => {
-		client.userID = user1.id;
+		client.user = user1;
 		const poll = new Poll({ client, poll: pollResponse });
 		const originalState = poll.data;
 		const removedVote = user1Votes[0];
@@ -678,7 +679,7 @@ describe('Poll', () => {
 				vote_count: originalState.vote_count - 1,
 				vote_counts_by_option,
 			},
-			poll_vote: { ...removedVote, user_id: client.userID },
+			poll_vote: { ...removedVote, user_id: client.userId },
 		});
 
 		expect(poll.data.ownVotesByOptionId).to.eql({
@@ -695,7 +696,7 @@ describe('Poll', () => {
 	});
 
 	it('should remove an answer when handleVoteRemoved is called', () => {
-		client.userID = user1.id;
+		client.user = user1;
 		const poll = new Poll({ client, poll: pollResponse });
 		const originalState = poll.data;
 		const removedAnswer = user2Answer;
@@ -716,7 +717,7 @@ describe('Poll', () => {
 	});
 
 	it('should remove own answer when handleVoteRemoved is called', () => {
-		client.userID = user1.id;
+		client.user = user1;
 		const poll = new Poll({ client, poll: pollResponse });
 		const originalState = poll.data;
 		const removedAnswer = user1Answer;
@@ -724,7 +725,7 @@ describe('Poll', () => {
 		poll.handleVoteRemoved({
 			type: 'poll.vote_removed',
 			poll: { ...pollResponse },
-			poll_vote: { ...removedAnswer, user_id: client.userID },
+			poll_vote: { ...removedAnswer, user_id: client.userId },
 		});
 
 		expect(poll.data.ownVotesByOptionId).to.eql(originalState.ownVotesByOptionId);
@@ -751,7 +752,7 @@ describe('Poll', () => {
 		const originalState = poll.data;
 		await poll.query(pollResponse.id);
 
-		expect(getPollStub.calledWith(pollResponse.id)).to.be.true;
+		expect(getPollStub.calledWith({ poll_id: pollResponse.id })).to.be.true;
 		const { lastActivityAt: __, ...currentPollState } = poll.data;
 		const { lastActivityAt: _, ...expectedPollState } = {
 			...originalState,
@@ -769,7 +770,7 @@ describe('Poll', () => {
 		const option_id = 'ba933470-c0da-4b6f-a4d2-d2176ac0d4a8';
 		const messageId = 'XXX';
 		const removePollVoteSpy = vi
-			.spyOn(client, 'removePollVote')
+			.spyOn(client, 'deletePollVote')
 			.mockResolvedValue('removed');
 		const castPollVoteSpy = vi
 			.spyOn(client, 'castPollVote')
@@ -791,7 +792,7 @@ describe('Poll', () => {
 		const option_id = 'ba933470-c0da-4b6f-a4d2-d2176ac0d4a8';
 		const messageId = 'XXX';
 		const removePollVoteSpy = vi
-			.spyOn(client, 'removePollVote')
+			.spyOn(client, 'deletePollVote')
 			.mockResolvedValue('removed');
 		const castPollVoteSpy = vi
 			.spyOn(client, 'castPollVote')
@@ -801,9 +802,10 @@ describe('Poll', () => {
 		await poll.castVote(option_id, messageId);
 
 		expect(removePollVoteSpy).not.toHaveBeenCalled();
-		expect(castPollVoteSpy).toHaveBeenCalledWith(messageId, pollResponse.id, {
-			option_id,
-		});
+		expect(castPollVoteSpy).toHaveBeenCalledWith(
+			{ message_id: messageId, poll_id: pollResponse.id },
+			{ vote: { option_id } },
+		);
 		expect(addInfoNotificationSpy).not.toHaveBeenCalled();
 	});
 
@@ -815,7 +817,7 @@ describe('Poll', () => {
 		const option_id = 'ba933470-c0da-4b6f-a4d2-d2176ac0d4a8';
 		const messageId = 'XXX';
 		const removePollVoteSpy = vi
-			.spyOn(client, 'removePollVote')
+			.spyOn(client, 'deletePollVote')
 			.mockResolvedValue('removed');
 		const castPollVoteSpy = vi
 			.spyOn(client, 'castPollVote')
@@ -825,9 +827,10 @@ describe('Poll', () => {
 		await poll.castVote(option_id, messageId);
 
 		expect(removePollVoteSpy).not.toHaveBeenCalled();
-		expect(castPollVoteSpy).toHaveBeenCalledWith(messageId, pollResponse.id, {
-			option_id,
-		});
+		expect(castPollVoteSpy).toHaveBeenCalledWith(
+			{ message_id: messageId, poll_id: pollResponse.id },
+			{ vote: { option_id } },
+		);
 		expect(addInfoNotificationSpy).not.toHaveBeenCalled();
 	});
 });
@@ -850,7 +853,6 @@ describe('Poll optimistic updates', () => {
 
 	const createPoll = (overrides = {}) => {
 		client.user = user1;
-		client.userID = user1.id;
 		return new Poll({
 			client,
 			poll: { ...pollResponse, max_votes_allowed: 3, ...overrides },
@@ -863,8 +865,8 @@ describe('Poll optimistic updates', () => {
 		option_id: optionId,
 		user_id: user1.id,
 		user: user1,
-		created_at: '2024-10-24T10:00:00.000000Z',
-		updated_at: '2024-10-24T10:00:00.000000Z',
+		created_at: convertDateToTimestamp('2024-10-24T10:00:00.000000Z'),
+		updated_at: convertDateToTimestamp('2024-10-24T10:00:00.000000Z'),
 	});
 
 	afterEach(() => {
@@ -875,7 +877,7 @@ describe('Poll optimistic updates', () => {
 		const poll = createPoll();
 		const optionB = '7312e983-b042-4596-b5ce-f9e82deb363f';
 		vi.spyOn(client, 'castPollVote').mockReturnValue(new Promise(() => {}));
-		vi.spyOn(client, 'removePollVote').mockReturnValue(new Promise(() => {}));
+		vi.spyOn(client, 'deletePollVote').mockReturnValue(new Promise(() => {}));
 		expect(poll.data.maxVotedOptionIds).toEqual([optionA]);
 
 		// B ties with A
@@ -990,7 +992,7 @@ describe('Poll optimistic updates', () => {
 
 			poll.handleVoteCasted({
 				type: 'poll.vote_casted',
-				created_at: '2024-10-24T10:00:00.000000Z',
+				created_at: convertDateToTimestamp('2024-10-24T10:00:00.000000Z'),
 				poll: { ...pollResponse, vote_count: 9, vote_counts_by_option },
 				poll_vote: vote,
 			});
@@ -1011,8 +1013,8 @@ describe('Poll optimistic updates', () => {
 		it('removes the vote before the request resolves', async () => {
 			const poll = createPoll();
 			const request = deferred();
-			const removePollVoteSpy = vi
-				.spyOn(client, 'removePollVote')
+			const deletePollVoteSpy = vi
+				.spyOn(client, 'deletePollVote')
 				.mockReturnValue(request.promise);
 			const before = poll.data;
 			const vote = before.ownVotesByOptionId[optionD];
@@ -1028,13 +1030,17 @@ describe('Poll optimistic updates', () => {
 
 			request.resolve({ vote });
 			await removePromise;
-			expect(removePollVoteSpy).toHaveBeenCalledWith(messageId, pollId, vote.id);
+			expect(deletePollVoteSpy).toHaveBeenCalledWith({
+				message_id: messageId,
+				poll_id: pollId,
+				vote_id: vote.id,
+			});
 		});
 
 		it('restores the vote when the request fails', async () => {
 			const poll = createPoll();
 			const error = new Error('failed');
-			vi.spyOn(client, 'removePollVote').mockRejectedValue(error);
+			vi.spyOn(client, 'deletePollVote').mockRejectedValue(error);
 			const before = poll.data;
 			const vote = before.ownVotesByOptionId[optionD];
 
@@ -1050,8 +1056,8 @@ describe('Poll optimistic updates', () => {
 			const poll = createPoll();
 			const castRequest = deferred();
 			vi.spyOn(client, 'castPollVote').mockReturnValue(castRequest.promise);
-			const removePollVoteSpy = vi
-				.spyOn(client, 'removePollVote')
+			const deletePollVoteSpy = vi
+				.spyOn(client, 'deletePollVote')
 				.mockResolvedValue({ vote: serverVote(optionC) });
 			const before = poll.data;
 
@@ -1061,19 +1067,23 @@ describe('Poll optimistic updates', () => {
 
 			expect(poll.data.ownVotesByOptionId[optionC]).toBeUndefined();
 			expect(poll.data.vote_count).toBe(before.vote_count);
-			expect(removePollVoteSpy).not.toHaveBeenCalled();
+			expect(deletePollVoteSpy).not.toHaveBeenCalled();
 
 			castRequest.resolve({ vote: serverVote(optionC, 'real-id') });
 			await Promise.all([castPromise, removePromise]);
 
-			expect(removePollVoteSpy).toHaveBeenCalledWith(messageId, pollId, 'real-id');
+			expect(deletePollVoteSpy).toHaveBeenCalledWith({
+				message_id: messageId,
+				poll_id: pollId,
+				vote_id: 'real-id',
+			});
 		});
 
 		it('does not send a request when the in-flight cast fails', async () => {
 			const poll = createPoll();
 			const castRequest = deferred();
 			vi.spyOn(client, 'castPollVote').mockReturnValue(castRequest.promise);
-			const removePollVoteSpy = vi.spyOn(client, 'removePollVote');
+			const deletePollVoteSpy = vi.spyOn(client, 'deletePollVote');
 			const before = poll.data;
 
 			const castPromise = poll.castVote(optionC, messageId);
@@ -1084,7 +1094,7 @@ describe('Poll optimistic updates', () => {
 			await expect(castPromise).rejects.toThrow('failed');
 			await expect(removePromise).resolves.toBeUndefined();
 
-			expect(removePollVoteSpy).not.toHaveBeenCalled();
+			expect(deletePollVoteSpy).not.toHaveBeenCalled();
 			expect(poll.data.ownVotesByOptionId).toEqual(before.ownVotesByOptionId);
 			expect(poll.data.vote_count).toBe(before.vote_count);
 		});
@@ -1094,7 +1104,7 @@ describe('Poll optimistic updates', () => {
 		it('closes the poll before the request resolves', async () => {
 			const poll = createPoll();
 			const request = deferred();
-			vi.spyOn(client, 'closePoll').mockReturnValue(request.promise);
+			vi.spyOn(client, 'updatePollPartial').mockReturnValue(request.promise);
 
 			const closePromise = poll.close();
 
@@ -1107,7 +1117,7 @@ describe('Poll optimistic updates', () => {
 		it('reopens the poll when the request fails', async () => {
 			const poll = createPoll();
 			const error = new Error('failed');
-			vi.spyOn(client, 'closePoll').mockRejectedValue(error);
+			vi.spyOn(client, 'updatePollPartial').mockRejectedValue(error);
 
 			await expect(poll.close()).rejects.toBe(error);
 
@@ -1116,24 +1126,24 @@ describe('Poll optimistic updates', () => {
 
 		it('does not send a request when the poll is already closed', async () => {
 			const poll = createPoll({ is_closed: true });
-			const closePollSpy = vi.spyOn(client, 'closePoll');
+			const updatePollPartialSpy = vi.spyOn(client, 'updatePollPartial');
 			const before = poll.data;
 
 			await expect(poll.close()).resolves.toBeUndefined();
 
-			expect(closePollSpy).not.toHaveBeenCalled();
+			expect(updatePollPartialSpy).not.toHaveBeenCalled();
 			expect(poll.data).toBe(before);
 		});
 
 		it('keeps the poll closed when the close was confirmed by a WS event', async () => {
 			const poll = createPoll();
 			const request = deferred();
-			vi.spyOn(client, 'closePoll').mockReturnValue(request.promise);
+			vi.spyOn(client, 'updatePollPartial').mockReturnValue(request.promise);
 
 			const closePromise = poll.close();
 			poll.handlePollClosed({
 				type: 'poll.closed',
-				created_at: '2024-10-24T10:00:00.000000Z',
+				created_at: convertDateToTimestamp('2024-10-24T10:00:00.000000Z'),
 				poll: { ...pollResponse, is_closed: true },
 			});
 			request.reject(new Error('failed'));
@@ -1149,7 +1159,7 @@ describe('Poll optimistic updates', () => {
 
 		poll.handleVoteCasted({
 			type: 'poll.vote_casted',
-			created_at: '2024-10-24T10:00:00.000000Z',
+			created_at: convertDateToTimestamp('2024-10-24T10:00:00.000000Z'),
 			poll: pollResponse,
 			poll_vote: serverVote(optionC),
 		});
@@ -1171,7 +1181,7 @@ describe('Poll optimistic updates', () => {
 
 		const voteEvent = (type, vote, voteCountsByOption, pollOverrides = {}) => ({
 			type,
-			created_at: '2024-10-24T10:00:00.000000Z',
+			created_at: convertDateToTimestamp('2024-10-24T10:00:00.000000Z'),
 			poll: {
 				...pollResponse,
 				latest_votes_by_option: {},
@@ -1291,7 +1301,7 @@ describe('Poll optimistic updates', () => {
 			it('keeps their vote on the option of a pending own removal', () => {
 				const poll = createPoll();
 				const ownVote = poll.data.ownVotesByOptionId[optionD];
-				vi.spyOn(client, 'removePollVote').mockReturnValue(new Promise(() => {}));
+				vi.spyOn(client, 'deletePollVote').mockReturnValue(new Promise(() => {}));
 				const base = pollResponse.vote_counts_by_option;
 
 				poll.removeVote(ownVote.id, messageId);
@@ -1376,8 +1386,8 @@ describe('Poll optimistic updates', () => {
 			const poll = createPoll();
 			const castRequest = deferred();
 			vi.spyOn(client, 'castPollVote').mockReturnValue(castRequest.promise);
-			const removePollVoteSpy = vi
-				.spyOn(client, 'removePollVote')
+			const deletePollVoteSpy = vi
+				.spyOn(client, 'deletePollVote')
 				.mockResolvedValue({ vote: serverVote(optionC, 'real-id') });
 			const before = poll.data;
 
@@ -1398,7 +1408,11 @@ describe('Poll optimistic updates', () => {
 
 			castRequest.resolve({ vote: serverVote(optionC, 'real-id') });
 			await Promise.all([castPromise, removePromise]);
-			expect(removePollVoteSpy).toHaveBeenCalledWith(messageId, pollId, 'real-id');
+			expect(deletePollVoteSpy).toHaveBeenCalledWith({
+				message_id: messageId,
+				poll_id: pollId,
+				vote_id: 'real-id',
+			});
 
 			poll.handleVoteRemoved(
 				voteEvent(
@@ -1519,10 +1533,12 @@ describe('Poll optimistic updates', () => {
 					calls.push(`cast ${vote.id}`);
 					return { vote };
 				});
-				vi.spyOn(client, 'removePollVote').mockImplementation(async (_, __, voteId) => {
-					calls.push(`remove ${voteId}`);
-					return { vote: serverVote(optionC, voteId) };
-				});
+				vi.spyOn(client, 'deletePollVote').mockImplementation(
+					async ({ vote_id: voteId }) => {
+						calls.push(`remove ${voteId}`);
+						return { vote: serverVote(optionC, voteId) };
+					},
+				);
 				const toggle = () => {
 					const vote = poll.data.ownVotesByOptionId[optionC];
 					return vote
@@ -1551,16 +1567,18 @@ describe('Poll optimistic updates', () => {
 				poll.castVote(optionA, messageId);
 				const castC = poll.castVote(optionC, messageId);
 				await vi.waitFor(() => expect(castPollVoteSpy).toHaveBeenCalledTimes(1));
-				expect(castPollVoteSpy).toHaveBeenLastCalledWith(messageId, pollId, {
-					option_id: optionA,
-				});
+				expect(castPollVoteSpy).toHaveBeenLastCalledWith(
+					{ message_id: messageId, poll_id: pollId },
+					{ vote: { option_id: optionA } },
+				);
 
 				castA.resolve({ vote: serverVote(optionA) });
 				await castC;
 				expect(castPollVoteSpy).toHaveBeenCalledTimes(2);
-				expect(castPollVoteSpy).toHaveBeenLastCalledWith(messageId, pollId, {
-					option_id: optionC,
-				});
+				expect(castPollVoteSpy).toHaveBeenLastCalledWith(
+					{ message_id: messageId, poll_id: pollId },
+					{ vote: { option_id: optionC } },
+				);
 			});
 
 			it('does not remove a vote again when undoing a vote whose cast failed', async () => {
@@ -1569,8 +1587,8 @@ describe('Poll optimistic updates', () => {
 				vi.spyOn(client, 'castPollVote')
 					.mockResolvedValueOnce({ vote: voteC })
 					.mockRejectedValueOnce(new Error('failed'));
-				const removePollVoteSpy = vi
-					.spyOn(client, 'removePollVote')
+				const deletePollVoteSpy = vi
+					.spyOn(client, 'deletePollVote')
 					.mockResolvedValue({ vote: voteC });
 				const toggle = () => {
 					const vote = poll.data.ownVotesByOptionId[optionC];
@@ -1582,14 +1600,17 @@ describe('Poll optimistic updates', () => {
 				// cast, undo, cast (fails), undo
 				await Promise.all([toggle(), toggle(), toggle(), toggle()]);
 
-				expect(removePollVoteSpy).toHaveBeenCalledTimes(1);
-				expect(removePollVoteSpy).toHaveBeenCalledWith(messageId, pollId, 'vote-c');
+				expect(deletePollVoteSpy).toHaveBeenCalledTimes(1);
+				expect(deletePollVoteSpy).toHaveBeenCalledWith({
+					message_id: messageId,
+					poll_id: pollId,
+					vote_id: 'vote-c',
+				});
 			});
 
 			it('does not wait for the vote requests of another poll instance with the same id', async () => {
 				const otherClient = new StreamChat('apiKey');
 				otherClient.user = user2;
-				otherClient.userID = user2.id;
 				const otherPoll = new Poll({
 					client: otherClient,
 					poll: { ...pollResponse, max_votes_allowed: 3 },
@@ -1673,7 +1694,7 @@ describe('Poll optimistic updates', () => {
 				const slowRequest = deferred();
 				vi.spyOn(client, 'castPollVote').mockReturnValueOnce(slowRequest.promise);
 				const removed = poll.data.ownVotesByOptionId[optionD];
-				vi.spyOn(client, 'removePollVote').mockResolvedValue({ vote: removed });
+				vi.spyOn(client, 'deletePollVote').mockResolvedValue({ vote: removed });
 
 				// the removal succeeds and starts the timeout, the cast that follows is slow
 				const removal = poll.removeVote(removed.id, messageId);
@@ -1709,15 +1730,19 @@ describe('Poll optimistic updates', () => {
 				const poll = createPoll();
 				const voteC = serverVote(optionC, 'real-id');
 				vi.spyOn(client, 'castPollVote').mockResolvedValue({ vote: voteC });
-				const removePollVoteSpy = vi
-					.spyOn(client, 'removePollVote')
+				const deletePollVoteSpy = vi
+					.spyOn(client, 'deletePollVote')
 					.mockResolvedValue({ vote: voteC });
 
 				await poll.castVote(optionC, messageId);
 				vi.advanceTimersByTime(3000);
 				await poll.removeVote(poll.data.ownVotesByOptionId[optionC].id, messageId);
 
-				expect(removePollVoteSpy).toHaveBeenCalledWith(messageId, pollId, 'real-id');
+				expect(deletePollVoteSpy).toHaveBeenCalledWith({
+					message_id: messageId,
+					poll_id: pollId,
+					vote_id: 'real-id',
+				});
 			});
 
 			it('does not rebuild the own votes after a request that failed', async () => {

@@ -19,7 +19,7 @@ describe('_default/05-features/03-unread.md', () => {
   const token = createUserToken(userId);
   // Not connected yet: the first snippet connects it.
   const client = new StreamChat(process.env.STREAM_API_KEY as string, {
-    allowServerSideConnect: true,
+    client: { allowServerSideConnect: true },
   });
   let firstMessageId = '';
 
@@ -67,12 +67,13 @@ describe('_default/05-features/03-unread.md', () => {
       console.log(user?.me?.unread_threads); // number of unread threads
 
       // Step 2: Listen to events for real-time updates
+      // (only some events carry the counts, so check for the field first)
       client.on((event) => {
-        if (event.total_unread_count !== undefined) {
+        if ('total_unread_count' in event && event.total_unread_count !== undefined) {
           console.log(event.total_unread_count);
         }
 
-        if (event.unread_channels !== undefined) {
+        if ('unread_channels' in event && event.unread_channels !== undefined) {
           console.log(event.unread_channels);
         }
       });
@@ -102,7 +103,7 @@ describe('_default/05-features/03-unread.md', () => {
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
     try {
       // #region snippet docs="chat/_default/05-features/03-unread.md" heading="Unread Counts - Server side" tab="JavaScript" index=1
-      const response = await client.getUnreadCount();
+      const response = await client.unreadCounts();
       console.log(response.total_unread_count); // total unread count for user
       console.log(response.channels); // distribution of unread counts across channels
       console.log(response.channel_type); // distribution of unread counts across channel types
@@ -158,7 +159,7 @@ describe('_default/05-features/03-unread.md', () => {
 
     // #region snippet docs="chat/_default/05-features/03-unread.md" heading="Mark All As Read" tab="JavaScript" index=1
     // client-side
-    await client.markAllRead();
+    await client.markChannelsRead();
     // #endregion snippet
 
     expect(await serverUnread()).toBe(0);
@@ -179,19 +180,21 @@ describe('_default/05-features/03-unread.md', () => {
       //  {
       //   id: '2fe6019c-872f-482a-989e-ecf4f786501b',
       //   role: 'user',
-      //   created_at: '2019-04-24T13:09:19.664378Z',
-      //   updated_at: '2019-04-24T13:09:23.784642Z',
-      //   last_active: '2019-04-24T13:09:23.781641Z',
+      //   created_at: 1556111359664378000, // unix nanoseconds
+      //   updated_at: 1556111363784642000,
+      //   last_active: 1556111363781641000,
       //   online: true
       //  },
-      //  last_read: '2019-04-24T13:09:21.623Z',
+      //  last_read: 1556111361623000000,
+      //  unread_messages: 0,
       // }
       //}
       // #endregion snippet
 
       expect(Object.keys(channel.state.read).sort()).toEqual([otherId, userId].sort());
       expect(channel.state.read[userId].user.id).toBe(userId);
-      expect(channel.state.read[userId].last_read).toBeInstanceOf(Date);
+      expect(channel.state.read[userId].last_read).toEqual(expect.any(Number));
+      expect(channel.state.read[userId].unread_messages).toBe(0);
       expect(logSpy).toHaveBeenCalledWith(channel.state.read);
     } finally {
       logSpy.mockRestore();

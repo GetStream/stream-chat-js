@@ -9,15 +9,16 @@ import { StreamChat } from '../../../../../src/client';
 import { MAX_CHANNEL_MEMBER_COUNT_IN_CHANNEL_QUERY } from '../../../../../src/constants';
 import type {
   ChannelMemberResponse,
+  MemberFilters,
   SearchUserGroupsOptions,
   SearchUserGroupsResponse,
-  Mute,
-  UserGroupResponse,
-  UserResponse,
   UserFilters,
-  MemberFilters,
+  UserGroupResponse,
+  UserMuteResponse,
+  UserResponse,
 } from '../../../../../src/types';
 import type { MentionSuggestion } from '../../../../../src/messageComposer/middleware/textComposer/types';
+import { convertDateToTimestamp } from '../../../test-utils/time';
 
 describe('calculateLevenshtein', () => {
   it('should return length of first string if second is empty', () => {
@@ -96,26 +97,39 @@ describe('MentionsSearchSource', () => {
 
     mockUserGroups = [
       {
-        created_at: '2026-05-08T12:00:00.000Z',
+        created_at: convertDateToTimestamp('2026-05-08T12:00:00.000Z'),
         id: 'backend-team',
         members: [
-          { created_at: '2026-05-08T12:00:00.000Z', id: 'member-1', is_admin: false },
+          {
+            created_at: convertDateToTimestamp('2026-05-08T12:00:00.000Z'),
+            id: 'member-1',
+            is_admin: false,
+          },
         ],
         name: 'Backend Team',
       },
       {
-        created_at: '2026-05-08T12:01:00.000Z',
+        created_at: convertDateToTimestamp('2026-05-08T12:01:00.000Z'),
         id: 'admins-group',
         members: [
-          { created_at: '2026-05-08T12:00:00.000Z', id: 'member-1', is_admin: false },
-          { created_at: '2026-05-08T12:01:00.000Z', id: 'member-2', is_admin: false },
+          {
+            created_at: convertDateToTimestamp('2026-05-08T12:00:00.000Z'),
+            id: 'member-1',
+            is_admin: false,
+          },
+          {
+            created_at: convertDateToTimestamp('2026-05-08T12:01:00.000Z'),
+            id: 'member-2',
+            is_admin: false,
+          },
         ],
         name: 'Admins',
       },
     ];
 
     client = {
-      userID: 'currentUser',
+      userId: 'currentUser',
+      userId: 'currentUser',
       searchRoles: vi.fn().mockImplementation(async ({ query }: { query: string }) => ({
         roles: [
           { name: 'admin' },
@@ -501,11 +515,11 @@ describe('MentionsSearchSource', () => {
 
   it('should preserve special mentions while filtering muted users', () => {
     const source = new MentionsSearchSource(channel);
-    const mute: Mute = {
+    const mute: UserMuteResponse = {
       target: { id: 'user1' },
       user: { id: 'currentUser' },
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      created_at: convertDateToTimestamp(new Date().toISOString()),
+      updated_at: convertDateToTimestamp(new Date().toISOString()),
     };
     client.mutedUsers = [mute];
 
@@ -524,11 +538,11 @@ describe('MentionsSearchSource', () => {
 
   it('should return only muted users for /unmute and hide special mentions', () => {
     const source = new MentionsSearchSource(channel);
-    const mute: Mute = {
+    const mute: UserMuteResponse = {
       target: { id: 'user1' },
       user: { id: 'currentUser' },
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      created_at: convertDateToTimestamp(new Date().toISOString()),
+      updated_at: convertDateToTimestamp(new Date().toISOString()),
     };
     client.mutedUsers = [mute];
 
@@ -584,9 +598,9 @@ describe('MentionsSearchSource', () => {
     await source.executeQuery();
 
     expect(client.queryUsers).toHaveBeenCalledWith(
-      expect.any(Object),
-      expect.any(Object),
-      expect.objectContaining({ limit: 10, offset: 3 }),
+      {
+        payload: expect.objectContaining({ limit: 10, offset: 3 }),
+      },
       { signal: expect.any(AbortSignal) },
     );
     expect(client.searchUserGroups).toHaveBeenCalledWith(
@@ -648,26 +662,48 @@ describe('MentionsSearchSource', () => {
   it('should prepare correct query parameters for users search', () => {
     const source = new MentionsSearchSource(channel);
     source.userFilters = { id: { $in: ['admin1', 'admin2'] } } as UserFilters;
-    source.userSort = [{ created_at: -1 }];
+    source.userSort = [{ field: 'created_at', direction: -1 }];
 
     const params = source.prepareQueryUsersParams('john', 7);
     expect(params.filters).toEqual({
       $or: [{ id: { $autocomplete: 'john' } }, { name: { $autocomplete: 'john' } }],
       id: { $in: ['admin1', 'admin2'] },
     });
-    expect(params.sort).toEqual([{ created_at: -1 }]);
+    expect(params.sort).toEqual([{ field: 'created_at', direction: -1 }]);
     expect(params.options).toEqual(expect.objectContaining({ limit: 10, offset: 7 }));
   });
 
   it('should prepare correct query parameters for members search', () => {
     const source = new MentionsSearchSource(channel);
     source.memberFilters = { name: { $autocomplete: 'john' } } as MemberFilters;
-    source.memberSort = { created_at: -1 };
+    source.memberSort = [{ field: 'created_at', direction: -1 }];
 
     const params = source.prepareQueryMembersParams('john', 5);
     expect(params.filters).toEqual({ name: { $autocomplete: 'john' } });
-    expect(params.sort).toEqual({ created_at: -1 });
+    expect(params.sort).toEqual([{ field: 'created_at', direction: -1 }]);
     expect(params.options).toEqual(expect.objectContaining({ limit: 10, offset: 5 }));
+  });
+
+  it('should default the members sort and keep only its first term', () => {
+    const source = new MentionsSearchSource(channel);
+
+    source.memberSort = undefined;
+    expect(source.prepareQueryMembersParams('john').sort).toEqual([
+      { field: 'user_id', direction: 1 },
+    ]);
+
+    source.memberSort = [];
+    expect(source.prepareQueryMembersParams('john').sort).toEqual([
+      { field: 'user_id', direction: 1 },
+    ]);
+
+    source.memberSort = [
+      { field: 'created_at', direction: -1 },
+      { field: 'name', direction: 1 },
+    ];
+    expect(source.prepareQueryMembersParams('john').sort).toEqual([
+      { field: 'created_at', direction: -1 },
+    ]);
   });
 
   it('should handle empty or invalid user names in local search', () => {
@@ -709,9 +745,9 @@ describe('MentionsSearchSource', () => {
 
     await source.query('test');
     expect(client.queryUsers).toHaveBeenCalledWith(
-      expect.any(Object),
-      expect.any(Object),
-      expect.objectContaining({ presence: true }),
+      {
+        payload: expect.objectContaining({ presence: true }),
+      },
       {},
     );
   });

@@ -21,12 +21,11 @@ export type MiddlewareExecutionResult<TValue> = {
 export type ExecuteParams<TValue> = {
   eventName: string;
   initialValue: TValue;
-  /*
-  Determines how the concurrently run middleware handlers will be executed:
-  - async - all handlers are executed even though the same handler is invoked more than once
-  - cancelable - previously invoked handlers of the same eventName that have not yet resolved are canceled
+  /**
+   * `cancelable`: a new run cancels the unresolved previous run of the same `eventName`.
+   * `concurrent`: every run executes. Defaults to `cancelable`.
    */
-  mode?: 'concurrent' | 'cancelable'; // default 'cancelable'
+  mode?: 'concurrent' | 'cancelable';
 };
 
 export type MiddlewareHandlerParams<TValue> = {
@@ -59,11 +58,9 @@ export class MiddlewareExecutor<TValue, THandlers extends string> {
   }
 
   /**
-   * The middleware currently installed, in execution order.
-   *
-   * Read-only: use `use` / `insert` / `replace` / `setOrder` / `remove` to change the chain. It
-   * exists so components can ask what the chain is capable of - a middleware may declare
-   * behaviour its host has to account for, and the host has no other way to find out.
+   * The installed middleware in execution order, read-only, so a host component can check what the
+   * chain contains (by `id`). Change the chain with `use`, `insert`, `replace`, `setOrder` or
+   * `remove`.
    */
   get installedMiddleware(): ReadonlyArray<Middleware<TValue, THandlers>> {
     return this.middleware;

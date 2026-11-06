@@ -20,10 +20,13 @@ import {
   createDraftCompositionValidationMiddleware,
 } from './compositionValidation';
 import { createCompositionDataCleanupMiddleware } from './cleanData';
+import {
+  createCommandInjectionMiddleware,
+  createDraftCommandInjectionMiddleware,
+} from './commandInjection';
 import type {
   MessageComposerMiddlewareExecutorOptions,
   MessageComposerMiddlewareState,
-  MessageCompositionMiddleware,
   MessageDraftComposerMiddlewareExecutorOptions,
   MessageDraftComposerMiddlewareValueState,
 } from './types';
@@ -48,6 +51,7 @@ export class MessageComposerMiddlewareExecutor extends MiddlewareExecutor<
       createPollOnlyCompositionMiddleware(composer),
       createTextComposerCompositionMiddleware(composer),
       createAttachmentsCompositionMiddleware(composer),
+      createCommandInjectionMiddleware(composer),
       createLinkPreviewsCompositionMiddleware(composer),
       createSharedLocationCompositionMiddleware(composer),
       createMessageComposerStateCompositionMiddleware(composer),
@@ -55,14 +59,6 @@ export class MessageComposerMiddlewareExecutor extends MiddlewareExecutor<
       createCompositionValidationMiddleware(composer),
       createCompositionDataCleanupMiddleware(composer),
     ]);
-  }
-
-  /**
-   * Narrows the base accessor to the composition middleware type, so callers can read the
-   * declarations it carries (`allowsPendingUploads`) without casting.
-   */
-  get installedMiddleware(): ReadonlyArray<MessageCompositionMiddleware> {
-    return super.installedMiddleware as ReadonlyArray<MessageCompositionMiddleware>;
   }
 }
 
@@ -77,6 +73,7 @@ export class MessageDraftComposerMiddlewareExecutor extends MiddlewareExecutor<
     this.use([
       createDraftTextComposerCompositionMiddleware(composer),
       createDraftAttachmentsCompositionMiddleware(composer),
+      createDraftCommandInjectionMiddleware(composer),
       createDraftLinkPreviewsCompositionMiddleware(composer),
       createDraftMessageComposerStateCompositionMiddleware(composer),
       createDraftCustomDataCompositionMiddleware(composer),

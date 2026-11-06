@@ -18,6 +18,8 @@ import { MessageDraftComposerMiddlewareValueState } from '../../../../../src/mes
 import { LocalMessage, MessageResponse } from '../../../../../src';
 import type { DeepPartial } from '../../../../../src/types.utility';
 import { generateChannel } from '../../../test-utils/generateChannel';
+import { stubServerConfig } from '../../../test-utils/stubServerConfig';
+import { convertDateToTimestamp } from '../../../test-utils/time';
 
 const setupMiddleware = (
   custom: {
@@ -29,13 +31,12 @@ const setupMiddleware = (
   const user = { id: 'user' };
   const client = new StreamChat('apiKey');
   client.user = user;
-  client.userID = user.id;
 
   const channelResponse = generateChannel();
-  const channel = client.channel(
-    channelResponse.channel.type,
-    channelResponse.channel.id,
-  );
+  const channel = client.channelManager.ensure({
+    type: channelResponse.channel.type,
+    id: channelResponse.channel.id,
+  });
   channel.initialized = true;
 
   const messageComposer =
@@ -81,7 +82,7 @@ const setupCompositionState = (text = ''): MessageComposerMiddlewareState => ({
   },
   localMessage: {
     attachments: [],
-    created_at: new Date(),
+    created_at: convertDateToTimestamp(new Date()),
     deleted_at: null,
     error: undefined,
     id: 'test-id',
@@ -92,7 +93,7 @@ const setupCompositionState = (text = ''): MessageComposerMiddlewareState => ({
     status: 'sending',
     text,
     type: 'regular',
-    updated_at: new Date(),
+    updated_at: convertDateToTimestamp(new Date()),
   },
   sendOptions: {},
 });
@@ -124,7 +125,7 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
         },
         localMessage: {
           attachments: [],
-          created_at: new Date(),
+          created_at: convertDateToTimestamp(new Date()),
           deleted_at: null,
           error: undefined,
           id: 'test-id',
@@ -135,7 +136,7 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
           status: 'sending',
           text: '',
           type: 'regular',
-          updated_at: new Date(),
+          updated_at: convertDateToTimestamp(new Date()),
         },
         sendOptions: {},
       }),
@@ -158,7 +159,7 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
         },
         localMessage: {
           attachments: [],
-          created_at: new Date(),
+          created_at: convertDateToTimestamp(new Date()),
           deleted_at: null,
           error: undefined,
           id: 'test-id',
@@ -169,7 +170,7 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
           status: 'sending',
           text: 'Hello world',
           type: 'regular',
-          updated_at: new Date(),
+          updated_at: convertDateToTimestamp(new Date()),
         },
         sendOptions: {},
       }),
@@ -181,7 +182,7 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
   it('should discard raw known commands while editing', async () => {
     const editedMessage: MessageResponse = {
       attachments: [],
-      created_at: new Date().toISOString(),
+      created_at: convertDateToTimestamp(new Date().toISOString()),
       id: 'edited-message-id',
       mentioned_users: [],
       parent_id: undefined,
@@ -190,12 +191,12 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
       status: 'received',
       text: 'original text',
       type: 'regular',
-      updated_at: new Date().toISOString(),
+      updated_at: convertDateToTimestamp(new Date().toISOString()),
     };
     const { messageComposer, validationMiddleware } = setupMiddleware({
       editedMessage,
     });
-    vi.spyOn(messageComposer.channel, 'getConfig').mockReturnValue({
+    stubServerConfig(messageComposer.channel, {
       commands: [{ name: 'ban', description: 'Ban a user' }],
     });
     const addWarningSpy = vi.spyOn(messageComposer.client.notifications, 'addWarning');
@@ -220,7 +221,7 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
 
   it('should discard raw moderation commands while replying', async () => {
     const { messageComposer, validationMiddleware } = setupMiddleware();
-    vi.spyOn(messageComposer.channel, 'getConfig').mockReturnValue({
+    stubServerConfig(messageComposer.channel, {
       commands: [{ name: 'ban', description: 'Ban a user', set: 'moderation_set' }],
     });
     vi.spyOn(messageComposer, 'quotedMessage', 'get').mockReturnValue({
@@ -265,7 +266,7 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
         },
       },
     });
-    vi.spyOn(messageComposer.channel, 'getConfig').mockReturnValue({
+    stubServerConfig(messageComposer.channel, {
       commands: [{ name: 'ban', description: 'Ban a user' }],
     });
     const addWarningSpy = vi.spyOn(messageComposer.client.notifications, 'addWarning');
@@ -342,7 +343,7 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
         },
       },
     });
-    vi.spyOn(messageComposer.channel, 'getConfig').mockReturnValue({
+    stubServerConfig(messageComposer.channel, {
       commands: [{ name: 'custom', description: 'Custom command' }],
     });
 
@@ -361,7 +362,7 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
 
   it('should discard ban commands without a reason by default', async () => {
     const { messageComposer, validationMiddleware } = setupMiddleware();
-    vi.spyOn(messageComposer.channel, 'getConfig').mockReturnValue({
+    stubServerConfig(messageComposer.channel, {
       commands: [{ name: 'ban', description: 'Ban a user' }],
     });
     vi.spyOn(messageComposer.textComposer, 'text', 'get').mockReturnValue('/ban @user1');
@@ -390,7 +391,7 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
 
   it('should allow ban commands with mention and reason by default', async () => {
     const { messageComposer, validationMiddleware } = setupMiddleware();
-    vi.spyOn(messageComposer.channel, 'getConfig').mockReturnValue({
+    stubServerConfig(messageComposer.channel, {
       commands: [{ name: 'ban', description: 'Ban a user' }],
     });
     vi.spyOn(messageComposer.textComposer, 'text', 'get').mockReturnValue(
@@ -412,7 +413,7 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
   it('should discard mute, unmute and unban commands without a mention by default', async () => {
     for (const commandName of ['mute', 'unmute', 'unban'] as const) {
       const { messageComposer, validationMiddleware } = setupMiddleware();
-      vi.spyOn(messageComposer.channel, 'getConfig').mockReturnValue({
+      stubServerConfig(messageComposer.channel, {
         commands: [{ name: commandName, description: `${commandName} a user` }],
       });
       vi.spyOn(messageComposer.textComposer, 'text', 'get').mockReturnValue(
@@ -442,7 +443,7 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
 
   it('should allow raw known commands if command is not disabled', async () => {
     const { messageComposer, validationMiddleware } = setupMiddleware();
-    vi.spyOn(messageComposer.channel, 'getConfig').mockReturnValue({
+    stubServerConfig(messageComposer.channel, {
       commands: [{ name: 'giphy', description: 'Post a random gif' }],
     });
     vi.spyOn(messageComposer.textComposer, 'text', 'get').mockReturnValue('/giphy hello');
@@ -484,7 +485,7 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
         },
         localMessage: {
           attachments: [attachment],
-          created_at: new Date(),
+          created_at: convertDateToTimestamp(new Date()),
           deleted_at: null,
           error: undefined,
           id: 'test-id',
@@ -495,7 +496,7 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
           status: 'sending',
           text: '',
           type: 'regular',
-          updated_at: new Date(),
+          updated_at: convertDateToTimestamp(new Date()),
         },
         sendOptions: {},
       }),
@@ -523,7 +524,7 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
           },
           localMessage: {
             attachments: [],
-            created_at: new Date(),
+            created_at: convertDateToTimestamp(new Date()),
             deleted_at: null,
             error: undefined,
             id: 'test-id',
@@ -534,7 +535,7 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
             status: 'sending',
             text: 'Hello @user1',
             type: 'regular',
-            updated_at: new Date(),
+            updated_at: convertDateToTimestamp(new Date()),
           },
           sendOptions: {},
         },
@@ -557,7 +558,7 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
           },
           localMessage: {
             attachments: [],
-            created_at: new Date(),
+            created_at: convertDateToTimestamp(new Date()),
             deleted_at: null,
             error: undefined,
             id: 'test-id',
@@ -569,7 +570,7 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
             status: 'sending',
             text: '',
             type: 'regular',
-            updated_at: new Date(),
+            updated_at: convertDateToTimestamp(new Date()),
           },
           sendOptions: {},
         },
@@ -582,7 +583,7 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
   it('should not discard composition for edited message without any local change', async () => {
     const editedMessage: MessageResponse = {
       attachments: [],
-      created_at: new Date().toISOString(),
+      created_at: convertDateToTimestamp(new Date().toISOString()),
       id: 'test-id',
       mentioned_users: [],
       parent_id: undefined,
@@ -591,7 +592,7 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
       status: 'sending',
       text: 'Hello world',
       type: 'regular',
-      updated_at: new Date().toISOString(),
+      updated_at: convertDateToTimestamp(new Date().toISOString()),
     };
     const { messageComposer, validationMiddleware } = setupMiddleware({ editedMessage });
 
@@ -607,10 +608,10 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
         },
         localMessage: {
           ...editedMessage,
-          created_at: new Date(editedMessage.created_at as string),
+          created_at: editedMessage.created_at,
           deleted_at: null,
           pinned_at: null,
-          updated_at: new Date(editedMessage.updated_at as string),
+          updated_at: editedMessage.updated_at,
         } as LocalMessage,
         sendOptions: {},
       }),
@@ -623,7 +624,7 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
     const { messageComposer, validationMiddleware } = setupMiddleware();
     const localMessage: LocalMessage = {
       attachments: [],
-      created_at: new Date(),
+      created_at: convertDateToTimestamp(new Date()),
       deleted_at: null,
       error: undefined,
       id: 'test-id',
@@ -634,7 +635,7 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
       status: 'sending',
       text: 'Hello world',
       type: 'regular',
-      updated_at: new Date(),
+      updated_at: convertDateToTimestamp(new Date()),
     };
     messageComposer.editedMessage = undefined;
     vi.spyOn(messageComposer, 'lastChangeOriginIsLocal', 'get').mockReturnValue(false);
@@ -664,7 +665,7 @@ describe('stream-io/message-composer-middleware/draft-data-validation', () => {
 
   beforeEach(() => {
     client = {
-      userID: 'currentUser',
+      userId: 'currentUser',
       user: { id: 'currentUser' },
     } as any;
 

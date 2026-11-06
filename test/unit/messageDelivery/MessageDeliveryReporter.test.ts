@@ -1,16 +1,24 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { getClientWithUser } from '../test-utils/getClient';
+import { generateChannel } from '../test-utils/generateChannel';
+import { generateMsg } from '../test-utils/generateMessage';
+import { generateThreadResponse } from '../test-utils/generateThreadResponse';
 import {
-  type APIErrorResponse,
+  type APIError,
   Channel,
-  ErrorFromResponse,
+  type CustomMarkReadRequestFn,
   Event,
-  EventAPIResponse,
+  formatMessage,
+  MarkDeliveredResponse,
+  MarkReadResponse,
+  StreamAPIError,
   StreamChat,
+  StreamResponse,
   Thread,
 } from '../../../src';
-import { generateThreadResponse } from '../test-utils/generateThreadResponse';
 import type { AxiosResponse } from 'axios';
+import { stubServerConfig } from '../test-utils/stubServerConfig';
+import { convertDateToTimestamp } from '../test-utils/time';
 
 const channelType = 'messaging';
 const channelId = 'channelId';
@@ -23,7 +31,22 @@ const otherUser = {
   id: 'otherUser',
 };
 const mkMsg = (id: string, at: string | number | Date) =>
-  ({ id, created_at: new Date(at) }) as any;
+  ({ id, created_at: convertDateToTimestamp(new Date(at)) }) as any;
+
+// The delivery reporter takes the newest message from `channel.messagePaginator.latestMessage`,
+// which ingesting a page advances, so tests seed the paginator's newest window instead of assigning
+// `channel.state.latestMessages`.
+const setLatest = (channel: Channel, msgs: ReturnType<typeof mkMsg>[]) => {
+  channel.messagePaginator.clearStateAndCache();
+  if (msgs.length) {
+    channel.messagePaginator.ingestPage({
+      page: msgs,
+      isHead: true,
+      isTail: true,
+      setActive: true,
+    });
+  }
+};
 
 describe('MessageDeliveryReporter', () => {
   let client: StreamChat;
@@ -36,9 +59,9 @@ describe('MessageDeliveryReporter', () => {
     // fresh object keeps tests isolated (e.g. read_receipts set in one test can't leak into others).
     (client as any).user.privacy_settings = { delivery_receipts: { enabled: undefined } };
 
-    channel = client.channel(channelType, channelId);
+    channel = client.channelManager.ensure({ type: channelType, id: channelId });
     channel.initialized = true;
-    client.configs[channel.cid] = {
+    client.channelServerConfigs[channel.cid] = {
       created_at: '',
       delivery_events: true,
       read_events: false,
@@ -53,23 +76,68 @@ describe('MessageDeliveryReporter', () => {
     vi.restoreAllMocks();
   });
 
+  it('makes the newest message of the page a jump loads the delivery candidate', async () => {
+    const at = (minute: number) => new Date(Date.UTC(2020, 0, 1, 0, minute));
+    const msg = (minute: number) =>
+      generateMsg({
+        cid: channel.cid,
+        date: at(minute),
+        id: `m${minute}`,
+        user: otherUser,
+      });
+    // an older window is loaded, not the newest messages
+    channel.messagePaginator.ingestPage({
+      page: [msg(1), msg(2)].map(formatMessage),
+      setActive: true,
+    });
+    vi.spyOn(channel, 'getOrCreate').mockResolvedValue(
+      generateChannel({
+        channel: {
+          id: channelId,
+          last_message_at: convertDateToTimestamp(at(9)),
+          type: channelType,
+        },
+        config: { delivery_events: true } as never,
+        messages: [msg(8), msg(9)],
+        // the user has read up to m1
+        read: [
+          {
+            last_read: convertDateToTimestamp(at(1)),
+            unread_messages: 3,
+            user: ownUser,
+          },
+        ],
+      }) as never,
+    );
+
+    // the paginator places the page, then the channel applies the rest of the response
+    await channel.messagePaginator.jumpToMessage('m9');
+
+    // @ts-expect-error accessing protected property deliveryReportCandidates
+    expect(client.messageDeliveryReporter.deliveryReportCandidates.get(channel.cid)).toBe(
+      'm9',
+    );
+  });
+
   it('announces delivery after the buffer window', async () => {
-    const markChannelsDeliveredSpy = vi
-      .spyOn(client, 'markChannelsDelivered')
+    const markDeliveredSpy = vi
+      .spyOn(client, 'markDelivered')
       .mockResolvedValue({ ok: true } as any);
 
-    // last_read < last message
-    channel.state.latestMessages = [mkMsg('m1', '2025-01-01T10:00:00Z')];
-    (channel.state as any).read['me'] = { last_read: new Date('2025-01-01T09:00:00Z') };
+    // last_read < latest message
+    setLatest(channel, [mkMsg('m1', '2025-01-01T10:00:00Z')]);
+    (channel.state as any).read['me'] = {
+      last_read: convertDateToTimestamp(new Date('2025-01-01T09:00:00Z')),
+    };
 
     client.syncDeliveredCandidates([channel]);
-    expect(markChannelsDeliveredSpy).not.toHaveBeenCalled();
+    expect(markDeliveredSpy).not.toHaveBeenCalled();
 
     // throttle window (MessageDeliveryReporter uses 1000ms)
     vi.advanceTimersByTime(1000);
     // trailing request is not triggered as there are no delivery candidates to report
-    expect(markChannelsDeliveredSpy).toHaveBeenCalledTimes(1);
-    expect(markChannelsDeliveredSpy).toHaveBeenCalledWith({
+    expect(markDeliveredSpy).toHaveBeenCalledTimes(1);
+    expect(markDeliveredSpy).toHaveBeenCalledWith({
       latest_delivered_messages: [
         {
           cid: channel.cid,
@@ -79,21 +147,54 @@ describe('MessageDeliveryReporter', () => {
     });
   });
 
-  it('announces at max 100 candidates per request', async () => {
-    const markChannelsDeliveredSpy = vi
-      .spyOn(client, 'markChannelsDelivered')
+  it('announces a message received live while only an older window is loaded', async () => {
+    const markDeliveredSpy = vi
+      .spyOn(client, 'markDelivered')
       .mockResolvedValue({ ok: true } as any);
 
-    // last_read < last message
+    channel.messagePaginator.clearStateAndCache();
+    // a window reached by a jump, older than anything unread
+    channel.messagePaginator.ingestPage({
+      page: [mkMsg('old', '2025-01-01T08:00:00Z')],
+      setActive: true,
+    });
+    // received live while the reader sits in that window
+    channel.messagePaginator.ingestItem({
+      ...mkMsg('live', '2025-01-01T10:00:00Z'),
+      cid: channel.cid,
+    });
+    (channel.state as any).read['me'] = {
+      last_read: convertDateToTimestamp(new Date('2025-01-01T09:00:00Z')),
+    };
+
+    client.syncDeliveredCandidates([channel]);
+    vi.advanceTimersByTime(1000);
+
+    expect(markDeliveredSpy).toHaveBeenCalledWith({
+      latest_delivered_messages: [{ cid: channel.cid, id: 'live' }],
+    });
+  });
+
+  it('announces at max 100 candidates per request', async () => {
+    const markDeliveredSpy = vi
+      .spyOn(client, 'markDelivered')
+      .mockResolvedValue({ ok: true } as any);
+
+    // last_read < latest message
     const channels = Array.from({ length: 110 }, (_, i) => {
-      const channel = client.channel(channelType, i.toString());
+      const channel = client.channelManager.ensure({
+        type: channelType,
+        id: i.toString(),
+      });
       channel.initialized = true;
-      channel.state.latestMessages = [mkMsg('m1', '2025-01-01T10:00:00Z')];
-      (channel.state as any).read['me'] = { last_read: new Date('2025-01-01T09:00:00Z') };
+      setLatest(channel, [mkMsg('m1', '2025-01-01T10:00:00Z')]);
+      (channel.state as any).read['me'] = {
+        last_read: convertDateToTimestamp(new Date('2025-01-01T09:00:00Z')),
+      };
       return channel;
     });
     channels.forEach((ch) => {
-      client.configs[ch.cid] = {
+      client.channelServerConfigs[ch.cid] = {
         created_at: '',
         delivery_events: true,
         read_events: false,
@@ -105,10 +206,8 @@ describe('MessageDeliveryReporter', () => {
     client.syncDeliveredCandidates(channels);
     vi.advanceTimersByTime(1000);
     // trailing request is not triggered as there are no delivery candidates to report
-    expect(markChannelsDeliveredSpy).toHaveBeenCalledTimes(1);
-    expect(
-      markChannelsDeliveredSpy.mock.calls[0][0].latest_delivered_messages.length,
-    ).toBe(100);
+    expect(markDeliveredSpy).toHaveBeenCalledTimes(1);
+    expect(markDeliveredSpy.mock.calls[0][0].latest_delivered_messages.length).toBe(100);
     // @ts-expect-error accessing protected property deliveryReportCandidates
     expect(client.messageDeliveryReporter.deliveryReportCandidates.size).toBe(10);
     expect(
@@ -118,74 +217,122 @@ describe('MessageDeliveryReporter', () => {
 
     await Promise.resolve();
     vi.advanceTimersByTime(1000);
-    expect(markChannelsDeliveredSpy).toHaveBeenCalledTimes(2);
-    expect(
-      markChannelsDeliveredSpy.mock.calls[1][0].latest_delivered_messages.length,
-    ).toBe(10);
+    expect(markDeliveredSpy).toHaveBeenCalledTimes(2);
+    expect(markDeliveredSpy.mock.calls[1][0].latest_delivered_messages.length).toBe(10);
     // @ts-expect-error accessing protected property deliveryReportCandidates
     expect(client.messageDeliveryReporter.deliveryReportCandidates.size).toBe(0);
   });
 
   it('does nothing when delivery receipts are disabled', async () => {
     (client as any).user.privacy_settings.delivery_receipts.enabled = false;
-    const markChannelsDeliveredSpy = vi
-      .spyOn(client, 'markChannelsDelivered')
+    const markDeliveredSpy = vi
+      .spyOn(client, 'markDelivered')
       .mockResolvedValue({ ok: true } as any);
 
-    channel.state.latestMessages = [mkMsg('m1', '2025-01-01T10:00:00Z')];
-    (channel.state as any).read['me'] = { last_read: new Date('2025-01-01T09:00:00Z') };
+    setLatest(channel, [mkMsg('m1', '2025-01-01T10:00:00Z')]);
+    (channel.state as any).read['me'] = {
+      last_read: convertDateToTimestamp(new Date('2025-01-01T09:00:00Z')),
+    };
 
     client.syncDeliveredCandidates([channel]);
     vi.advanceTimersByTime(1000);
 
-    expect(markChannelsDeliveredSpy).not.toHaveBeenCalled();
+    expect(markDeliveredSpy).not.toHaveBeenCalled();
   });
 
   it('does nothing when delievry events are disabled in channel config', async () => {
-    client.configs[channel.cid] = {
+    // Through the store, not by mutating `channelServerConfigs`: the flag is reconciled into
+    // `channel.config.deliveryEvents` by the channel's own derivation, and the store write is what
+    // triggers it. A direct mutation changes the raw record and nothing else.
+    stubServerConfig(channel, {
       created_at: '',
       delivery_events: false,
       read_events: false,
       reminders: false,
       updated_at: '',
-    };
-    const markChannelsDeliveredSpy = vi
-      .spyOn(client, 'markChannelsDelivered')
+    });
+    const markDeliveredSpy = vi
+      .spyOn(client, 'markDelivered')
       .mockResolvedValue({ ok: true } as any);
 
-    channel.state.latestMessages = [mkMsg('m1', '2025-01-01T10:00:00Z')];
-    (channel.state as any).read['me'] = { last_read: new Date('2025-01-01T09:00:00Z') };
+    setLatest(channel, [mkMsg('m1', '2025-01-01T10:00:00Z')]);
+    (channel.state as any).read['me'] = {
+      last_read: convertDateToTimestamp(new Date('2025-01-01T09:00:00Z')),
+    };
 
     client.syncDeliveredCandidates([channel]);
     vi.advanceTimersByTime(1000);
 
-    expect(markChannelsDeliveredSpy).not.toHaveBeenCalled();
+    expect(markDeliveredSpy).not.toHaveBeenCalled();
   });
 
   it('does not report if latest message is older than last_delivered_at in read state', async () => {
-    const markChannelsDeliveredSpy = vi
-      .spyOn(client, 'markChannelsDelivered')
+    const markDeliveredSpy = vi
+      .spyOn(client, 'markDelivered')
       .mockResolvedValue({ ok: true } as any);
 
-    (channel.state as any).latestMessages = [mkMsg('m1', '2025-01-01T10:00:00Z')];
+    setLatest(channel, [mkMsg('m1', '2025-01-01T10:00:00Z')]);
     (channel.state as any).read['me'] = {
-      last_read: new Date('2025-01-01T09:00:00Z'),
-      last_delivered_at: new Date('2025-01-01T11:00:00Z'),
+      last_read: convertDateToTimestamp(new Date('2025-01-01T09:00:00Z')),
+      last_delivered_at: convertDateToTimestamp(new Date('2025-01-01T11:00:00Z')),
     };
 
     client.syncDeliveredCandidates([channel]);
 
     vi.advanceTimersByTime(1000);
-    expect(markChannelsDeliveredSpy).not.toHaveBeenCalled();
+    expect(markDeliveredSpy).not.toHaveBeenCalled();
+  });
+
+  it('does not report delivery for threads (unsupported; branch early-returns)', () => {
+    const markDeliveredSpy = vi
+      .spyOn(client, 'markDelivered')
+      .mockResolvedValue({ ok: true } as any);
+
+    const parent = mkMsg('parent', '2025-01-01T10:00:00Z');
+    const channelResponse = generateChannel({
+      channel: { id: 'thread-channel', members: [] },
+    }).channel;
+    const thread = new Thread({
+      client,
+      threadData: generateThreadResponse(channelResponse, parent),
+    });
+    thread.channel.initialized = true;
+    // Grant delivery permission so we exercise the thread branch of
+    // `getNextDeliveryReportCandidate`, not the earlier permission gate.
+    client.channelServerConfigs[thread.channel.cid] = {
+      created_at: '',
+      delivery_events: true,
+      read_events: false,
+      reminders: false,
+      updated_at: '',
+    };
+    // Seed the thread's head window with a newest reply that — on a channel — would be reported as a
+    // delivery candidate (see the channel tests above).
+    thread.messagePaginator.ingestPage({
+      page: [mkMsg('t1', '2025-01-01T11:00:00Z')],
+      isHead: true,
+      isTail: true,
+      setActive: true,
+    });
+
+    client.messageDeliveryReporter.syncDeliveredCandidates([thread]);
+    vi.advanceTimersByTime(1000);
+
+    // Thread delivery reporting is not yet supported: the thread branch returns before producing a
+    // candidate, so nothing is announced. (When enabled, it reads the thread's newest reply,
+    // `messagePaginator.latestMessage`, mirroring the channel branch.)
+    expect(markDeliveredSpy).not.toHaveBeenCalled();
   });
 
   it('coalesces multiple announceDeliveryBuffered calls into a single request', async () => {
-    const markChannelsDeliveredSpy = vi
-      .spyOn(client, 'markChannelsDelivered')
+    const markDeliveredSpy = vi
+      .spyOn(client, 'markDelivered')
       .mockResolvedValue({} as any);
 
-    channel.state.latestMessages = [mkMsg('m1', 1000)];
-    (channel.state as any).read['me'] = { last_read: new Date(0) };
+    setLatest(channel, [mkMsg('m1', 1000)]);
+    (channel.state as any).read['me'] = {
+      last_read: convertDateToTimestamp(new Date(0)),
+    };
 
     client.syncDeliveredCandidates([channel]);
 
@@ -194,26 +341,31 @@ describe('MessageDeliveryReporter', () => {
     client.messageDeliveryReporter.announceDeliveryBuffered();
 
     vi.advanceTimersByTime(1000);
-    expect(markChannelsDeliveredSpy).toHaveBeenCalledTimes(1);
+    expect(markDeliveredSpy).toHaveBeenCalledTimes(1);
   });
 
   it('updates the candidate to the newest message before the throttle fires', async () => {
-    const markChannelsDeliveredSpy = vi
-      .spyOn(client, 'markChannelsDelivered')
+    const markDeliveredSpy = vi
+      .spyOn(client, 'markDelivered')
       .mockResolvedValue({} as any);
 
-    (channel.state as any).read['me'] = { last_read: new Date('2025-01-01T09:00:00Z') };
-    channel.state.latestMessages = [mkMsg('m1', '2025-01-01T10:00:00Z')];
+    (channel.state as any).read['me'] = {
+      last_read: convertDateToTimestamp(new Date('2025-01-01T09:00:00Z')),
+    };
+    setLatest(channel, [mkMsg('m1', '2025-01-01T10:00:00Z')]);
 
     client.syncDeliveredCandidates([channel]);
 
     // newer message arrives before throttle fires
-    channel.state.latestMessages.push(mkMsg('m2', '2025-01-01T10:05:00Z'));
+    setLatest(channel, [
+      mkMsg('m1', '2025-01-01T10:00:00Z'),
+      mkMsg('m2', '2025-01-01T10:05:00Z'),
+    ]);
     client.syncDeliveredCandidates([channel]);
 
     vi.advanceTimersByTime(1000);
 
-    expect(markChannelsDeliveredSpy).toHaveBeenCalledWith({
+    expect(markDeliveredSpy).toHaveBeenCalledWith({
       latest_delivered_messages: [
         {
           cid: channel.cid,
@@ -226,22 +378,25 @@ describe('MessageDeliveryReporter', () => {
   it('does not start a second request while one is in-flight; queues new candidate for after', async () => {
     // first call stays in-flight until we resolve it
     let resolveFirstMarkDelivered!: (
-      value: EventAPIResponse | PromiseLike<EventAPIResponse | undefined> | undefined,
+      value:
+        | StreamResponse<MarkDeliveredResponse>
+        | PromiseLike<StreamResponse<MarkDeliveredResponse> | undefined>
+        | undefined,
     ) => void;
-    const markChannelsDeliveredSpy = vi
-      .spyOn(client, 'markChannelsDelivered')
+    const markDeliveredSpy = vi
+      .spyOn(client, 'markDelivered')
       .mockImplementationOnce(() => new Promise((r) => (resolveFirstMarkDelivered = r)))
       .mockResolvedValueOnce({ ok: true } as any); // second request
 
-    const ch1 = client.channel('messaging', 'ch1');
+    const ch1 = client.channelManager.ensure({ type: 'messaging', id: 'ch1' });
     ch1.initialized = true;
-    (ch1.state as any).read['me'] = { last_read: new Date(0) };
-    (ch1.state as any).latestMessages = [mkMsg('m1', 1000)];
+    (ch1.state as any).read['me'] = { last_read: convertDateToTimestamp(new Date(0)) };
+    setLatest(ch1, [mkMsg('m1', 1000)]);
 
-    const ch2 = client.channel('messaging', 'ch2');
+    const ch2 = client.channelManager.ensure({ type: 'messaging', id: 'ch2' });
     ch2.initialized = true;
 
-    client.configs[ch1.cid] = {
+    client.channelServerConfigs[ch1.cid] = {
       created_at: '',
       delivery_events: true,
       read_events: false,
@@ -249,7 +404,7 @@ describe('MessageDeliveryReporter', () => {
       updated_at: '',
     };
 
-    client.configs[ch2.cid] = {
+    client.channelServerConfigs[ch2.cid] = {
       created_at: '',
       delivery_events: true,
       read_events: false,
@@ -259,8 +414,8 @@ describe('MessageDeliveryReporter', () => {
     client.syncDeliveredCandidates([ch1]);
     vi.advanceTimersByTime(1000);
 
-    expect(markChannelsDeliveredSpy).toHaveBeenCalledTimes(1);
-    expect(markChannelsDeliveredSpy).toHaveBeenCalledWith({
+    expect(markDeliveredSpy).toHaveBeenCalledTimes(1);
+    expect(markDeliveredSpy).toHaveBeenCalledWith({
       latest_delivered_messages: [
         {
           cid: 'messaging:ch1',
@@ -270,13 +425,13 @@ describe('MessageDeliveryReporter', () => {
     });
 
     // While request is in-flight, a new candidate (different channel) arrives.
-    (ch2.state as any).read['me'] = { last_read: new Date(0) };
-    (ch2.state as any).latestMessages = [mkMsg('n1', 2000)];
+    (ch2.state as any).read['me'] = { last_read: convertDateToTimestamp(new Date(0)) };
+    setLatest(ch2, [mkMsg('n1', 2000)]);
     client.syncDeliveredCandidates([ch2]);
 
     // Trying to announce during in-flight should be a no-op for sending
     vi.advanceTimersByTime(1000);
-    expect(markChannelsDeliveredSpy).toHaveBeenCalledTimes(1);
+    expect(markDeliveredSpy).toHaveBeenCalledTimes(1);
 
     // Settle the first request
     resolveFirstMarkDelivered({ ok: true } as any);
@@ -286,8 +441,8 @@ describe('MessageDeliveryReporter', () => {
     client.messageDeliveryReporter.announceDeliveryBuffered();
     vi.advanceTimersByTime(1000);
 
-    expect(markChannelsDeliveredSpy).toHaveBeenCalledTimes(2);
-    expect(markChannelsDeliveredSpy).toHaveBeenCalledWith({
+    expect(markDeliveredSpy).toHaveBeenCalledTimes(2);
+    expect(markDeliveredSpy).toHaveBeenCalledWith({
       latest_delivered_messages: [
         {
           cid: 'messaging:ch2',
@@ -303,22 +458,18 @@ describe('MessageDeliveryReporter', () => {
   it('sends the read request when the user disabled read receipts', async () => {
     (client as any).user.privacy_settings = { read_receipts: { enabled: false } };
     const response = { event: {} } as any;
-    const markAsReadRequestSpy = vi
-      .spyOn(channel, 'markAsReadRequest')
-      .mockResolvedValue(response);
+    const markReadSpy = vi.spyOn(channel, 'markRead').mockResolvedValue(response);
 
-    const result = await channel.markRead();
+    const result = await channel.markReadViaReporter();
 
-    expect(markAsReadRequestSpy).toHaveBeenCalledTimes(1);
+    expect(markReadSpy).toHaveBeenCalledTimes(1);
     expect(result).toBe(response);
   });
 
   it('sends the thread read request when the user disabled read receipts', async () => {
     (client as any).user.privacy_settings = { read_receipts: { enabled: false } };
     const response = { event: {} } as any;
-    const markAsReadRequestSpy = vi
-      .spyOn(channel, 'markAsReadRequest')
-      .mockResolvedValue(response);
+    const markReadSpy = vi.spyOn(channel, 'markRead').mockResolvedValue(response);
     const thread = new Thread({
       client,
       threadData: generateThreadResponse(
@@ -329,38 +480,185 @@ describe('MessageDeliveryReporter', () => {
 
     const result = await client.messageDeliveryReporter.markRead(thread);
 
-    expect(markAsReadRequestSpy).toHaveBeenCalledWith({ thread_id: thread.id });
+    expect(markReadSpy).toHaveBeenCalledWith({ thread_id: thread.id });
     expect(result).toBe(response);
   });
 
-  it('removes the pending delivery candidate upon channel.markRead', async () => {
-    const markChannelsDeliveredSpy = vi
-      .spyOn(client, 'markChannelsDelivered')
+  it('removes the pending delivery candidate upon channel.markReadViaReporter', async () => {
+    const markDeliveredSpy = vi
+      .spyOn(client, 'markDelivered')
       .mockResolvedValue({} as any);
-    vi.spyOn(channel, 'markAsReadRequest').mockResolvedValue({} as any);
+    vi.spyOn(channel, 'markRead').mockResolvedValue({} as any);
 
-    (channel.state as any).read['me'] = { last_read: new Date(0) };
-    channel.state.latestMessages = [mkMsg('m1', 1000)];
+    (channel.state as any).read['me'] = {
+      last_read: convertDateToTimestamp(new Date(0)),
+    };
+    setLatest(channel, [mkMsg('m1', 1000)]);
 
     client.syncDeliveredCandidates([channel]);
 
-    await channel.markRead();
+    await channel.markReadViaReporter();
 
     vi.advanceTimersByTime(1000);
-    expect(markChannelsDeliveredSpy).not.toHaveBeenCalled();
+    expect(markDeliveredSpy).not.toHaveBeenCalled();
+  });
+
+  describe('channel with read events disabled', () => {
+    let localChannel: Channel;
+
+    const enableLocalUnreadCount = () =>
+      localChannel.configState.partialNext({
+        readEvents: { ...localChannel.config.readEvents, localUnreadCountEnabled: true },
+      });
+
+    beforeEach(() => {
+      // The server config has to be in place before the channel is built - it is folded into the
+      // channel's own configuration at construction, not consulted per call.
+      client.channelServerConfigs[`${channelType}:noReadEvents`] = {
+        created_at: '',
+        delivery_events: true,
+        read_events: false,
+        reminders: false,
+        updated_at: '',
+      };
+      localChannel = client.channelManager.ensure({
+        type: channelType,
+        id: 'noReadEvents',
+      });
+      localChannel.initialized = true;
+    });
+
+    it('clears the unread count without a request when unread is counted locally', async () => {
+      enableLocalUnreadCount();
+      const markReadSpy = vi.spyOn(localChannel, 'markRead');
+      client.dispatchEvent({
+        cid: localChannel.cid,
+        message: { ...mkMsg('m1', 1000), user: otherUser },
+        type: 'message.new',
+        user: otherUser,
+      } as any);
+      // Without the opt-in the channel would not have counted this at all.
+      expect(localChannel.countUnread()).toBe(1);
+
+      await expect(localChannel.markReadViaReporter()).resolves.toBeNull();
+
+      expect(markReadSpy).not.toHaveBeenCalled();
+      expect(localChannel.countUnread()).toBe(0);
+    });
+
+    it('sends no request when no local unread count was configured', async () => {
+      const markReadSpy = vi.spyOn(localChannel, 'markRead').mockResolvedValue({} as any);
+
+      await expect(localChannel.markReadViaReporter()).resolves.toBeNull();
+
+      expect(markReadSpy).not.toHaveBeenCalled();
+    });
+
+    it('sends no thread request and leaves the local count alone, since a thread read is not the channel read', async () => {
+      enableLocalUnreadCount();
+      const markReadSpy = vi.spyOn(localChannel, 'markRead').mockResolvedValue({} as any);
+      const markReadLocallySpy = vi.spyOn(localChannel, 'markReadLocally');
+      const thread = new Thread({
+        client,
+        threadData: generateThreadResponse(
+          { type: channelType, id: 'noReadEvents', cid: localChannel.cid },
+          mkMsg('parent', 1000),
+        ),
+      });
+
+      await expect(client.messageDeliveryReporter.markRead(thread)).resolves.toBeNull();
+
+      expect(markReadLocallySpy).not.toHaveBeenCalled();
+      expect(markReadSpy).not.toHaveBeenCalled();
+    });
+
+    it('lets a custom markReadRequest handler take over', async () => {
+      enableLocalUnreadCount();
+      const markReadLocallySpy = vi.spyOn(localChannel, 'markReadLocally');
+      const handler = vi.fn(async () => ({ event: {} }) as any);
+      localChannel.configState.partialNext({
+        requestHandlers: { markReadRequest: handler },
+      });
+
+      await localChannel.markReadViaReporter();
+
+      expect(handler).toHaveBeenCalled();
+      expect(markReadLocallySpy).not.toHaveBeenCalled();
+    });
+  });
+
+  // `CustomMarkReadRequestFn` returns `Promise<Partial<StreamResponse<MarkReadResponse>> | null>`.
+  // The `Partial<>` is what lets a handler delegate straight to `channel.markRead` — that resolves
+  // to `StreamResponse<MarkReadResponse>` whose `event` is optional, so a stricter
+  // `{ event: MarkReadResponseEvent }` return type would reject the delegation at compile time.
+  describe('custom markReadRequest handler', () => {
+    const markReadEvent = {
+      channel_id: channelId,
+      channel_type: channelType,
+      cid: `${channelType}:${channelId}`,
+      created_at: convertDateToTimestamp(new Date()),
+      type: 'message.read',
+    };
+
+    it('accepts a handler that delegates straight to channel.markRead', async () => {
+      const response = {
+        duration: '0.1ms',
+        event: markReadEvent,
+      } as StreamResponse<MarkReadResponse>;
+      const markReadSpy = vi.spyOn(channel, 'markRead').mockResolvedValue(response);
+
+      const markReadRequest: CustomMarkReadRequestFn = ({ channel, options }) =>
+        channel.markRead(options);
+      const handler = vi.fn(markReadRequest);
+      channel.configState.partialNext({ requestHandlers: { markReadRequest: handler } });
+
+      const result = await channel.markReadViaReporter({ thread_id: 'threadId' });
+
+      expect(handler).toHaveBeenCalledWith({
+        channel,
+        options: { thread_id: 'threadId' },
+      });
+      expect(markReadSpy).toHaveBeenCalledWith({ thread_id: 'threadId' });
+      expect(result).toBe(response);
+    });
+
+    it('accepts a handler that returns only an event, without a duration', async () => {
+      const markReadSpy = vi.spyOn(channel, 'markRead');
+      const handler = vi.fn(async () => ({ event: markReadEvent }));
+      channel.configState.partialNext({ requestHandlers: { markReadRequest: handler } });
+
+      const result = await channel.markReadViaReporter();
+
+      expect(handler).toHaveBeenCalled();
+      // the handler replaces the request entirely — the SDK must not also issue one
+      expect(markReadSpy).not.toHaveBeenCalled();
+      expect(result).toEqual({ event: markReadEvent });
+    });
+
+    it('normalizes a nullish handler result to null', async () => {
+      const handler = vi.fn(async () => undefined);
+      channel.configState.partialNext({ requestHandlers: { markReadRequest: handler } });
+
+      await expect(channel.markReadViaReporter()).resolves.toBeNull();
+    });
   });
 
   const receiveMessages = (count: number, startId = 0) => {
-    // last_read < last message
+    // last_read < latest message
     const channels = Array.from({ length: count }, (_, i) => {
-      const channel = client.channel(channelType, (i + startId).toString());
+      const channel = client.channelManager.ensure({
+        type: channelType,
+        id: (i + startId).toString(),
+      });
       channel.initialized = true;
-      channel.state.latestMessages = [mkMsg('m1', '2025-01-01T10:00:00Z')];
-      (channel.state as any).read['me'] = { last_read: new Date('2025-01-01T09:00:00Z') };
+      setLatest(channel, [mkMsg('m1', '2025-01-01T10:00:00Z')]);
+      (channel.state as any).read['me'] = {
+        last_read: convertDateToTimestamp(new Date('2025-01-01T09:00:00Z')),
+      };
       return channel;
     });
     channels.forEach((ch) => {
-      client.configs[ch.cid] = {
+      client.channelServerConfigs[ch.cid] = {
         created_at: '',
         delivery_events: true,
         read_events: false,
@@ -372,22 +670,22 @@ describe('MessageDeliveryReporter', () => {
     return channels;
   };
 
-  const retryableError = new ErrorFromResponse<APIErrorResponse>('X', {
+  const retryableError = new StreamAPIError<APIError>('X', {
     code: -1,
     response: {} as AxiosResponse,
     status: 400,
   });
 
-  const notRetryableError = new ErrorFromResponse<APIErrorResponse>('X', {
+  const notRetryableError = new StreamAPIError<APIError>('X', {
     code: 2,
     response: {} as AxiosResponse,
     status: 400,
   });
 
   it('re-queues failed markChannelsDelivered request payloads', async () => {
-    const markChannelsDeliveredSpy = vi.spyOn(client, 'markChannelsDelivered');
+    const markDeliveredSpy = vi.spyOn(client, 'markDelivered');
 
-    markChannelsDeliveredSpy.mockRejectedValue(retryableError);
+    markDeliveredSpy.mockRejectedValue(retryableError);
     const channels1 = receiveMessages(110);
     // @ts-expect-error accessing protected property deliveryReportCandidates
     expect(client.messageDeliveryReporter.deliveryReportCandidates.size).toBe(110);
@@ -398,7 +696,7 @@ describe('MessageDeliveryReporter', () => {
     // trigger mark delivered request that will fail
     vi.advanceTimersByTime(1000);
     await Promise.resolve();
-    expect(markChannelsDeliveredSpy).toHaveBeenCalledTimes(1);
+    expect(markDeliveredSpy).toHaveBeenCalledTimes(1);
     // all the candidates have been returned back to deliveryReportCandidates
     // @ts-expect-error accessing protected property deliveryReportCandidates
     expect(client.messageDeliveryReporter.deliveryReportCandidates.size).toBe(110);
@@ -429,7 +727,7 @@ describe('MessageDeliveryReporter', () => {
 
     // finish mark delivered request
     await Promise.resolve();
-    expect(markChannelsDeliveredSpy).toHaveBeenCalledTimes(2);
+    expect(markDeliveredSpy).toHaveBeenCalledTimes(2);
     // all the candidates together now
     // @ts-expect-error accessing protected property deliveryReportCandidates
     expect(client.messageDeliveryReporter.deliveryReportCandidates.size).toBe(220);
@@ -482,21 +780,21 @@ describe('MessageDeliveryReporter', () => {
     vi.advanceTimersByTime(8000);
     // finish mark delivered request
     await Promise.resolve();
-    expect(markChannelsDeliveredSpy).toHaveBeenCalledTimes(4);
+    expect(markDeliveredSpy).toHaveBeenCalledTimes(4);
 
     // success resets the interval
-    markChannelsDeliveredSpy.mockResolvedValueOnce({ ok: true } as any);
+    markDeliveredSpy.mockResolvedValueOnce({ ok: true } as any);
     // the timeout does not increase anymore from the fourth failed retry
     vi.advanceTimersByTime(8000);
     // finish mark delivered request
     await Promise.resolve();
-    expect(markChannelsDeliveredSpy).toHaveBeenCalledTimes(5);
+    expect(markDeliveredSpy).toHaveBeenCalledTimes(5);
 
     // after the previous success we are back to the base timeout
     vi.advanceTimersByTime(1000);
     // finish mark delivered request
     await Promise.resolve();
-    expect(markChannelsDeliveredSpy).toHaveBeenCalledTimes(6);
+    expect(markDeliveredSpy).toHaveBeenCalledTimes(6);
 
     // @ts-expect-error accessing protected property deliveryReportCandidates
     expect(client.messageDeliveryReporter.deliveryReportCandidates.size).toBe(120);
@@ -513,9 +811,9 @@ describe('MessageDeliveryReporter', () => {
   });
 
   it('non retryable error does not schedule retry', async () => {
-    const markChannelsDeliveredSpy = vi.spyOn(client, 'markChannelsDelivered');
+    const markDeliveredSpy = vi.spyOn(client, 'markDelivered');
 
-    markChannelsDeliveredSpy.mockRejectedValue(notRetryableError);
+    markDeliveredSpy.mockRejectedValue(notRetryableError);
     const channels1 = receiveMessages(110);
     // @ts-expect-error accessing protected property deliveryReportCandidates
     expect(client.messageDeliveryReporter.deliveryReportCandidates.size).toBe(110);
@@ -526,20 +824,22 @@ describe('MessageDeliveryReporter', () => {
     // trigger mark delivered request that will fail
     vi.advanceTimersByTime(1000);
     await Promise.resolve();
-    expect(markChannelsDeliveredSpy).toHaveBeenCalledTimes(1);
+    expect(markDeliveredSpy).toHaveBeenCalledTimes(1);
 
     // will not retry
     vi.advanceTimersByTime(2000);
     await Promise.resolve();
-    expect(markChannelsDeliveredSpy).toHaveBeenCalledTimes(1);
+    expect(markDeliveredSpy).toHaveBeenCalledTimes(1);
   });
 
   it('does not remove the pending delivery candidate after failed markRead request', async () => {
-    const markChannelsDeliveredSpy = vi.spyOn(client, 'markChannelsDelivered');
-    vi.spyOn(channel, 'markAsReadRequest').mockRejectedValue({} as any);
+    const markDeliveredSpy = vi.spyOn(client, 'markDelivered');
+    vi.spyOn(channel, 'markRead').mockRejectedValue({} as any);
 
-    (channel.state as any).read['me'] = { last_read: new Date(0) };
-    channel.state.latestMessages = [mkMsg('m1', 1000)];
+    (channel.state as any).read['me'] = {
+      last_read: convertDateToTimestamp(new Date(0)),
+    };
+    setLatest(channel, [mkMsg('m1', 1000)]);
 
     client.syncDeliveredCandidates([channel]);
 
@@ -548,7 +848,7 @@ describe('MessageDeliveryReporter', () => {
     } catch (error) {}
 
     vi.advanceTimersByTime(1000);
-    expect(markChannelsDeliveredSpy).toHaveBeenCalledWith({
+    expect(markDeliveredSpy).toHaveBeenCalledWith({
       latest_delivered_messages: [
         {
           cid: channel.cid,
@@ -558,28 +858,47 @@ describe('MessageDeliveryReporter', () => {
     });
   });
 
+  it('swallows rejections from the throttled (auto) markRead so they do not leak as unhandled rejections', async () => {
+    // Reproduces the fire-and-forget path: an active thread/channel auto-marks-read via
+    // `throttledMarkRead`, but `channel.markRead` rejects (e.g. read events disabled). The throttled
+    // wrapper must absorb it — otherwise it surfaces as an unhandled rejection and fails the run.
+    const markReadSpy = vi
+      .spyOn(channel, 'markRead')
+      .mockRejectedValue(new Error('Read events are disabled for this application'));
+
+    expect(() => client.messageDeliveryReporter.throttledMarkRead(channel)).not.toThrow();
+
+    // Let the rejected markRead settle; the `.catch` in the throttled wrapper absorbs it.
+    // (1000ms === the reporter's MARK_AS_READ_THROTTLE_TIMEOUT.)
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(markReadSpy).toHaveBeenCalledTimes(1);
+  });
+
   it('handles message.new via channel event: schedules and sends delivered for newest', async () => {
-    const markChannelsDeliveredSpy = vi
-      .spyOn(client, 'markChannelsDelivered')
+    const markDeliveredSpy = vi
+      .spyOn(client, 'markDelivered')
       .mockResolvedValue({} as any);
 
-    (channel.state as any).read['me'] = { last_read: new Date(0) };
-    channel.state.latestMessages = [];
+    (channel.state as any).read['me'] = {
+      last_read: convertDateToTimestamp(new Date(0)),
+    };
+    setLatest(channel, []);
 
     // simulate incoming message.new event
     const ev: Event = {
       type: 'message.new',
-      created_at: new Date('2025-01-01T10:00:00Z').toISOString(),
+      created_at: convertDateToTimestamp(new Date('2025-01-01T10:00:00Z')),
       user: otherUser,
-      message: mkMsg('m1', '2025-01-01T10:00:00Z') as any,
+      // cid must match the paginator filter so message.new ingests into an interval
+      message: { ...mkMsg('m1', '2025-01-01T10:00:00Z'), cid: channel.cid } as any,
     };
 
     channel._handleChannelEvent(ev);
 
     vi.advanceTimersByTime(1000);
 
-    expect(markChannelsDeliveredSpy).toHaveBeenCalledTimes(1);
-    expect(markChannelsDeliveredSpy).toHaveBeenCalledWith({
+    expect(markDeliveredSpy).toHaveBeenCalledTimes(1);
+    expect(markDeliveredSpy).toHaveBeenCalledWith({
       latest_delivered_messages: [
         {
           cid: channel.cid,
@@ -590,17 +909,19 @@ describe('MessageDeliveryReporter', () => {
   });
 
   it('prevents tracking own new messages', async () => {
-    const markChannelsDeliveredSpy = vi
-      .spyOn(client, 'markChannelsDelivered')
+    const markDeliveredSpy = vi
+      .spyOn(client, 'markDelivered')
       .mockResolvedValue({} as any);
 
-    (channel.state as any).read['me'] = { last_read: new Date(0) };
-    channel.state.latestMessages = [];
+    (channel.state as any).read['me'] = {
+      last_read: convertDateToTimestamp(new Date(0)),
+    };
+    setLatest(channel, []);
 
     // simulate incoming message.new event
     const ev: Event = {
       type: 'message.new',
-      created_at: new Date('2025-01-01T10:00:00Z').toISOString(),
+      created_at: convertDateToTimestamp(new Date('2025-01-01T10:00:00Z')),
       user: ownUser,
       message: mkMsg('m1', '2025-01-01T10:00:00Z') as any,
     };
@@ -609,22 +930,24 @@ describe('MessageDeliveryReporter', () => {
 
     vi.advanceTimersByTime(1000);
 
-    expect(markChannelsDeliveredSpy).not.toHaveBeenCalled();
+    expect(markDeliveredSpy).not.toHaveBeenCalled();
   });
 
   it('syncs delivery candidates upon own message.read event and prevents reporting delivery', async () => {
-    const markChannelsDeliveredSpy = vi
-      .spyOn(client, 'markChannelsDelivered')
+    const markDeliveredSpy = vi
+      .spyOn(client, 'markDelivered')
       .mockResolvedValue({} as any);
 
-    (channel.state as any).read['me'] = { last_read: new Date(0) };
-    channel.state.latestMessages = [mkMsg('m1', '2025-01-01T10:00:00Z') as any];
+    (channel.state as any).read['me'] = {
+      last_read: convertDateToTimestamp(new Date(0)),
+    };
+    setLatest(channel, [mkMsg('m1', '2025-01-01T10:00:00Z')]);
 
     client.syncDeliveredCandidates([channel]);
 
     const ev: Event = {
       type: 'message.read',
-      created_at: new Date('2025-01-01T10:00:00Z').toISOString(),
+      created_at: convertDateToTimestamp(new Date('2025-01-01T10:00:00Z')),
       last_read_message_id: 'm1',
       message: mkMsg('m1', '2025-01-01T10:00:00Z') as any,
       user: ownUser,
@@ -634,22 +957,24 @@ describe('MessageDeliveryReporter', () => {
 
     vi.advanceTimersByTime(1000);
 
-    expect(markChannelsDeliveredSpy).not.toHaveBeenCalled();
+    expect(markDeliveredSpy).not.toHaveBeenCalled();
   });
 
   it('does not sync delivery candidates upon other user message.read event and reports delivery', async () => {
-    const markChannelsDeliveredSpy = vi
-      .spyOn(client, 'markChannelsDelivered')
+    const markDeliveredSpy = vi
+      .spyOn(client, 'markDelivered')
       .mockResolvedValue({} as any);
 
-    (channel.state as any).read['me'] = { last_read: new Date(0) };
-    channel.state.latestMessages = [mkMsg('m1', '2025-01-01T10:00:00Z') as any];
+    (channel.state as any).read['me'] = {
+      last_read: convertDateToTimestamp(new Date(0)),
+    };
+    setLatest(channel, [mkMsg('m1', '2025-01-01T10:00:00Z')]);
 
     client.syncDeliveredCandidates([channel]);
 
     const ev: Event = {
       type: 'message.read',
-      created_at: new Date('2025-01-01T10:00:00Z').toISOString(),
+      created_at: convertDateToTimestamp(new Date('2025-01-01T10:00:00Z')),
       last_read_message_id: 'm1',
       message: mkMsg('m1', '2025-01-01T10:00:00Z') as any,
       user: otherUser,
@@ -659,8 +984,8 @@ describe('MessageDeliveryReporter', () => {
 
     vi.advanceTimersByTime(1000);
 
-    expect(markChannelsDeliveredSpy).toHaveBeenCalledTimes(1);
-    expect(markChannelsDeliveredSpy).toHaveBeenCalledWith({
+    expect(markDeliveredSpy).toHaveBeenCalledTimes(1);
+    expect(markDeliveredSpy).toHaveBeenCalledWith({
       latest_delivered_messages: [
         {
           cid: channel.cid,
@@ -670,16 +995,88 @@ describe('MessageDeliveryReporter', () => {
     });
   });
 
-  it('throttles markRead (burst collapses to one underlying request)', async () => {
-    const spy = vi.spyOn(channel, 'markAsReadRequest').mockResolvedValue({} as any);
+  it('throttles markRead (leading + trailing: fires immediately, then once more on the trailing edge)', async () => {
+    const spy = vi.spyOn(channel, 'markRead').mockResolvedValue({} as any);
 
     // burst
     client.messageDeliveryReporter.throttledMarkRead(channel);
     client.messageDeliveryReporter.throttledMarkRead(channel);
     client.messageDeliveryReporter.throttledMarkRead(channel);
 
-    expect(spy).not.toHaveBeenCalled();
+    expect(spy).toHaveBeenCalledTimes(1); // leading edge fires immediately
     vi.advanceTimersByTime(1000);
-    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy).toHaveBeenCalledTimes(2); // trailing edge coalesces the remaining calls into one more
+  });
+
+  it('marks read immediately on a single throttledMarkRead call (leading edge)', async () => {
+    const spy = vi.spyOn(channel, 'markRead').mockResolvedValue({} as any);
+
+    // A single call is the common case (e.g. scrolling to the bottom once). With `leading: true` it
+    // fires immediately on the leading edge — no delay — and a lone call schedules no extra trailing
+    // invocation. (The lone-call-drop regression for `leading: false` is covered by the `throttle`
+    // unit tests in utils.test.ts.)
+    client.messageDeliveryReporter.throttledMarkRead(channel);
+
+    expect(spy).toHaveBeenCalledTimes(1); // leading edge fires immediately
+    vi.advanceTimersByTime(1000);
+    expect(spy).toHaveBeenCalledTimes(1); // no extra trailing for a solitary call
+  });
+
+  describe('throttles each collection separately', () => {
+    const markedCollections = (spy: { mock: { calls: unknown[][] } }) =>
+      spy.mock.calls.map(([collection]) => collection);
+
+    it('marks a thread read when its channel is marked inside the same window', () => {
+      const reporter = client.messageDeliveryReporter;
+      const spy = vi.spyOn(reporter, 'markRead').mockResolvedValue(null);
+      const thread = new Thread({
+        client,
+        threadData: generateThreadResponse(
+          { type: channelType, id: channelId, cid: channel.cid },
+          mkMsg('parent', 1000),
+        ),
+      });
+
+      reporter.throttledMarkRead(channel);
+      reporter.throttledMarkRead(thread);
+      reporter.throttledMarkRead(channel);
+      vi.advanceTimersByTime(1000);
+
+      expect(markedCollections(spy)).toEqual([channel, thread, channel]);
+    });
+
+    it('marks another channel read when the first is marked again inside the same window', () => {
+      const reporter = client.messageDeliveryReporter;
+      const spy = vi.spyOn(reporter, 'markRead').mockResolvedValue(null);
+      const otherChannel = client.channelManager.ensure({
+        type: channelType,
+        id: 'other-channel',
+      });
+
+      reporter.throttledMarkRead(channel);
+      reporter.throttledMarkRead(otherChannel);
+      reporter.throttledMarkRead(channel);
+      vi.advanceTimersByTime(1000);
+
+      expect(markedCollections(spy)).toEqual([channel, otherChannel, channel]);
+    });
+
+    it('still throttles repeated calls for one collection', () => {
+      const reporter = client.messageDeliveryReporter;
+      const spy = vi.spyOn(reporter, 'markRead').mockResolvedValue(null);
+      const otherChannel = client.channelManager.ensure({
+        type: channelType,
+        id: 'other-channel',
+      });
+
+      reporter.throttledMarkRead(channel);
+      reporter.throttledMarkRead(otherChannel);
+      reporter.throttledMarkRead(channel);
+      reporter.throttledMarkRead(channel);
+
+      expect(markedCollections(spy)).toEqual([channel, otherChannel]);
+      vi.advanceTimersByTime(1000);
+      expect(markedCollections(spy)).toEqual([channel, otherChannel, channel]);
+    });
   });
 });

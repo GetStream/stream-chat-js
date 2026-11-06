@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Poll, StreamChat } from '../../src';
+import { convertDateToTimestamp } from './test-utils/time';
 
 /**
  * Simulates the current user tapping poll options quickly while other users vote at the same time,
@@ -35,11 +36,10 @@ const runScenario = async ({
 	const latency = () => 5 + Math.floor(random() * 75);
 
 	const client = new StreamChat('apiKey');
-	client.userID = ME;
 	client.user = { id: ME };
 	const pollResponse = {
 		answers_count: 0,
-		created_at: '2024-10-22T15:28:20.580523Z',
+		created_at: convertDateToTimestamp('2024-10-22T15:28:20.580523Z'),
 		created_by: { id: ME },
 		created_by_id: ME,
 		enforce_unique_vote: unique,
@@ -49,7 +49,7 @@ const runScenario = async ({
 		name: 'Poll',
 		options: OPTIONS.map((id) => ({ id })),
 		own_votes: [],
-		updated_at: '2024-10-22T15:28:20.580523Z',
+		updated_at: convertDateToTimestamp('2024-10-22T15:28:20.580523Z'),
 		vote_count: 0,
 		vote_counts_by_option: {},
 		voting_visibility: 'public',
@@ -76,7 +76,7 @@ const runScenario = async ({
 		if (vote.user_id === ME && random() < dropRate) return;
 		const counts = voteCounts();
 		const event = {
-			created_at: new Date().toISOString(),
+			created_at: convertDateToTimestamp(new Date()),
 			poll: {
 				...pollResponse,
 				vote_count: Object.values(counts).reduce((sum, count) => sum + count, 0),
@@ -106,11 +106,11 @@ const runScenario = async ({
 			return moved;
 		}
 		const vote = {
-			created_at: 'x',
+			created_at: 0,
 			id: `vote-${nextVoteId++}`,
 			option_id: optionId,
 			poll_id: 'poll',
-			updated_at: 'x',
+			updated_at: 0,
 			user_id: user,
 		};
 		userVotes[optionId] = vote;
@@ -131,11 +131,11 @@ const runScenario = async ({
 			if (random() < failRate) throw new Error('network error'); // never reaches the server
 			return sleep(latency()).then(handle);
 		});
-	vi.spyOn(client, 'castPollVote').mockImplementation((_, __, { option_id }) =>
+	vi.spyOn(client, 'castPollVote').mockImplementation((_, { vote: { option_id } }) =>
 		request(() => ({ vote: castOnServer(ME, option_id) })),
 	);
-	vi.spyOn(client, 'removePollVote').mockImplementation((_, __, voteId) =>
-		request(() => ({ vote: removeOnServer(ME, voteId) })),
+	vi.spyOn(client, 'deletePollVote').mockImplementation(({ vote_id }) =>
+		request(() => ({ vote: removeOnServer(ME, vote_id) })),
 	);
 
 	// checked on every state change

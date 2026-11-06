@@ -1,0 +1,5106 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  BasePaginator,
+  DEFAULT_PAGINATION_OPTIONS,
+  Filters,
+  ItemCoordinates,
+  LOGICAL_HEAD_INTERVAL_ID,
+  LOGICAL_TAIL_INTERVAL_ID,
+  PaginationQueryParams,
+  PaginationQueryReturnValue,
+  PaginatorCursor,
+  type PaginatorOptions,
+  PaginatorState,
+  QueryFilters,
+  SortParamRequest,
+  ZERO_PAGE_CURSOR,
+} from '../../../../src';
+import { sleep } from '../../../../src/utils';
+import * as utils from '../../../../src/utils';
+import { makeComparator } from '../../../../src/pagination/sortCompiler';
+import { DEFAULT_QUERY_CHANNELS_MS_BETWEEN_RETRIES } from '../../../../src/constants';
+import { StoreBackedItemIndex } from '../../../../src/entityStore/StoreBackedItemIndex';
+
+const toNextTick = async () => {
+  const sleepPromise = sleep(0);
+  vi.advanceTimersByTime(0);
+  await sleepPromise;
+};
+
+type TestItem = {
+  id: string;
+  name?: string;
+  teams?: string[];
+  blocked?: boolean;
+  createdAt?: string; // date string
+  age?: number;
+};
+
+type QueryShape = {
+  filters: Filters<{
+    id: { type: string; operators: '$autocomplete' | '$eq' | '$in' };
+    name: { type: string; operators: '$autocomplete' | '$eq' | '$in' };
+    // element type + an `$eq` override for the whole array, the way the spec models `members`
+    teams: {
+      type: string;
+      operators: '$contains' | '$eq' | '$in';
+      valueTypes: { $eq: Array<string> };
+    };
+    blocked: { type: boolean; operators: '$eq' | '$ne' };
+    createdAt: { type: string; operators: '$eq' | '$gt' | '$gte' | '$lt' | '$lte' };
+    age: { type: number; operators: '$eq' | '$gt' | '$gte' | '$lt' | '$lte' };
+  }>;
+  sort: SortParamRequest[];
+};
+
+class IncompletePaginator extends BasePaginator<TestItem, QueryShape> {
+  sort: QueryFilters<TestItem> | undefined;
+  // @ts-ignore
+  sortComparator: (a: TestItem, b: TestItem) => number = vi.fn().mockReturnValue(0); // BasePaginator implementation
+  queryResolve: Function = vi.fn();
+  queryReject: Function = vi.fn();
+  queryPromise: Promise<PaginationQueryReturnValue<TestItem>> | null = null;
+  mockClientQuery = vi.fn();
+
+  constructor(options: PaginatorOptions<TestItem, QueryShape> = {}) {
+    super(options);
+  }
+
+  protected override fetchQueryResponse(
+    params: PaginationQueryParams<QueryShape>,
+  ): Promise<PaginationQueryReturnValue<TestItem>> {
+    const promise = new Promise<PaginationQueryReturnValue<TestItem>>(
+      (queryResolve, queryReject) => {
+        this.queryResolve = queryResolve;
+        this.queryReject = queryReject;
+      },
+    );
+    this.mockClientQuery(params);
+    this.queryPromise = promise;
+    return promise;
+  }
+
+  protected override extractQueryPage(
+    response: PaginationQueryReturnValue<TestItem>,
+    _params: PaginationQueryParams<QueryShape>,
+  ) {
+    return response;
+  }
+}
+
+const defaultNextQueryShape: QueryShape = {
+  filters: { id: 'test-id' },
+  sort: [{ field: 'id', direction: 1 }],
+};
+
+class Paginator extends IncompletePaginator {
+  constructor(options: PaginatorOptions<TestItem, QueryShape> = {}) {
+    super(options);
+  }
+
+  getNextQueryShape = vi.fn().mockReturnValue(defaultNextQueryShape);
+}
+
+const itemIndex = new StoreBackedItemIndex<TestItem>({ getEntityId: ({ id }) => id });
+const a: TestItem = { id: 'a', age: 30, name: 'A' };
+const b: TestItem = { id: 'b', age: 25, name: 'B' };
+const c: TestItem = { id: 'c', age: 25, name: 'C' };
+const d: TestItem = { id: 'd', age: 20, name: 'D' };
+
+const v: TestItem = { id: 'v', age: 10, name: 'V' };
+const x: TestItem = { id: 'x', age: 5, name: 'x' };
+const y: TestItem = { id: 'y', age: 4, name: 'Y' };
+const z: TestItem = { id: 'z', age: 1, name: 'Z' };
+
+describe('BasePaginator', () => {
+  describe('window cap (pruning)', () => {
+    /**
+     * Polarity guard. This getter is the UI's "hold off" latch, and every paginator that actually
+     * prunes today overrides it — so the BASE value is read by nothing, and a flipped default would
+     * pass the whole window-cap suite while silently disabling pruning for any paginator that does
+     * not override. It was in fact inverted once, by a rename.
+     */
+    it('does not suspend pruning by default, so a paginator with no UI still honours its cap', () => {
+      const paginator = new Paginator();
+      // @ts-expect-error accessing protected property
+      expect(paginator.isPruningSuspended).toBe(false);
+    });
+  });
+
+  describe('constructor', () => {
+    it('initiates with the defaults', () => {
+      const paginator = new Paginator();
+      expect(paginator.state.getLatestValue()).toEqual({
+        hasMoreTail: true,
+        hasMoreHead: true,
+        isLoading: false,
+        items: undefined,
+        lastQueryError: undefined,
+        cursor: undefined,
+        offset: 0,
+      });
+      expect(paginator.isInitialized).toBe(false);
+      // @ts-expect-error accessing protected property
+      expect(paginator._filterFieldToDataResolvers).toHaveLength(0);
+      expect(paginator.config.initialCursor).toBeUndefined();
+      expect(paginator.config.initialOffset).toBeUndefined();
+      expect(paginator.config.throwErrors).toBe(false);
+      expect(paginator.pageSize).toBe(DEFAULT_PAGINATION_OPTIONS.pageSize);
+      expect(paginator.config.debounceMs).toBe(DEFAULT_PAGINATION_OPTIONS.debounceMs);
+      expect(paginator.config.lockItemOrder).toBe(
+        DEFAULT_PAGINATION_OPTIONS.lockItemOrder,
+      );
+      expect(paginator.config.hasPaginationQueryShapeChanged).toBe(
+        DEFAULT_PAGINATION_OPTIONS.hasPaginationQueryShapeChanged,
+      );
+    });
+
+    it('initiates with custom options', () => {
+      const options: PaginatorOptions<TestItem, QueryShape> = {
+        debounceMs: DEFAULT_PAGINATION_OPTIONS.debounceMs - 100,
+        doRequest: () => Promise.resolve({ items: [{ id: 'test-id' }] }),
+        hasPaginationQueryShapeChanged: () => true,
+        initialCursor: { tailward: 'tailward', headward: 'headward' },
+        initialOffset: 10,
+        lockItemOrder: !DEFAULT_PAGINATION_OPTIONS.lockItemOrder,
+        pageSize: DEFAULT_PAGINATION_OPTIONS.pageSize - 1,
+        throwErrors: true,
+      };
+      const paginator = new Paginator(options);
+      expect(paginator.state.getLatestValue()).toEqual({
+        hasMoreTail: true,
+        hasMoreHead: true,
+        isLoading: false,
+        items: undefined,
+        lastQueryError: undefined,
+        cursor: options.initialCursor,
+        offset: options.initialOffset,
+      });
+      expect(paginator.isInitialized).toBe(false);
+      // @ts-expect-error accessing protected property
+      expect(paginator._filterFieldToDataResolvers).toHaveLength(0);
+      expect(paginator.config.initialCursor).toStrictEqual(options.initialCursor);
+      expect(paginator.config.initialOffset).toStrictEqual(options.initialOffset);
+      expect(paginator.config.throwErrors).toBe(options.throwErrors);
+      expect(paginator.pageSize).toBe(options.pageSize);
+      expect(paginator.config.hasPaginationQueryShapeChanged).toStrictEqual(
+        options.hasPaginationQueryShapeChanged,
+      );
+      expect(paginator.config.debounceMs).toBe(options.debounceMs);
+      expect(paginator.config.lockItemOrder).toBe(options.lockItemOrder);
+    });
+  });
+
+  describe('pagination API', () => {
+    it('throws is the paginator does implement own getNextQueryShape', () => {
+      const paginator = new IncompletePaginator();
+      // @ts-expect-error accessing protected property
+      expect(paginator.getNextQueryShape).toThrow(
+        'Paginator.getNextQueryShape() is not implemented',
+      );
+    });
+
+    describe('shouldResetStateBeforeQuery', () => {
+      const stateBeforeQuery: PaginatorState<TestItem> = {
+        hasMoreTail: true,
+        hasMoreHead: true,
+        isLoading: false,
+        items: [{ id: 'test-item' }],
+        lastQueryError: undefined,
+        cursor: { tailward: 'tailward', headward: 'headward' },
+        offset: 10,
+      };
+
+      const prevQueryShape: QueryShape = {
+        filters: { id: 'a' },
+        sort: [{ field: 'id', direction: 1 }],
+      };
+      const nextQueryShape: QueryShape = {
+        filters: { id: 'b' },
+        sort: [{ field: 'id', direction: 1 }],
+      };
+
+      it('resets the state before a query when querying the first page', () => {
+        const paginator = new Paginator();
+        const initialState = { ...stateBeforeQuery, items: undefined };
+        paginator.state.next(initialState);
+        expect(paginator.state.getLatestValue()).toEqual(initialState);
+        // @ts-expect-error accessing protected property
+        expect(paginator.shouldResetStateBeforeQuery()).toBe(true);
+      });
+
+      it('resets the state before a query when query shape changed', () => {
+        const prevQueryShape: QueryShape = {
+          filters: { id: 'a' },
+          sort: [{ field: 'id', direction: 1 }],
+        };
+        const nextQueryShape: QueryShape = {
+          filters: { id: 'b' },
+          sort: [{ field: 'id', direction: 1 }],
+        };
+        const paginator = new Paginator();
+        expect(
+          // @ts-expect-error accessing protected property
+          paginator.shouldResetStateBeforeQuery(prevQueryShape, nextQueryShape),
+        ).toBe(true);
+        expect(
+          // @ts-expect-error accessing protected property
+          paginator.shouldResetStateBeforeQuery(prevQueryShape, prevQueryShape),
+        ).toBe(false);
+      });
+
+      it('determines whether pagination state should be reset before a query using custom logic', () => {
+        const options = {
+          hasPaginationQueryShapeChanged: vi.fn().mockReturnValue(true),
+        };
+        const paginator = new Paginator(options);
+        expect(
+          // @ts-expect-error accessing protected property
+          paginator.shouldResetStateBeforeQuery(prevQueryShape, nextQueryShape),
+        ).toBe(true);
+        expect(
+          // @ts-expect-error accessing protected property
+          paginator.shouldResetStateBeforeQuery(prevQueryShape, prevQueryShape),
+        ).toBe(true);
+        expect(options.hasPaginationQueryShapeChanged).toHaveBeenCalledTimes(2);
+      });
+    });
+
+    describe('query pipeline', () => {
+      type QueryStep = 'applyQueryResponseRest' | 'extractQueryPage';
+      // the steps are protected
+      const spyOnStep = (paginator: Paginator, step: QueryStep) =>
+        vi.spyOn(
+          paginator as unknown as Record<QueryStep, (...args: unknown[]) => unknown>,
+          step,
+        );
+      const failPlacingThePage = (paginator: Paginator) =>
+        // only the placing of a page: ending the query without one still works
+        vi.spyOn(paginator, 'placeQueryPage').mockImplementationOnce(() => {
+          throw new Error('placing failed');
+        });
+      const answerFirstPage = async (paginator: Paginator) => {
+        const promise = paginator.toTail();
+        // wait for the DB data first page load
+        await sleep(0);
+        paginator.queryResolve({ items: [{ id: 'id1' }], tailward: 'next1' });
+        return promise;
+      };
+
+      it('applies the rest of a response once, after its page is placed', async () => {
+        const paginator = new Paginator({ initialCursor: ZERO_PAGE_CURSOR });
+        const itemsWhenApplied: unknown[] = [];
+        spyOnStep(paginator, 'applyQueryResponseRest').mockImplementation(() => {
+          itemsWhenApplied.push(paginator.items);
+        });
+
+        await answerFirstPage(paginator);
+
+        expect(itemsWhenApplied).toEqual([[{ id: 'id1' }]]);
+      });
+
+      it('applies nothing when fetching fails, and ends the query', async () => {
+        const paginator = new Paginator({ initialCursor: ZERO_PAGE_CURSOR });
+        const applyRest = spyOnStep(paginator, 'applyQueryResponseRest');
+        const promise = paginator.toTail();
+        await sleep(0);
+
+        paginator.queryReject(new Error('offline'));
+        await promise;
+
+        expect(applyRest).not.toHaveBeenCalled();
+        expect(paginator.isLoading).toBe(false);
+      });
+
+      it('still applies the rest when placing the page fails, ends the query and records the error', async () => {
+        const paginator = new Paginator({ initialCursor: ZERO_PAGE_CURSOR });
+        const applyRest = spyOnStep(paginator, 'applyQueryResponseRest');
+        failPlacingThePage(paginator);
+
+        await answerFirstPage(paginator);
+
+        expect(applyRest).toHaveBeenCalledTimes(1);
+        expect(paginator.isLoading).toBe(false);
+        expect(paginator.lastQueryError?.message).toBe('placing failed');
+      });
+
+      it('still applies the rest when the page cannot be extracted, ends the query and records the error', async () => {
+        const paginator = new Paginator({ initialCursor: ZERO_PAGE_CURSOR });
+        const applyRest = spyOnStep(paginator, 'applyQueryResponseRest');
+        spyOnStep(paginator, 'extractQueryPage').mockImplementation(() => {
+          throw new Error('no page');
+        });
+
+        await answerFirstPage(paginator);
+
+        expect(applyRest).toHaveBeenCalledTimes(1);
+        expect(paginator.isLoading).toBe(false);
+        expect(paginator.items).toBeUndefined();
+        expect(paginator.lastQueryError?.message).toBe('no page');
+      });
+
+      it('still applies the rest and ends the query when ending it without a page fails too', async () => {
+        const paginator = new Paginator({ initialCursor: ZERO_PAGE_CURSOR });
+        const applyRest = spyOnStep(paginator, 'applyQueryResponseRest');
+        vi.spyOn(paginator, 'placeQueryPage').mockImplementation(() => {
+          throw new Error('placing failed');
+        });
+
+        await answerFirstPage(paginator);
+
+        expect(applyRest).toHaveBeenCalledTimes(1);
+        expect(paginator.isLoading).toBe(false);
+        expect(paginator.lastQueryError?.message).toBe('placing failed');
+      });
+
+      it('keeps the placed page when applying the rest fails, and records the error', async () => {
+        const paginator = new Paginator({ initialCursor: ZERO_PAGE_CURSOR });
+        spyOnStep(paginator, 'applyQueryResponseRest').mockImplementation(() => {
+          throw new Error('apply failed');
+        });
+
+        await answerFirstPage(paginator);
+
+        expect(paginator.items).toEqual([{ id: 'id1' }]);
+        expect(paginator.isLoading).toBe(false);
+        expect(paginator.lastQueryError?.message).toBe('apply failed');
+      });
+
+      it('reports the first error of the steps after the fetch', async () => {
+        const paginator = new Paginator({ initialCursor: ZERO_PAGE_CURSOR });
+        failPlacingThePage(paginator);
+        spyOnStep(paginator, 'applyQueryResponseRest').mockImplementation(() => {
+          throw new Error('apply failed');
+        });
+
+        await answerFirstPage(paginator);
+
+        expect(paginator.lastQueryError?.message).toBe('placing failed');
+      });
+
+      it('rejects with the error of a step after the fetch only with throwErrors set, after running every step', async () => {
+        const paginator = new Paginator({
+          initialCursor: ZERO_PAGE_CURSOR,
+          throwErrors: true,
+        });
+        const applyRest = spyOnStep(paginator, 'applyQueryResponseRest');
+        failPlacingThePage(paginator);
+
+        await expect(answerFirstPage(paginator)).rejects.toThrow('placing failed');
+
+        expect(applyRest).toHaveBeenCalledTimes(1);
+        expect(paginator.isLoading).toBe(false);
+        expect(paginator.lastQueryError?.message).toBe('placing failed');
+      });
+    });
+
+    it('paginates to next pages (cursor)', async () => {
+      const paginator = new Paginator({ initialCursor: ZERO_PAGE_CURSOR });
+      let nextPromise = paginator.toTail();
+      // wait for the DB data first page load
+      await sleep(0);
+      expect(paginator.isLoading).toBe(true);
+      expect(paginator.hasMoreTail).toBe(true);
+      expect(paginator.hasMoreHead).toBe(true);
+
+      paginator.queryResolve({
+        items: [{ id: 'id1' }],
+        tailward: 'next1',
+        headward: 'prev1',
+      });
+      await nextPromise;
+      expect(paginator.isLoading).toBe(false);
+      expect(paginator.hasMoreTail).toBe(true);
+      expect(paginator.hasMoreHead).toBe(true);
+      expect(paginator.items).toEqual([{ id: 'id1' }]);
+      expect(paginator.cursor).toEqual({ tailward: 'next1', headward: 'prev1' });
+      expect(paginator.mockClientQuery).toHaveBeenCalledWith({
+        direction: 'tailward',
+        queryShape: defaultNextQueryShape,
+        reset: undefined,
+        retryCount: 0,
+      });
+
+      nextPromise = paginator.toTail();
+      expect(paginator.isLoading).toBe(true);
+      paginator.queryResolve({
+        items: [{ id: 'id2' }],
+        tailward: 'next2',
+        headward: 'prev2',
+      });
+      await nextPromise;
+      expect(paginator.hasMoreTail).toBe(true);
+      expect(paginator.hasMoreHead).toBe(true);
+      expect(paginator.items).toEqual([{ id: 'id1' }, { id: 'id2' }]);
+      expect(paginator.cursor).toEqual({ tailward: 'next2', headward: 'prev2' });
+
+      nextPromise = paginator.toTail();
+      paginator.queryResolve({ items: [] });
+      await nextPromise;
+      expect(paginator.hasMoreTail).toBe(false);
+      expect(paginator.hasMoreHead).toBe(false);
+      expect(paginator.items).toEqual([{ id: 'id1' }, { id: 'id2' }]);
+      expect(paginator.cursor).toEqual({ tailward: null, headward: null });
+
+      paginator.toTail();
+      expect(paginator.isLoading).toBe(false);
+      expect(paginator.mockClientQuery).toHaveBeenCalledTimes(3);
+    });
+
+    it('issues one request when both directions are requested in the same tick', async () => {
+      const paginator = new Paginator({ initialCursor: ZERO_PAGE_CURSOR });
+      // A list with no loaded window sits within the scroll threshold of its top AND its bottom, so
+      // a UI's scroll handler asks for both directions one line apart. With nothing loaded, both
+      // resolve to the same first page — the second must not slip past the `isLoading` gate while
+      // the first is still awaiting its offline preload.
+      const tailward = paginator.toTail();
+      const headward = paginator.toHead();
+
+      // The gate that matters: set synchronously, so the second call is turned away before the
+      // request for the first has even been built.
+      expect(paginator.isLoading).toBe(true);
+
+      // wait for the DB data first page load
+      await sleep(0);
+      expect(paginator.mockClientQuery).toHaveBeenCalledTimes(1);
+
+      paginator.queryResolve({
+        items: [{ id: 'id1' }],
+        tailward: 'next1',
+        headward: 'prev1',
+      });
+      await Promise.all([tailward, headward]);
+
+      expect(paginator.mockClientQuery).toHaveBeenCalledTimes(1);
+      expect(paginator.items).toEqual([{ id: 'id1' }]);
+      expect(paginator.isLoading).toBe(false);
+    });
+
+    it('paginates to next pages (offset)', async () => {
+      const paginator = new Paginator({ pageSize: 1 });
+      let nextPromise = paginator.toTail();
+      // wait for the DB data first page load
+      await sleep(0);
+      expect(paginator.isLoading).toBe(true);
+      expect(paginator.hasMoreTail).toBe(true);
+      // Offset pagination establishes its window from the start offset (0 here) as soon as the
+      // first-page load begins, so the head is known to be loaded before the query resolves.
+      expect(paginator.hasMoreHead).toBe(false);
+
+      paginator.queryResolve({ items: [{ id: 'id1' }] });
+      await nextPromise;
+      expect(paginator.isLoading).toBe(false);
+      expect(paginator.hasMoreTail).toBe(true);
+      expect(paginator.hasMoreHead).toBe(false);
+      expect(paginator.items).toEqual([{ id: 'id1' }]);
+      expect(paginator.cursor).toBeUndefined();
+      expect(paginator.offset).toBe(1);
+      expect(paginator.mockClientQuery).toHaveBeenCalledWith({
+        direction: 'tailward',
+        queryShape: defaultNextQueryShape,
+        reset: undefined,
+        retryCount: 0,
+      });
+
+      nextPromise = paginator.toTail();
+      expect(paginator.isLoading).toBe(true);
+      paginator.queryResolve({ items: [{ id: 'id2' }] });
+      await nextPromise;
+      expect(paginator.hasMoreTail).toBe(true);
+      expect(paginator.hasMoreHead).toBe(false);
+      expect(paginator.items).toEqual([{ id: 'id1' }, { id: 'id2' }]);
+      expect(paginator.cursor).toBeUndefined();
+      expect(paginator.offset).toBe(2);
+
+      nextPromise = paginator.toTail();
+      paginator.queryResolve({ items: [] });
+      await nextPromise;
+      expect(paginator.hasMoreTail).toBe(false);
+      expect(paginator.hasMoreHead).toBe(false);
+      expect(paginator.items).toEqual([{ id: 'id1' }, { id: 'id2' }]);
+      expect(paginator.cursor).toBeUndefined();
+      expect(paginator.offset).toBe(2);
+
+      paginator.toTail();
+      expect(paginator.isLoading).toBe(false);
+      expect(paginator.mockClientQuery).toHaveBeenCalledTimes(3);
+    });
+
+    it('reload() re-fetches the FIRST page (offset 0) after paginating, not the current page', async () => {
+      // Regression: executeQuery derived the query shape (which carries `offset`) BEFORE the reset
+      // restored the initial offset, so reload() on an already-paginated list re-fetched the current
+      // page (e.g. page 2) and replaced page 1 with it. Probe `this.offset` when the shape is derived
+      // to prove the reset applies to the OUTGOING request, not just to state after the fact.
+      const offsetAtQueryShape: number[] = [];
+      class OffsetProbePaginator extends IncompletePaginator {
+        getNextQueryShape = vi.fn(() => {
+          offsetAtQueryShape.push(this.offset);
+          return defaultNextQueryShape;
+        });
+      }
+      const paginator = new OffsetProbePaginator({ pageSize: 1 });
+
+      // Page 1 (offset 0 -> 1)
+      let nextPromise = paginator.toTail();
+      await sleep(0);
+      paginator.queryResolve({ items: [{ id: 'id1' }] });
+      await nextPromise;
+      expect(paginator.offset).toBe(1);
+
+      // Page 2 (offset 1 -> 2)
+      nextPromise = paginator.toTail();
+      paginator.queryResolve({ items: [{ id: 'id2' }] });
+      await nextPromise;
+      expect(paginator.offset).toBe(2);
+
+      // reload() must derive its request from offset 0, not the paginated 2.
+      nextPromise = paginator.reload();
+      await sleep(0);
+      expect(offsetAtQueryShape.at(-1)).toBe(0);
+
+      paginator.queryResolve({ items: [{ id: 'id1' }] });
+      await nextPromise;
+      expect(paginator.items).toEqual([{ id: 'id1' }]);
+    });
+
+    it('keepPreviousItems + reset is non-destructive: resets to page 1 but keeps the loaded items (offset)', async () => {
+      // `reset` restores the first-page offset (so the refresh fetches page 1, not the paginated page),
+      // while `keepPreviousItems` keeps the loaded items AND their storage intact — the fresh page is
+      // MERGED in, not blanked/collapsed. This is what keeps the channel list stable on a pull-to-refresh
+      // / reconnect refresh. Guards: (a) offset resets to page 1; (b) items stay visible during the fetch;
+      // (c) the list is merged (not collapsed to just page 1); (d) hasMoreHead stays anchored at 0.
+      const paginator = new Paginator({ pageSize: 1 });
+
+      // Page 1 (offset 0 -> 1)
+      let nextPromise = paginator.toTail();
+      await sleep(0);
+      paginator.queryResolve({ items: [{ id: 'id1' }] });
+      await nextPromise;
+      expect(paginator.hasMoreHead).toBe(false);
+      expect(paginator.offset).toBe(1);
+
+      // Page 2 (offset 1 -> 2)
+      nextPromise = paginator.toTail();
+      paginator.queryResolve({ items: [{ id: 'id2' }] });
+      await nextPromise;
+      expect(paginator.offset).toBe(2);
+      expect(paginator.items).toEqual([{ id: 'id1' }, { id: 'id2' }]);
+
+      // keepPreviousItems reset: offset resets to page 1, items stay visible during the fetch.
+      const refreshPromise = paginator.executeQuery({
+        keepPreviousItems: true,
+        reset: 'yes',
+      });
+      expect(paginator.offset).toBe(0); // fetches page 1, not the paginated offset
+      expect(paginator.items).toEqual([{ id: 'id1' }, { id: 'id2' }]); // still visible during the fetch
+
+      // The fresh page 1 merges in non-destructively — the loaded list is NOT collapsed to just page 1.
+      paginator.queryResolve({ items: [{ id: 'id1' }] });
+      await refreshPromise;
+      expect(paginator.items?.map((i) => i.id).sort()).toEqual(['id1', 'id2']);
+      expect(paginator.hasMoreHead).toBe(false);
+    });
+
+    it('keepPreviousItems + reset keeps the loaded items when an item is ingested mid-refresh (no rebuild-from-empty)', async () => {
+      // Regression: a keepPreviousItems refresh must NOT clear the item index. Otherwise an item ingested
+      // concurrently while the refresh query is in flight (e.g. a message.new from the offline-send replay
+      // on reconnect) rebuilds the list from an empty index and collapses it to just that one item until
+      // the query resolves. The previously-loaded items must survive the mid-refresh ingest.
+      const paginator = new Paginator({ pageSize: 3 });
+      const loadPromise = paginator.toTail();
+      await sleep(0);
+      paginator.queryResolve({ items: [a, b, c] });
+      await loadPromise;
+      expect(paginator.items).toEqual([a, b, c]);
+
+      // Start a keepPreviousItems refresh (query in flight, not yet resolved).
+      const refreshPromise = paginator.executeQuery({
+        keepPreviousItems: true,
+        reset: 'yes',
+      });
+
+      // A concurrent ingest lands mid-refresh — the already-loaded items must NOT be wiped.
+      paginator.ingestItem(v);
+      const idsMidRefresh = paginator.items?.map((item) => item.id) ?? [];
+      expect(idsMidRefresh).toEqual(expect.arrayContaining(['a', 'b', 'c']));
+
+      paginator.queryResolve({ items: [a, b, c] });
+      await refreshPromise;
+    });
+
+    it('ends the list only on a page shorter than pageSize, not on a larger capped response (offset)', async () => {
+      const paginator = new Paginator({ pageSize: 2 });
+      const load = async (items: TestItem[]) => {
+        const loadPromise = paginator.toTail();
+        await sleep(0);
+        paginator.queryResolve({ items });
+        await loadPromise;
+      };
+
+      // More than a page, as a refresh that asked for more and was capped by the server returns.
+      await load([a, b, c, d]);
+      expect(paginator.hasMoreTail).toBe(true);
+
+      await load([v, x]);
+      expect(paginator.hasMoreTail).toBe(true);
+
+      await load([y]);
+      expect(paginator.hasMoreTail).toBe(false);
+    });
+
+    describe('a page that filterQueryResults reduces to nothing', () => {
+      class BlockedFilteringPaginator extends Paginator {
+        filterQueryResults(items: TestItem[]) {
+          return items.filter((item) => !item.blocked);
+        }
+      }
+      const blocked1: TestItem = { id: 'blocked1', blocked: true };
+      const blocked2: TestItem = { id: 'blocked2', blocked: true };
+
+      it('keeps the loaded items and advances the offset by the raw page (offset)', async () => {
+        const paginator = new BlockedFilteringPaginator({ pageSize: 1 });
+
+        let nextPromise = paginator.toTail();
+        await sleep(0);
+        paginator.queryResolve({ items: [a] });
+        await nextPromise;
+        expect(paginator.items).toEqual([a]);
+
+        nextPromise = paginator.toTail();
+        paginator.queryResolve({ items: [blocked1] });
+        await nextPromise;
+        expect(paginator.items).toEqual([a]);
+        expect(paginator.offset).toBe(2);
+        expect(paginator.hasMoreTail).toBe(true);
+
+        nextPromise = paginator.toTail();
+        paginator.queryResolve({ items: [b] });
+        await nextPromise;
+        expect(paginator.items).toEqual([a, b]);
+        expect(paginator.offset).toBe(3);
+      });
+
+      it('keeps the loaded items and advances the cursor by the raw page (cursor)', async () => {
+        const paginator = new BlockedFilteringPaginator({
+          initialCursor: ZERO_PAGE_CURSOR,
+          pageSize: 1,
+        });
+
+        let nextPromise = paginator.toTail();
+        await sleep(0);
+        paginator.queryResolve({ items: [a], tailward: 'next1', headward: null });
+        await nextPromise;
+        expect(paginator.items).toEqual([a]);
+
+        nextPromise = paginator.toTail();
+        paginator.queryResolve({ items: [blocked1], tailward: 'next2', headward: null });
+        await nextPromise;
+        expect(paginator.items).toEqual([a]);
+        expect(paginator.cursor).toEqual({ tailward: 'next2', headward: null });
+        expect(paginator.hasMoreTail).toBe(true);
+
+        nextPromise = paginator.toTail();
+        paginator.queryResolve({ items: [b], tailward: null, headward: null });
+        await nextPromise;
+        expect(paginator.items).toEqual([a, b]);
+        expect(paginator.hasMoreTail).toBe(false);
+      });
+
+      it('still blanks the list on a reset first page', async () => {
+        const paginator = new BlockedFilteringPaginator({ pageSize: 2 });
+
+        let nextPromise = paginator.toTail();
+        await sleep(0);
+        paginator.queryResolve({ items: [a, b] });
+        await nextPromise;
+        expect(paginator.items).toEqual([a, b]);
+
+        nextPromise = paginator.executeQuery({ reset: 'yes' });
+        await sleep(0);
+        paginator.queryResolve({ items: [blocked1, blocked2] });
+        await nextPromise;
+        expect(paginator.items).toEqual([]);
+        expect(paginator.offset).toBe(2);
+        expect(paginator.hasMoreTail).toBe(true);
+      });
+    });
+
+    describe('keepPreviousItems + reset: where pagination continues after the refresh (offset)', () => {
+      const e: TestItem = { id: 'e', age: 18, name: 'E' };
+      const f: TestItem = { id: 'f', age: 16, name: 'F' };
+
+      const setup = async () => {
+        const offsetAtQueryShape: number[] = [];
+        class OffsetProbePaginator extends IncompletePaginator {
+          getNextQueryShape = vi.fn(() => {
+            offsetAtQueryShape.push(this.offset);
+            return defaultNextQueryShape;
+          });
+        }
+        const paginator = new OffsetProbePaginator({ pageSize: 2 });
+        for (const page of [
+          [a, b],
+          [c, d],
+          [e, f],
+        ]) {
+          const pagePromise = paginator.toTail();
+          await sleep(0);
+          paginator.queryResolve({ items: page });
+          await pagePromise;
+        }
+        expect(paginator.offset).toBe(6);
+
+        const refresh = async (page: TestItem[]) => {
+          const refreshPromise = paginator.executeQuery({
+            keepPreviousItems: true,
+            reset: 'yes',
+          });
+          await sleep(0);
+          expect(offsetAtQueryShape.at(-1)).toBe(0);
+          paginator.queryResolve({ items: page });
+          await refreshPromise;
+        };
+
+        const nextPageOffset = async () => {
+          const nextPromise = paginator.toTail();
+          await sleep(0);
+          const offset = offsetAtQueryShape.at(-1);
+          paginator.queryResolve({ items: [] });
+          await nextPromise;
+          return offset;
+        };
+
+        return { nextPageOffset, paginator, refresh };
+      };
+
+      it('continues from the end of the kept window, not from the end of page 1', async () => {
+        // Regression: the refresh reset the offset to page 1 and left it there, so the next pages
+        // re-fetched what was already loaded (offset 2, then 4) before anything new arrived.
+        const { nextPageOffset, paginator, refresh } = await setup();
+
+        await refresh([a, b]);
+
+        expect(paginator.items?.map((item) => item.id)).toEqual([
+          'a',
+          'b',
+          'c',
+          'd',
+          'e',
+          'f',
+        ]);
+        expect(paginator.offset).toBe(6);
+        expect(await nextPageOffset()).toBe(6);
+      });
+
+      it('counts the items that entered the list with the refreshed page', async () => {
+        const { nextPageOffset, paginator, refresh } = await setup();
+
+        // `v` entered the list at the top, pushing `b` onto page 2. The page still ends in the kept
+        // window, so the loaded window is contiguous and the server now has 7 items up to its end.
+        await refresh([v, a]);
+
+        expect(paginator.items).toHaveLength(7);
+        expect(paginator.offset).toBe(7);
+        expect(await nextPageOffset()).toBe(7);
+      });
+
+      it('continues from where it was when the refresh fails', async () => {
+        const { nextPageOffset, paginator } = await setup();
+
+        const refreshPromise = paginator.executeQuery({
+          keepPreviousItems: true,
+          reset: 'yes',
+        });
+        await sleep(0);
+        paginator.queryReject(new Error('offline'));
+        await refreshPromise;
+
+        expect(paginator.items).toHaveLength(6);
+        expect(paginator.offset).toBe(6);
+        expect(await nextPageOffset()).toBe(6);
+      });
+
+      it('continues from the end of page 1 when the page does not connect to the kept window', async () => {
+        // More than a page of new items entered above the kept window: the items between the page and
+        // the window are unknown, so continuing past the window would skip them.
+        const { nextPageOffset, paginator, refresh } = await setup();
+
+        await refresh([x, y]);
+
+        expect(paginator.offset).toBe(2);
+        expect(await nextPageOffset()).toBe(2);
+      });
+    });
+
+    describe('end marks of the intervals a page merges', () => {
+      // sorts above every other test item (highest age first)
+      const n: TestItem = { id: 'n', age: 40, name: 'N' };
+      const ids = (items: TestItem[] | undefined) => (items ?? []).map((item) => item.id);
+
+      const setup = (options: PaginatorOptions<TestItem, QueryShape> = {}) => {
+        const paginator = new Paginator({
+          itemIndex: new StoreBackedItemIndex<TestItem>({ getEntityId: ({ id }) => id }),
+          pageSize: 2,
+          ...options,
+        });
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
+        });
+        const load = async (
+          query: () => Promise<unknown>,
+          results: PaginationQueryReturnValue<TestItem>,
+        ) => {
+          const queryPromise = query();
+          await sleep(0);
+          paginator.queryResolve(results);
+          await queryPromise;
+        };
+        const refresh = (results: PaginationQueryReturnValue<TestItem>) =>
+          load(
+            () => paginator.executeQuery({ keepPreviousItems: true, reset: 'yes' }),
+            results,
+          );
+        return { load, paginator, refresh };
+      };
+
+      it('keeps paging after a full refreshed page merges the list marked as ended (offset)', async () => {
+        const { load, paginator, refresh } = setup();
+        await load(paginator.toTail, { items: [a, d] });
+        // a short page: the end of the list
+        await load(paginator.toTail, { items: [v] });
+        expect(paginator.hasMoreTail).toBe(false);
+
+        // `n` entered the list at the top: the full page says items may follow the kept list
+        await refresh({ items: [n, a] });
+
+        expect(ids(paginator.items)).toEqual(['n', 'a', 'd', 'v']);
+        expect(paginator.hasMoreTail).toBe(true);
+      });
+
+      it('keeps the tailward cursor of a refreshed page that merges the list marked as ended (cursor)', async () => {
+        const { load, paginator, refresh } = setup({ initialCursor: ZERO_PAGE_CURSOR });
+        await load(paginator.toTail, {
+          items: [a, d],
+          headward: null,
+          tailward: 'after-d',
+        });
+        await load(paginator.toTail, { items: [v], tailward: null });
+        expect(paginator.hasMoreTail).toBe(false);
+
+        await refresh({ items: [n, a], headward: null, tailward: 'after-a' });
+
+        expect(ids(paginator.items)).toEqual(['n', 'a', 'd', 'v']);
+        expect(paginator.hasMoreTail).toBe(true);
+        expect(paginator.cursor?.tailward).toBe('after-a');
+      });
+
+      it('keeps the headward cursor of a page that joins its interval to the head interval (cursor)', async () => {
+        const { load, paginator } = setup({
+          initialCursor: ZERO_PAGE_CURSOR,
+          pageSize: 3,
+        });
+        // the shown interval, and the head interval stored above it
+        await load(paginator.toTail, {
+          items: [v, x],
+          headward: 'before-v',
+          tailward: null,
+        });
+        paginator.ingestPage({ page: [n, a], isHead: true });
+
+        // the server says more items lie headward, whatever the head interval's mark says
+        await load(paginator.toHead, {
+          items: [a, d, v],
+          headward: 'before-a',
+          tailward: null,
+        });
+
+        expect(ids(paginator.items)).toEqual(['n', 'a', 'd', 'v', 'x']);
+        expect(paginator.hasMoreHead).toBe(true);
+        expect(paginator.cursor?.headward).toBe('before-a');
+      });
+    });
+
+    it('anchors hasMoreHead from a new start offset when the window is re-established via reset (offset)', async () => {
+      // To start a window mid-list, set the start offset and reset. isFirstPage is true,
+      // getStateBeforeFirstQuery runs, and hasMoreHead is anchored from the (new) start offset.
+      const paginator = new Paginator({ pageSize: 10 });
+
+      // First window at the head (offset 0) -> head loaded.
+      let queryPromise = paginator.toTail();
+      await sleep(0);
+      paginator.queryResolve({ items: [{ id: 'id1' }] });
+      await queryPromise;
+      expect(paginator.hasMoreHead).toBe(false);
+
+      // Move the start offset and re-establish the window from it (reload -> reset: 'yes').
+      paginator.initialOffset = 30;
+      queryPromise = paginator.reload();
+      await sleep(0);
+      paginator.queryResolve({ items: [{ id: 'id2' }] });
+      await queryPromise;
+
+      // Anchored correctly: a window starting at offset 30 reports items before it.
+      expect(paginator.hasMoreHead).toBe(true);
+    });
+
+    it('paginates to next pages debounced (cursor)', async () => {
+      vi.useFakeTimers();
+      const paginator = new Paginator({
+        debounceMs: 2000,
+        initialCursor: ZERO_PAGE_CURSOR,
+        pageSize: 1,
+      });
+
+      paginator.toTailDebounced();
+      expect(paginator.isLoading).toBe(false);
+      expect(paginator.hasMoreTail).toBe(true);
+      expect(paginator.hasMoreHead).toBe(true);
+      vi.advanceTimersByTime(2000);
+      // await first page load from the DB
+      await toNextTick();
+      expect(paginator.isLoading).toBe(true);
+      expect(paginator.hasMoreTail).toBe(true);
+      expect(paginator.hasMoreHead).toBe(true);
+
+      paginator.queryResolve({
+        items: [{ id: 'id1' }],
+        tailward: 'next1',
+        headward: 'prev1',
+      });
+      await paginator.queryPromise;
+      await toNextTick();
+      expect(paginator.isLoading).toBe(false);
+      expect(paginator.hasMoreTail).toBe(true);
+      expect(paginator.hasMoreHead).toBe(true);
+      expect(paginator.items).toEqual([{ id: 'id1' }]);
+      expect(paginator.cursor).toEqual({ tailward: 'next1', headward: 'prev1' });
+      expect(paginator.mockClientQuery).toHaveBeenCalledWith({
+        direction: 'tailward',
+        queryShape: defaultNextQueryShape,
+        reset: undefined,
+        retryCount: 0,
+      });
+
+      vi.useRealTimers();
+    });
+
+    it('paginates to next pages debounced (offset)', async () => {
+      vi.useFakeTimers();
+      const paginator = new Paginator({ debounceMs: 2000, pageSize: 1 });
+
+      paginator.toTailDebounced();
+      expect(paginator.isLoading).toBe(false);
+      expect(paginator.hasMoreTail).toBe(true);
+      expect(paginator.hasMoreHead).toBe(true);
+      vi.advanceTimersByTime(2000);
+      // await first page load from the DB
+      await toNextTick();
+      expect(paginator.isLoading).toBe(true);
+      expect(paginator.hasMoreTail).toBe(true);
+      // Head is known to be loaded once the offset-0 first-page load begins (see non-debounced case).
+      expect(paginator.hasMoreHead).toBe(false);
+
+      paginator.queryResolve({
+        items: [{ id: 'id1' }],
+      });
+      await paginator.queryPromise;
+      await toNextTick();
+      expect(paginator.isLoading).toBe(false);
+      expect(paginator.hasMoreTail).toBe(true);
+      expect(paginator.hasMoreHead).toBe(false);
+      expect(paginator.items).toEqual([{ id: 'id1' }]);
+      expect(paginator.cursor).toBeUndefined();
+      expect(paginator.offset).toBe(1);
+      expect(paginator.mockClientQuery).toHaveBeenCalledWith({
+        direction: 'tailward',
+        queryShape: defaultNextQueryShape,
+        reset: undefined,
+        retryCount: 0,
+      });
+
+      vi.useRealTimers();
+    });
+
+    it('paginates to a previous page (cursor only)', async () => {
+      const paginator = new Paginator({ initialCursor: ZERO_PAGE_CURSOR });
+      let nextPromise = paginator.toHead();
+      await sleep(0);
+      expect(paginator.isLoading).toBe(true);
+      expect(paginator.hasMoreTail).toBe(true);
+      expect(paginator.hasMoreHead).toBe(true);
+
+      paginator.queryResolve({
+        items: [{ id: 'id1' }],
+        tailward: 'next1',
+        headward: 'prev1',
+      });
+      await nextPromise;
+      expect(paginator.isLoading).toBe(false);
+      expect(paginator.hasMoreTail).toBe(true);
+      expect(paginator.hasMoreHead).toBe(true);
+      expect(paginator.items).toEqual([{ id: 'id1' }]);
+      expect(paginator.cursor).toEqual({ tailward: 'next1', headward: 'prev1' });
+      expect(paginator.mockClientQuery).toHaveBeenCalledWith({
+        direction: 'headward',
+        queryShape: defaultNextQueryShape,
+        reset: undefined,
+        retryCount: 0,
+      });
+
+      nextPromise = paginator.toHead();
+      expect(paginator.isLoading).toBe(true);
+      paginator.queryResolve({
+        items: [{ id: 'id2' }],
+        tailward: 'next2',
+        headward: 'prev2',
+      });
+      await nextPromise;
+      expect(paginator.hasMoreTail).toBe(true);
+      expect(paginator.hasMoreHead).toBe(true);
+      expect(paginator.items).toEqual([{ id: 'id1' }, { id: 'id2' }]);
+      expect(paginator.cursor).toEqual({ tailward: 'next2', headward: 'prev2' });
+
+      nextPromise = paginator.toHead();
+      paginator.queryResolve({ items: [] });
+      await nextPromise;
+      expect(paginator.hasMoreTail).toBe(false);
+      expect(paginator.hasMoreHead).toBe(false);
+      expect(paginator.items).toEqual([{ id: 'id1' }, { id: 'id2' }]);
+      expect(paginator.cursor).toEqual({ tailward: null, headward: null });
+
+      paginator.toHead();
+      expect(paginator.isLoading).toBe(false);
+    });
+
+    it('debounces the pagination to a previous page (cursor only)', async () => {
+      vi.useFakeTimers();
+      const paginator = new Paginator({
+        debounceMs: 2000,
+        initialCursor: ZERO_PAGE_CURSOR,
+      });
+
+      paginator.toHeadDebounced();
+      expect(paginator.isLoading).toBe(false);
+      expect(paginator.hasMoreTail).toBe(true);
+      expect(paginator.hasMoreHead).toBe(true);
+      vi.advanceTimersByTime(2000);
+      await toNextTick();
+      expect(paginator.isLoading).toBe(true);
+      expect(paginator.hasMoreTail).toBe(true);
+      expect(paginator.hasMoreHead).toBe(true);
+
+      paginator.queryResolve({
+        items: [{ id: 'id1' }],
+        tailward: 'next1',
+        headward: 'prev1',
+      });
+      await paginator.queryPromise;
+      await toNextTick();
+      expect(paginator.isLoading).toBe(false);
+      expect(paginator.hasMoreTail).toBe(true);
+      expect(paginator.hasMoreHead).toBe(true);
+      expect(paginator.items).toEqual([{ id: 'id1' }]);
+      expect(paginator.cursor).toEqual({ tailward: 'next1', headward: 'prev1' });
+      expect(paginator.mockClientQuery).toHaveBeenCalledWith({
+        direction: 'headward',
+        queryShape: defaultNextQueryShape,
+        reset: undefined,
+        retryCount: 0,
+      });
+      vi.useRealTimers();
+    });
+
+    it('cancelScheduledQuery cancels a pending debounced query', async () => {
+      vi.useFakeTimers();
+      const paginator = new Paginator({ debounceMs: 2000 });
+
+      paginator.toTailDebounced();
+      paginator.cancelScheduledQuery();
+
+      vi.advanceTimersByTime(2000);
+      await toNextTick();
+
+      expect(paginator.isLoading).toBe(false);
+      expect(paginator.mockClientQuery).not.toHaveBeenCalled();
+
+      vi.useRealTimers();
+    });
+
+    it('prevents pagination if another query is in progress', async () => {
+      const paginator = new Paginator();
+      const nextPromise1 = paginator.toTail();
+      // wait for the first page load from the DB
+      await sleep(0);
+      expect(paginator.isLoading).toBe(true);
+      expect(paginator.mockClientQuery).toHaveBeenCalledTimes(1);
+      const nextPromise2 = paginator.toTail();
+      paginator.queryResolve({
+        items: [{ id: 'id1' }],
+        tailward: 'next1',
+        headward: 'prev1',
+      });
+      await Promise.all([nextPromise1, nextPromise2]);
+      expect(paginator.mockClientQuery).toHaveBeenCalledTimes(1);
+    });
+
+    it('discards accumulated pages when the query shape is reset (sort/filter change)', async () => {
+      const paginator = new Paginator({ pageSize: 1 });
+      let nextPromise = paginator.toTail();
+      await sleep(0);
+      paginator.queryResolve({ items: [{ id: 'id1' }] });
+      await nextPromise;
+      expect(paginator.isLoading).toBe(false);
+      expect(paginator.hasMoreTail).toBe(true);
+      expect(paginator.hasMoreHead).toBe(false);
+      expect(paginator.items).toEqual([{ id: 'id1' }]);
+      expect(paginator.cursor).toBeUndefined();
+      expect(paginator.offset).toBe(1);
+
+      // A genuine query-shape change (new filter/sort) is applied by a subclass setter, which calls
+      // resetState() to discard the now-invalid interval cache before re-querying. Without that, the
+      // freshly loaded page would merge into the stale intervals from the previous shape.
+      paginator.getNextQueryShape.mockReturnValueOnce({
+        filters: { id: 'test' },
+        sort: [{ field: 'id', direction: -1 }],
+      });
+      paginator.resetState();
+      expect(paginator.items).toBeUndefined();
+      expect(paginator.offset).toBe(0);
+
+      nextPromise = paginator.toTail();
+      await sleep(0);
+      expect(paginator.isLoading).toBe(true);
+      expect(paginator.items).toBeUndefined();
+      paginator.queryResolve({ items: [{ id: 'id2' }] });
+      await nextPromise;
+      expect(paginator.isLoading).toBe(false);
+      expect(paginator.items).toEqual([{ id: 'id2' }]);
+      expect(paginator.offset).toBe(1);
+    });
+
+    it('resets the state if forced', async () => {
+      const paginator = new Paginator({ pageSize: 1 });
+      let nextPromise = paginator.toTail();
+      await sleep(0);
+      paginator.queryResolve({ items: [{ id: 'id1' }] });
+      await nextPromise;
+      expect(paginator.isLoading).toBe(false);
+      expect(paginator.hasMoreTail).toBe(true);
+      expect(paginator.hasMoreHead).toBe(false);
+      expect(paginator.items).toEqual([{ id: 'id1' }]);
+      expect(paginator.cursor).toBeUndefined();
+      expect(paginator.offset).toBe(1);
+
+      nextPromise = paginator.toTail({ reset: 'yes' });
+      await sleep(0);
+      expect(paginator.isLoading).toBe(true);
+      expect(paginator.items).toBeUndefined();
+      expect(paginator.offset).toBe(0);
+      paginator.queryResolve({ items: [{ id: 'id2' }] });
+      await nextPromise;
+      expect(paginator.isLoading).toBe(false);
+      expect(paginator.items).toEqual([{ id: 'id2' }]);
+      expect(paginator.offset).toBe(1);
+    });
+
+    it('does not reset the state if forced', async () => {
+      const paginator = new Paginator({ pageSize: 1 });
+      let nextPromise = paginator.toTail();
+      await sleep(0);
+      paginator.queryResolve({ items: [{ id: 'id1' }] });
+      await nextPromise;
+      expect(paginator.isLoading).toBe(false);
+      expect(paginator.hasMoreTail).toBe(true);
+      expect(paginator.hasMoreHead).toBe(false);
+      expect(paginator.items).toEqual([{ id: 'id1' }]);
+      expect(paginator.cursor).toBeUndefined();
+      expect(paginator.offset).toBe(1);
+
+      paginator.getNextQueryShape.mockReturnValueOnce({
+        filters: { id: 'test' },
+        sort: [{ field: 'id', direction: -1 }],
+      });
+      nextPromise = paginator.toTail({ reset: 'no' });
+      await sleep(0);
+      expect(paginator.items).toStrictEqual([{ id: 'id1' }]);
+      expect(paginator.offset).toBe(1);
+      paginator.queryResolve({ items: [{ id: 'id2' }] });
+      await nextPromise;
+      expect(paginator.items).toEqual([{ id: 'id1' }, { id: 'id2' }]);
+      expect(paginator.offset).toBe(2);
+    });
+
+    it('stores lastQueryError and clears it with the next successful query', async () => {
+      const paginator = new Paginator({ initialCursor: ZERO_PAGE_CURSOR });
+      let nextPromise = paginator.toTail();
+      // wait for the first page load from DB
+      await sleep(0);
+      const error = new Error('Failed');
+      paginator.queryReject(error);
+      // hand over to finish the cleanup and state update after the query execution
+      await sleep(0);
+      expect(paginator.lastQueryError).toEqual(error);
+      expect(paginator.isLoading).toEqual(false);
+
+      nextPromise = paginator.toTail();
+      paginator.queryResolve({
+        items: [{ id: 'id1' }],
+        tailward: 'next1',
+        headward: 'prev1',
+      });
+      await nextPromise;
+      expect(paginator.lastQueryError).toBeUndefined();
+      expect(paginator.items).toEqual([{ id: 'id1' }]);
+      expect(paginator.cursor).toEqual({ tailward: 'next1', headward: 'prev1' });
+    });
+
+    it('throws error if enabled', async () => {
+      const paginator = new Paginator({
+        initialCursor: ZERO_PAGE_CURSOR,
+        throwErrors: true,
+      });
+      let nextPromise = paginator.toTail();
+      // wait for the first page load from DB
+      await sleep(0);
+      const error = new Error('Failed');
+      paginator.queryReject(error);
+      await expect(nextPromise).rejects.toThrowError(error);
+      // hand over to finish the cleanup and state update after the query execution
+      await sleep(0);
+      expect(paginator.lastQueryError).toEqual(error);
+      expect(paginator.isLoading).toEqual(false);
+
+      nextPromise = paginator.toTail();
+      // wait for the first page load from DB
+      await sleep(0);
+      paginator.queryResolve({
+        items: [{ id: 'id1' }],
+        tailward: 'next1',
+        headward: 'prev1',
+      });
+      await nextPromise;
+      expect(paginator.lastQueryError).toBeUndefined();
+      expect(paginator.items).toEqual([{ id: 'id1' }]);
+      expect(paginator.cursor).toEqual({ tailward: 'next1', headward: 'prev1' });
+    });
+
+    it('retries the query', async () => {
+      vi.useFakeTimers();
+      const paginator = new Paginator({ initialCursor: ZERO_PAGE_CURSOR });
+      let nextPromise = paginator.toTail({ retryCount: 2 });
+      // wait for the first page load from DB
+      await toNextTick();
+      const error = new Error('Failed');
+      paginator.queryReject(error);
+      // hand over to finish the cleanup and state update after the query execution
+      await toNextTick();
+      // a retry is pending, so the failed attempt is not the query's error
+      expect(paginator.lastQueryError).toBeUndefined();
+      vi.advanceTimersByTime(DEFAULT_QUERY_CHANNELS_MS_BETWEEN_RETRIES);
+      await toNextTick();
+
+      paginator.queryResolve({
+        items: [{ id: 'id1' }],
+        tailward: 'next1',
+        headward: 'prev1',
+      });
+      await nextPromise;
+      expect(paginator.lastQueryError).toBeUndefined();
+      expect(paginator.items).toEqual([{ id: 'id1' }]);
+      expect(paginator.cursor).toEqual({ tailward: 'next1', headward: 'prev1' });
+      vi.useRealTimers();
+    });
+
+    // `retryCount` counts *retries*, so N retries mean N + 1 attempts. Failing every attempt and
+    // counting the query calls is the only way to pin that down — the test above resolves on the second
+    // attempt, which passes for either interpretation.
+    const failEveryAttempt = async (paginator: Paginator, attempts: number) => {
+      for (let attempt = 0; attempt < attempts; attempt++) {
+        await toNextTick();
+        paginator.queryReject(new Error('Failed'));
+        await toNextTick();
+        vi.advanceTimersByTime(DEFAULT_QUERY_CHANNELS_MS_BETWEEN_RETRIES);
+      }
+    };
+
+    it('does not retry by default', async () => {
+      vi.useFakeTimers();
+      const paginator = new Paginator({ initialCursor: ZERO_PAGE_CURSOR });
+      const promise = paginator.toTail();
+
+      await failEveryAttempt(paginator, 1);
+      await promise;
+
+      expect(paginator.config.retryCount).toBe(0);
+      expect(paginator.mockClientQuery).toHaveBeenCalledTimes(1);
+      vi.useRealTimers();
+    });
+
+    it('retries config.retryCount times, then gives up', async () => {
+      vi.useFakeTimers();
+      const retryCount = 3;
+      const paginator = new Paginator({ initialCursor: ZERO_PAGE_CURSOR, retryCount });
+      const sleepSpy = vi.spyOn(utils, 'sleep');
+      const promise = paginator.toTail();
+
+      // one attempt more than the configured retries; the extra iteration proves it stops there
+      await failEveryAttempt(paginator, retryCount + 2);
+      await promise;
+
+      expect(paginator.mockClientQuery).toHaveBeenCalledTimes(retryCount + 1);
+      // `toNextTick` sleeps too, so count only the waits between attempts
+      const retryWaits = sleepSpy.mock.calls.filter(
+        ([ms]) => ms === DEFAULT_QUERY_CHANNELS_MS_BETWEEN_RETRIES,
+      );
+      expect(retryWaits).toHaveLength(retryCount);
+      expect(paginator.lastQueryError).toEqual(new Error('Failed'));
+      vi.useRealTimers();
+    });
+
+    it('publishes lastQueryError once, after the last attempt fails', async () => {
+      vi.useFakeTimers();
+      const retryCount = 3;
+      const paginator = new Paginator({ initialCursor: ZERO_PAGE_CURSOR, retryCount });
+      const published: Array<Error | undefined> = [];
+      const unsubscribe = paginator.state.subscribeWithSelector(
+        ({ lastQueryError }) => ({ lastQueryError }),
+        ({ lastQueryError }) => published.push(lastQueryError),
+      );
+      const promise = paginator.toTail();
+
+      await failEveryAttempt(paginator, retryCount + 1);
+      await promise;
+      unsubscribe();
+
+      // the initial value, then the error once
+      expect(published).toEqual([undefined, new Error('Failed')]);
+      vi.useRealTimers();
+    });
+
+    it('stops retrying as soon as an attempt succeeds', async () => {
+      vi.useFakeTimers();
+      const paginator = new Paginator({ initialCursor: ZERO_PAGE_CURSOR, retryCount: 3 });
+      const promise = paginator.toTail();
+
+      const published: Array<Error | undefined> = [];
+      const unsubscribe = paginator.state.subscribeWithSelector(
+        ({ lastQueryError }) => ({ lastQueryError }),
+        ({ lastQueryError }) => published.push(lastQueryError),
+      );
+      await failEveryAttempt(paginator, 1);
+      await toNextTick();
+      paginator.queryResolve({ items: [{ id: 'id1' }] });
+      await promise;
+      unsubscribe();
+
+      expect(paginator.mockClientQuery).toHaveBeenCalledTimes(2);
+      expect(paginator.lastQueryError).toBeUndefined();
+      // a failure the retry recovered from never surfaces
+      expect(published).not.toContainEqual(new Error('Failed'));
+      expect(paginator.items).toEqual([{ id: 'id1' }]);
+      vi.useRealTimers();
+    });
+
+    it('lets a per-call retryCount override the configured one', async () => {
+      vi.useFakeTimers();
+      const paginator = new Paginator({ initialCursor: ZERO_PAGE_CURSOR, retryCount: 3 });
+      const promise = paginator.toTail({ retryCount: 0 });
+
+      await failEveryAttempt(paginator, 2);
+      await promise;
+
+      expect(paginator.mockClientQuery).toHaveBeenCalledTimes(1);
+      vi.useRealTimers();
+    });
+
+    it('executeQuery uses explicit queryShape and does not call getNextQueryShape', async () => {
+      const paginator = new Paginator();
+      const forcedShape: QueryShape = {
+        filters: { id: 'forced' },
+        sort: [{ field: 'id', direction: -1 }],
+      };
+
+      const promise = paginator.executeQuery({
+        direction: 'tailward',
+        queryShape: forcedShape,
+      });
+
+      await sleep(0);
+      paginator.queryResolve({ items: [] });
+      await promise;
+
+      expect(paginator.getNextQueryShape).not.toHaveBeenCalled();
+      expect(paginator.mockClientQuery).toHaveBeenCalledWith({
+        direction: 'tailward',
+        queryShape: forcedShape,
+        reset: undefined,
+        retryCount: 0,
+      });
+    });
+
+    describe('with updateState: false', () => {
+      const setUpShownWindow = () => {
+        const paginator = new Paginator({ itemIndex });
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
+        });
+        paginator.ingestPage({ page: [a, b], setActive: true });
+        const publishedItems: Array<TestItem[] | undefined> = [];
+        const unsubscribe = paginator.state.subscribeWithSelector(
+          ({ items }) => ({ items }),
+          ({ items }) => publishedItems.push(items),
+        );
+        return { paginator, publishedItems, unsubscribe };
+      };
+
+      const queryStoredPage = async (paginator: Paginator, items: TestItem[]) => {
+        const promise = paginator.executeQuery({
+          direction: 'tailward',
+          queryShape: defaultNextQueryShape,
+          reset: 'no',
+          updateState: false,
+        });
+        await sleep(0);
+        paginator.queryResolve({ items });
+        await promise;
+      };
+
+      it('prevents setting active interval and emitting new state', async () => {
+        const { paginator, publishedItems, unsubscribe } = setUpShownWindow();
+        // @ts-expect-error accessing protected property
+        const activeIntervalId = paginator._activeIntervalId;
+        const shownItems = paginator.items;
+
+        await queryStoredPage(paginator, [y, z]);
+        unsubscribe();
+
+        // @ts-expect-error accessing protected property
+        expect(paginator._activeIntervalId).toBe(activeIntervalId);
+        expect(paginator.items).toBe(shownItems);
+        expect(publishedItems).toEqual([shownItems]);
+        // @ts-expect-error accessing protected property
+        const storedIds = Array.from(paginator._itemIntervals.values()).map(
+          ({ itemIds }) => itemIds,
+        );
+        expect(storedIds).toEqual(expect.arrayContaining([['y', 'z']]));
+      });
+
+      it('still publishes a page that lands in the active interval', async () => {
+        const { paginator, publishedItems, unsubscribe } = setUpShownWindow();
+
+        await queryStoredPage(paginator, [b, c]);
+        unsubscribe();
+
+        expect(paginator.items).toEqual([a, b, c]);
+        expect(publishedItems.at(-1)).toEqual([a, b, c]);
+      });
+    });
+  });
+
+  describe('item management', () => {
+    const item1: TestItem = {
+      id: 'id1',
+      name: 'test',
+      age: 100,
+      teams: ['abc', 'efg'],
+    };
+
+    const item2 = {
+      ...item1,
+      id: 'id2',
+      name: 'test2',
+      age: 101,
+    };
+
+    const item3 = {
+      ...item1,
+      id: 'id3',
+      name: 'test3',
+      age: 102,
+    };
+
+    it('hasResults reflects whether items have been set', () => {
+      const paginator = new Paginator();
+      expect(paginator.hasResults).toBe(false);
+
+      paginator.state.partialNext({ items: [] });
+      expect(paginator.hasResults).toBe(true);
+
+      paginator.resetState();
+      expect(paginator.hasResults).toBe(false);
+    });
+
+    describe('matchesFilter', () => {
+      it('returns true if no filter is provided', async () => {
+        const paginator = new Paginator();
+        expect(paginator.matchesFilter(item1)).toBeTruthy();
+      });
+      it('returns false if does not match the filter', async () => {
+        const paginator = new Paginator();
+        // @ts-expect-error accessing protected property
+        paginator.buildMatchFilters = () => ({
+          name: { $eq: 'test1' },
+        });
+        expect(paginator.matchesFilter(item1)).toBeFalsy();
+      });
+      it('returns true if item matches the filter', async () => {
+        const paginator = new Paginator();
+        // @ts-expect-error accessing protected property
+        paginator.buildMatchFilters = () => ({
+          $or: [{ name: { $eq: 'test1' } }, { teams: { $contains: 'abc' } }],
+        });
+        expect(paginator.matchesFilter(item1)).toBeTruthy();
+      });
+    });
+
+    describe('locateByItem', () => {
+      afterEach(() => itemIndex.clear());
+
+      const tieBreakerById = (l: TestItem, r: TestItem) =>
+        l.id < r.id ? -1 : l.id > r.id ? 1 : 0;
+
+      it('returns -1 for empty list', () => {
+        const paginator = new Paginator();
+        const res = paginator.locateByItem(a);
+        expect(res).toEqual({
+          state: { currentIndex: -1, insertionIndex: 0 },
+        } as ItemCoordinates);
+      });
+
+      it('finds an existing item on a tie plateau (no ID tiebreaker)', () => {
+        const paginator = new Paginator();
+        // comparator: age desc only (ties produce a plateau)
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
+        });
+        // items are already sorted by age desc
+        paginator.state.partialNext({ items: [a, b, c, d] });
+
+        const location = paginator.locateByItem(c);
+        // c is at index 2 in [a, b, c, d]
+        // insertionIndex for identical key (age 25) is after the plateau
+        expect(location).toStrictEqual({
+          state: { currentIndex: 2, insertionIndex: 3 },
+        });
+      });
+
+      it('finds an existing item on a tie plateau (no ID tiebreaker) with itemIndex', () => {
+        const paginator = new Paginator({ itemIndex });
+        // comparator: age desc only (ties produce a plateau)
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
+        });
+        // items are already sorted by age desc
+        paginator.ingestPage({ page: [a, b, c, d], setActive: true });
+
+        const location = paginator.locateByItem(c);
+        expect(location).toStrictEqual({
+          state: { currentIndex: 2, insertionIndex: 3 },
+          interval: {
+            currentIndex: 2,
+            insertionIndex: 3,
+            interval: {
+              id: expect.any(String),
+              hasMoreHead: true,
+              hasMoreTail: true,
+              isHead: false,
+              isTail: false,
+              itemIds: ['a', 'b', 'c', 'd'],
+            },
+          },
+        });
+      });
+
+      it('returns insertion index when not found on a tie plateau (no ID tiebreaker)', () => {
+        const paginator = new Paginator();
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
+        });
+        paginator.state.partialNext({ items: [a, b, c, d] });
+
+        // same sort keys as b/c but different id; not present
+        const x: TestItem = { id: 'x', age: 25, name: 'X' };
+        const { state } = paginator.locateByItem(x);
+        // insertion point should be after the 25-plateau (after c at index 2)
+        expect(state?.currentIndex).toBe(-1);
+        expect(state?.insertionIndex).toBe(3);
+      });
+
+      it('returns insertion index when not found on a tie plateau (no ID tiebreaker) with itemIndex', () => {
+        const paginator = new Paginator({ itemIndex });
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
+        });
+        paginator.ingestPage({ page: [a, b, c, d], setActive: true });
+
+        // same sort keys as b/c but different id; not present
+        const x: TestItem = { id: 'x', age: 25, name: 'X' };
+        const location = paginator.locateByItem(x);
+        // insertion point should be after the 25-plateau (after c at index 2)
+        expect(location).toStrictEqual({
+          state: { currentIndex: -1, insertionIndex: 3 },
+          interval: {
+            currentIndex: -1,
+            insertionIndex: 3,
+            interval: {
+              id: expect.any(String),
+              hasMoreHead: true,
+              hasMoreTail: true,
+              isHead: false,
+              isTail: false,
+              itemIds: ['a', 'b', 'c', 'd'],
+            },
+          },
+        });
+      });
+
+      it('finds exact index with ID tiebreaker in comparator (pure O(log n))', () => {
+        const paginator = new Paginator();
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
+          // tie-breaker on id asc guarantees a total order
+          tiebreaker: tieBreakerById,
+        });
+
+        // With tiebreaker, the order within age==25 is by id asc: b (id 'b'), then c (id 'c')
+        paginator.state.partialNext({ items: [a, b, c, d] });
+
+        const { state } = paginator.locateByItem(c);
+        expect(state?.currentIndex).toBe(2);
+        // In this setting the insertionIndex is deterministic but not strictly needed when found
+        expect(state?.insertionIndex).toBe(3);
+      });
+
+      it('finds exact index with ID tiebreaker in comparator (pure O(log n)) with itemIndex', () => {
+        const paginator = new Paginator({ itemIndex });
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
+          // tie-breaker on id asc guarantees a total order
+          tiebreaker: tieBreakerById,
+        });
+
+        // With tiebreaker, the order within age==25 is by id asc: b (id 'b'), then c (id 'c')
+        paginator.ingestPage({ page: [a, b, c, d], setActive: true });
+        const location = paginator.locateByItem(c);
+        expect(location).toStrictEqual({
+          state: { currentIndex: 2, insertionIndex: 3 },
+          interval: {
+            currentIndex: 2,
+            insertionIndex: 3,
+            interval: {
+              id: expect.any(String),
+              hasMoreHead: true,
+              hasMoreTail: true,
+              isHead: false,
+              isTail: false,
+              itemIds: ['a', 'b', 'c', 'd'],
+            },
+          },
+        });
+      });
+
+      it('computes insertion for state at the beginning when needle sorts before all items', () => {
+        const paginator = new Paginator();
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
+          tiebreaker: tieBreakerById,
+        });
+        paginator.state.partialNext({ items: [a, b, c, d] });
+
+        const z: TestItem = { id: 'z', age: 40, name: 'Z' }; // highest age → goes to front
+        const { state } = paginator.locateByItem(z);
+        expect(state?.currentIndex).toBe(-1);
+        expect(state?.insertionIndex).toBe(0);
+      });
+
+      it('computes insertion for state at the beginning when needle sorts before all items with itemIndex', () => {
+        const paginator = new Paginator({ itemIndex });
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
+          tiebreaker: tieBreakerById,
+        });
+        paginator.ingestPage({ page: [a, b, c, d], setActive: true });
+
+        const z: TestItem = { id: 'z', age: 40, name: 'Z' }; // highest age → goes to front
+        const location = paginator.locateByItem(z);
+        // interval does not exist so it is not included in the search result
+        expect(location).toStrictEqual({
+          state: { currentIndex: -1, insertionIndex: 0 },
+        });
+      });
+
+      it('computes insertion for state at the end when needle sorts after all items', () => {
+        const paginator = new Paginator();
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
+          tiebreaker: tieBreakerById,
+        });
+        paginator.state.partialNext({ items: [a, b, c, d] });
+
+        const z: TestItem = { id: 'z', age: 10, name: 'Z' }; // lowest age → goes to end
+        const { state } = paginator.locateByItem(z);
+        expect(state?.currentIndex).toBe(-1);
+        expect(state?.insertionIndex).toBe(4);
+      });
+
+      it('computes insertion for state at the end when needle sorts after all items with item index', () => {
+        const paginator = new Paginator({ itemIndex });
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
+          tiebreaker: tieBreakerById,
+        });
+        paginator.ingestPage({ page: [a, b, c, d], setActive: true });
+
+        const z: TestItem = { id: 'z', age: 10, name: 'Z' }; // lowest age → goes to end
+        const location = paginator.locateByItem(z);
+        // interval does not exist so it is not included in the search result
+        expect(location).toStrictEqual({
+          state: { currentIndex: -1, insertionIndex: 4 },
+        });
+      });
+
+      it('locates the correct interval when multiple intervals exist', () => {
+        const paginator = new Paginator({ itemIndex });
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
+          tiebreaker: tieBreakerById,
+        });
+        paginator.ingestPage({ page: [a, b, c, d], setActive: true });
+        paginator.ingestPage({ page: [v, x, y, z], setActive: true });
+
+        const location = paginator.locateByItem(z);
+        // interval does not exist so it is not included in the search result
+        expect(location).toStrictEqual({
+          state: { currentIndex: 3, insertionIndex: 4 },
+          interval: {
+            interval: {
+              id: expect.any(String),
+              hasMoreHead: true,
+              hasMoreTail: true,
+              isHead: false,
+              isTail: false,
+              itemIds: ['v', 'x', 'y', 'z'],
+            },
+            currentIndex: 3,
+            insertionIndex: 4,
+          },
+        });
+      });
+    });
+
+    describe('ingestPage', () => {
+      let paginator: Paginator;
+      beforeEach(() => {
+        paginator = new Paginator({ itemIndex });
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
+        });
+      });
+
+      it('placeQueryPage treats jump query as non-directional (direction undefined)', async () => {
+        class JumpAwarePaginator extends Paginator {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          isJumpQueryShape(_queryShape: QueryShape): boolean {
+            return true;
+          }
+        }
+
+        const jumpPaginator = new JumpAwarePaginator({ itemIndex });
+        jumpPaginator.sortComparator = paginator.sortComparator;
+
+        const ingestSpy = vi.spyOn(jumpPaginator, 'ingestPage');
+
+        await jumpPaginator.placeQueryPage({
+          direction: undefined,
+          isFirstPage: true,
+          queryShape: defaultNextQueryShape,
+          requestedPageSize: 10,
+          results: { items: [a] },
+          updateState: false,
+        });
+
+        expect(ingestSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            policy: 'strict-overlap-only',
+            isHead: undefined,
+            isTail: undefined,
+            targetIntervalId: undefined,
+          }),
+        );
+      });
+
+      it('sorts items according to effectiveSortComparator', () => {
+        paginator.ingestPage({ page: [c, a, b, d, b, c, a], setActive: true });
+        // sorts by age, not id
+        expect(paginator.items).toStrictEqual([a, a, c, b, b, c, d]);
+        // @ts-expect-error accessing protected property _itemIntervals
+        expect(paginator._itemIntervals.size).toBe(1);
+        // @ts-expect-error accessing protected property _itemIntervals
+        expect(Array.from(paginator._itemIntervals.values())).toStrictEqual([
+          {
+            id: expect.any(String),
+            hasMoreHead: true,
+            hasMoreTail: true,
+            isHead: false,
+            isTail: false,
+            itemIds: ['a', 'a', 'c', 'b', 'b', 'c', 'd'],
+          },
+        ]);
+      });
+
+      it('sets items in intervals only', () => {
+        paginator.ingestPage({ page: [c, a, b, d, b, c, a] });
+        expect(paginator.items).toBeUndefined();
+        // @ts-expect-error accessing protected property _itemIntervals
+        expect(paginator._itemIntervals.size).toBe(1);
+        // @ts-expect-error accessing protected property _itemIntervals
+        expect(Array.from(paginator._itemIntervals.values())).toStrictEqual([
+          {
+            id: expect.any(String),
+            hasMoreHead: true,
+            hasMoreTail: true,
+            isHead: false,
+            isTail: false,
+            itemIds: ['a', 'a', 'c', 'b', 'b', 'c', 'd'],
+          },
+        ]);
+      });
+
+      it('ingests into the anchored head interval', () => {
+        paginator.ingestPage({ page: [c, d], isHead: true, setActive: true });
+        expect(paginator.items).toStrictEqual([c, d]);
+        // @ts-expect-error accessing protected property _itemIntervals
+        expect(paginator._itemIntervals.size).toBe(1);
+        // @ts-expect-error accessing protected property _itemIntervals
+        expect(Array.from(paginator._itemIntervals.values())).toStrictEqual([
+          {
+            id: expect.any(String),
+            hasMoreHead: false,
+            hasMoreTail: true,
+            isHead: true,
+            isTail: false,
+            itemIds: ['c', 'd'],
+          },
+        ]);
+
+        paginator.ingestPage({ page: [a] });
+        // ingestPage without setActive does not emit state.items
+        expect(paginator.items).toStrictEqual([c, d]);
+        // @ts-expect-error accessing protected property _itemIntervals
+        expect(paginator._itemIntervals.size).toBe(1);
+        // @ts-expect-error accessing protected property _itemIntervals
+        expect(Array.from(paginator._itemIntervals.values())).toStrictEqual([
+          {
+            id: expect.any(String),
+            hasMoreHead: false,
+            hasMoreTail: true,
+            isHead: true,
+            isTail: false,
+            itemIds: ['a', 'c', 'd'],
+          },
+        ]);
+      });
+
+      it('does not force-merge into head interval under strict-overlap-only policy', () => {
+        paginator.ingestPage({ page: [c, d], isHead: true, setActive: true });
+
+        // Under default ('auto') policy, ingesting [a] would be merged into the head interval
+        // even though the sort bounds do not overlap.
+        paginator.ingestPage({ page: [a], policy: 'strict-overlap-only' });
+
+        // @ts-expect-error accessing protected property _itemIntervals
+        const intervals = Array.from(paginator._itemIntervals.values());
+        expect(intervals).toHaveLength(2);
+
+        const headInterval = intervals.find(
+          (itv) => 'isHead' in itv && (itv as { isHead: boolean }).isHead,
+        );
+        expect(headInterval).toBeTruthy();
+        expect(headInterval).toMatchObject({
+          isHead: true,
+          isTail: false,
+          itemIds: ['c', 'd'],
+        });
+
+        const otherInterval = intervals.find(
+          (itv) => !('isHead' in itv) || !(itv as { isHead: boolean }).isHead,
+        );
+        expect(otherInterval).toBeTruthy();
+        expect(otherInterval).toMatchObject({
+          isHead: false,
+          isTail: false,
+          itemIds: ['a'],
+        });
+      });
+
+      it('merges intervals when they strictly overlap under strict-overlap-only policy', () => {
+        paginator.ingestPage({ page: [b, c], setActive: true });
+        paginator.ingestPage({ page: [c, d], policy: 'strict-overlap-only' });
+
+        // @ts-expect-error accessing protected property _itemIntervals
+        expect(paginator._itemIntervals.size).toBe(1);
+        // @ts-expect-error accessing protected property _itemIntervals
+        expect(Array.from(paginator._itemIntervals.values())).toStrictEqual([
+          {
+            id: expect.any(String),
+            hasMoreHead: true,
+            hasMoreTail: true,
+            isHead: false,
+            isTail: false,
+            itemIds: ['b', 'c', 'd'],
+          },
+        ]);
+      });
+
+      it('prepends and appends a page', () => {
+        paginator.ingestPage({ page: [b, c], setActive: true });
+        expect(paginator.items).toStrictEqual([b, c]);
+        // @ts-expect-error accessing protected property _itemIntervals
+        expect(paginator._itemIntervals.size).toBe(1);
+        // @ts-expect-error accessing protected property _itemIntervals
+        expect(Array.from(paginator._itemIntervals.values())).toStrictEqual([
+          {
+            id: expect.any(String),
+            hasMoreHead: true,
+            hasMoreTail: true,
+            isHead: false,
+            isTail: false,
+            itemIds: ['b', 'c'],
+          },
+        ]);
+
+        paginator.ingestPage({ page: [a] });
+        expect(paginator.items).toStrictEqual([b, c]);
+        // @ts-expect-error accessing protected property _itemIntervals
+        expect(paginator._itemIntervals.size).toBe(2);
+        // @ts-expect-error accessing protected property _itemIntervals
+        expect(Array.from(paginator._itemIntervals.values())).toStrictEqual([
+          {
+            id: expect.any(String),
+            hasMoreHead: true,
+            hasMoreTail: true,
+            isHead: false,
+            isTail: false,
+            itemIds: ['a'],
+          },
+          {
+            id: expect.any(String),
+            hasMoreHead: true,
+            hasMoreTail: true,
+            isHead: false,
+            isTail: false,
+            itemIds: ['b', 'c'],
+          },
+        ]);
+
+        paginator.ingestPage({ page: [d] });
+        expect(paginator.items).toStrictEqual([b, c]);
+        // @ts-expect-error accessing protected property _itemIntervals
+        expect(paginator._itemIntervals.size).toBe(3);
+        // @ts-expect-error accessing protected property _itemIntervals
+        expect(Array.from(paginator._itemIntervals.values())).toStrictEqual([
+          {
+            id: expect.any(String),
+            hasMoreHead: true,
+            hasMoreTail: true,
+            isHead: false,
+            isTail: false,
+            itemIds: ['a'],
+          },
+          {
+            id: expect.any(String),
+            hasMoreHead: true,
+            hasMoreTail: true,
+            isHead: false,
+            isTail: false,
+            itemIds: ['b', 'c'],
+          },
+          {
+            id: expect.any(String),
+            hasMoreHead: true,
+            hasMoreTail: true,
+            isHead: false,
+            isTail: false,
+            itemIds: ['d'],
+          },
+        ]);
+      });
+
+      it('ingests into the anchored tail interval', () => {
+        paginator.ingestPage({ page: [b, c], isTail: true, setActive: true });
+        expect(paginator.items).toStrictEqual([b, c]);
+        // @ts-expect-error accessing protected property _itemIntervals
+        expect(Array.from(paginator._itemIntervals.values())).toStrictEqual([
+          {
+            id: expect.any(String),
+            hasMoreHead: true,
+            hasMoreTail: false,
+            isHead: false,
+            isTail: true,
+            itemIds: ['b', 'c'],
+          },
+        ]);
+
+        paginator.ingestPage({ page: [d] });
+        // ingestPage without setActive does not emit state.items
+        expect(paginator.items).toStrictEqual([b, c]);
+        // @ts-expect-error accessing protected property _itemIntervals
+        expect(paginator._itemIntervals.size).toBe(1);
+        // @ts-expect-error accessing protected property _itemIntervals
+        expect(Array.from(paginator._itemIntervals.values())).toStrictEqual([
+          {
+            id: expect.any(String),
+            hasMoreHead: true,
+            hasMoreTail: false,
+            isHead: false,
+            isTail: true,
+            itemIds: ['b', 'c', 'd'],
+          },
+        ]);
+      });
+
+      it('removes an item from the interval that holds it, even after it sorts into another one', async () => {
+        const index = new StoreBackedItemIndex<TestItem>({ getEntityId: ({ id }) => id });
+        paginator = new Paginator({ itemIndex: index });
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
+        });
+        paginator.ingestPage({ page: [b, d], setActive: true });
+        // Parked below the loaded window, then updated in place so it now sorts inside it, the way a
+        // listed channel moves once its latest message arrives.
+        const moved: TestItem = { id: 'moved', age: 1 };
+        paginator.ingestItem(moved);
+        moved.age = 22;
+
+        paginator.removeItem({ id: 'moved' });
+
+        // @ts-expect-error accessing protected property _itemIntervals
+        const intervals = Array.from(paginator._itemIntervals.values()) as {
+          itemIds: string[];
+        }[];
+        expect(intervals.some((interval) => interval.itemIds.includes('moved'))).toBe(
+          false,
+        );
+
+        // The next query reconciles against the intervals and has to finish.
+        const query = paginator.toTail();
+        await sleep(0);
+        paginator.queryResolve({ items: [x] });
+        await query.catch(() => undefined);
+        expect(paginator.isLoading).toBe(false);
+      });
+
+      it('locates unmoved and new items without scanning every interval', () => {
+        const index = new StoreBackedItemIndex<TestItem>({ getEntityId: ({ id }) => id });
+        paginator = new Paginator({ itemIndex: index });
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
+        });
+        const stored: TestItem = { id: 'stored', age: 22 };
+        paginator.ingestPage({ page: [b, stored, d], setActive: true });
+        // @ts-expect-error spying on a protected method
+        const scan = vi.spyOn(paginator, 'findIntervalHoldingItem');
+        // @ts-expect-error spying on a protected method
+        const search = vi.spyOn(paginator, 'locateByItemInInterval');
+
+        // Updated in place without changing where it sorts.
+        stored.name = 'renamed';
+        paginator.ingestItem(stored);
+        expect(scan).not.toHaveBeenCalled();
+
+        // No interval holds it, so its position is found without walking the interval for it.
+        search.mockClear();
+        paginator.ingestItem({ id: 'new', age: 21 });
+        expect(search).toHaveBeenCalledWith(
+          expect.objectContaining({ plateauScan: false }),
+        );
+        expect(scan).not.toHaveBeenCalled();
+        expect(paginator.items?.map(({ id }) => id)).toEqual(['b', 'stored', 'new', 'd']);
+      });
+
+      it('merges all the overlapping anchored intervals, parts of logical intervals with target interval', () => {
+        let keys: string[] = [];
+        paginator.ingestPage({ page: [c, d], setActive: true });
+        paginator.ingestPage({ page: [b] });
+        // @ts-expect-error accessing protected property _itemIntervals
+        expect(paginator._itemIntervals.size).toBe(1);
+        // @ts-expect-error accessing protected property _itemIntervals
+        expect(Array.from(paginator._itemIntervals.values())).toStrictEqual([
+          {
+            id: expect.any(String),
+            hasMoreHead: true,
+            hasMoreTail: true,
+            isHead: false,
+            isTail: false,
+            itemIds: ['c', 'b', 'd'], // b.age === c.age => merged
+          },
+        ]);
+        // @ts-expect-error accessing protected property _itemIntervals
+        keys = Array.from(paginator._itemIntervals.keys());
+
+        paginator.ingestItem(a); // leads to creation of logical head
+        // ingestItem does not emit into state.items if active interval isn't affected
+        expect(paginator.items).toStrictEqual([c, d]);
+        // @ts-expect-error accessing protected property _itemIntervals
+        expect(Array.from(paginator._itemIntervals.values())).toStrictEqual([
+          {
+            id: LOGICAL_HEAD_INTERVAL_ID,
+            itemIds: ['a'],
+          },
+          {
+            id: keys[0],
+            hasMoreHead: true,
+            hasMoreTail: true,
+            isHead: false,
+            isTail: false,
+            itemIds: ['c', 'b', 'd'],
+          },
+        ]);
+
+        // @ts-expect-error accessing protected property _itemIntervals
+        keys = Array.from(paginator._itemIntervals.keys());
+
+        paginator.ingestItem(z); // leads to creation of logical tail
+        expect(paginator.items).toStrictEqual([c, d]);
+        // @ts-expect-error accessing protected property _itemIntervals
+        expect(paginator._itemIntervals.size).toBe(3);
+        // @ts-expect-error accessing protected property _itemIntervals
+        expect(Array.from(paginator._itemIntervals.values())).toStrictEqual([
+          {
+            id: LOGICAL_HEAD_INTERVAL_ID,
+            itemIds: ['a'],
+          },
+          {
+            id: keys[1],
+            hasMoreHead: true,
+            hasMoreTail: true,
+            isHead: false,
+            isTail: false,
+            itemIds: ['c', 'b', 'd'],
+          },
+          {
+            id: LOGICAL_TAIL_INTERVAL_ID,
+            itemIds: ['z'],
+          },
+        ]);
+
+        // @ts-expect-error accessing protected property _itemIntervals
+        keys = Array.from(paginator._itemIntervals.keys());
+
+        paginator.ingestPage({ page: [x] });
+        expect(paginator.items).toStrictEqual([c, d]);
+        // @ts-expect-error accessing protected property _itemIntervals
+        expect(paginator._itemIntervals.size).toBe(4);
+        // @ts-expect-error accessing protected property _itemIntervals
+        expect(Array.from(paginator._itemIntervals.values())).toStrictEqual([
+          {
+            id: LOGICAL_HEAD_INTERVAL_ID,
+            itemIds: ['a'],
+          },
+          {
+            id: keys[1],
+            hasMoreHead: true,
+            hasMoreTail: true,
+            isHead: false,
+            isTail: false,
+            itemIds: ['c', 'b', 'd'],
+          },
+          {
+            id: expect.any(String), // new interval with new id
+            hasMoreHead: true,
+            hasMoreTail: true,
+            isHead: false,
+            isTail: false,
+            itemIds: ['x'],
+          },
+          {
+            id: LOGICAL_TAIL_INTERVAL_ID,
+            itemIds: ['z'],
+          },
+        ]);
+        // @ts-expect-error accessing protected property _itemIntervals
+        keys = Array.from(paginator._itemIntervals.keys());
+
+        paginator.ingestPage({ page: [y], targetIntervalId: keys[2] });
+        expect(paginator.items).toStrictEqual([c, d]);
+        // @ts-expect-error accessing protected property _itemIntervals
+        expect(paginator._itemIntervals.size).toBe(4);
+        // @ts-expect-error accessing protected property _itemIntervals
+        expect(Array.from(paginator._itemIntervals.values())).toStrictEqual([
+          {
+            id: LOGICAL_HEAD_INTERVAL_ID,
+            itemIds: ['a'],
+          },
+          {
+            id: keys[1],
+            hasMoreHead: true,
+            hasMoreTail: true,
+            isHead: false,
+            isTail: false,
+            itemIds: ['c', 'b', 'd'],
+          },
+          {
+            id: keys[2],
+            hasMoreHead: true,
+            hasMoreTail: true,
+            isHead: false,
+            isTail: false,
+            itemIds: ['x', 'y'],
+          },
+          {
+            id: LOGICAL_TAIL_INTERVAL_ID,
+            itemIds: ['z'],
+          },
+        ]);
+
+        // @ts-expect-error accessing protected property _itemIntervals
+        keys = Array.from(paginator._itemIntervals.keys());
+        const previousAnchoredPageId = keys[1];
+
+        paginator.ingestPage({ page: [a, b, z] });
+        // @ts-expect-error accessing protected property _itemIntervals
+        expect(paginator._itemIntervals.size).toBe(1);
+        // @ts-expect-error accessing protected property _itemIntervals
+        const currentAnchoredPageId = Array.from(paginator._itemIntervals.keys())[0];
+        expect(previousAnchoredPageId).toBe(currentAnchoredPageId);
+        // @ts-expect-error accessing protected property _itemIntervals
+        expect(Array.from(paginator._itemIntervals.values())).toStrictEqual([
+          {
+            id: currentAnchoredPageId,
+            hasMoreHead: true,
+            hasMoreTail: true,
+            isHead: false,
+            isTail: false,
+            // original interval (containing 'c') served as a base, therefore 'b' is merged after 'c'
+            itemIds: ['a', 'c', 'b', 'd', 'x', 'y', 'z'],
+          },
+        ]);
+      });
+
+      // A live update can put an item into a logical interval before any page has been loaded (a
+      // channel archived while the archived list is still untouched). The first query must then be
+      // recognised as a first page, so the page is ingested with `isHead` and the logical interval
+      // it is holding gets reconciled instead of surviving next to the loaded window with the same
+      // id in it.
+      describe('first page after a live update into a logical interval', () => {
+        const intervalsOf = (p: Paginator) =>
+          // @ts-expect-error accessing protected property _itemIntervals
+          Array.from(p._itemIntervals.values()).map((itv) => ({
+            id: itv.id,
+            itemIds: itv.itemIds,
+          }));
+
+        const idHomes = (p: Paginator, id: string) =>
+          intervalsOf(p).filter((itv) => itv.itemIds.includes(id)).length;
+
+        const queryFirstPageAfterIngesting = async (
+          ingested: TestItem,
+          page: TestItem[],
+        ) => {
+          const freshPaginator = new Paginator({
+            itemIndex: new StoreBackedItemIndex<TestItem>({
+              getEntityId: ({ id }) => id,
+            }),
+            pageSize: page.length,
+          });
+          freshPaginator.sortComparator = makeComparator<TestItem>({
+            sort: [{ field: 'age', direction: -1 }],
+          });
+
+          freshPaginator.ingestItem(ingested); // live update → logical head
+          expect(freshPaginator.items).toStrictEqual([ingested]);
+          // items are present, but no page has been loaded — the next query is still a first page
+          expect(freshPaginator.isInitialized).toBe(false);
+
+          const queryPromise = freshPaginator.toTail();
+          await sleep(0);
+          freshPaginator.queryResolve({ items: page });
+          await queryPromise;
+
+          return freshPaginator;
+        };
+
+        // The ingest publishes `items`, but no page has been loaded — so the list's own query is
+        // still its first page and must be ingested as the head of the list. Treating it as a
+        // continuation leaves the loaded window claiming there are pages headward of it.
+        it('treats the query as a first page rather than a continuation', async () => {
+          const freshPaginator = new Paginator({
+            itemIndex: new StoreBackedItemIndex<TestItem>({
+              getEntityId: ({ id }) => id,
+            }),
+            pageSize: 3,
+          });
+          freshPaginator.sortComparator = makeComparator<TestItem>({
+            sort: [{ field: 'age', direction: -1 }],
+          });
+
+          freshPaginator.ingestItem(b);
+          expect(freshPaginator.items).toStrictEqual([b]); // items are published…
+          expect(
+            freshPaginator.isFirstPageQuery({ queryShape: defaultNextQueryShape }),
+          ).toBe(true); // …yet the next query still starts the list
+
+          const queryPromise = freshPaginator.toTail();
+          await sleep(0);
+          freshPaginator.queryResolve({ items: [a, b, d] });
+          await queryPromise;
+
+          expect(freshPaginator.hasMoreHead).toBe(false);
+          // @ts-expect-error accessing protected property _itemIntervals
+          expect(Array.from(freshPaginator._itemIntervals.values())).toStrictEqual([
+            expect.objectContaining({ hasMoreHead: false, isHead: true }),
+          ]);
+        });
+
+        // a(30) > b(25) > d(20) — distinct ages, so the expected order is unambiguous
+        it('absorbs the ingested item into the queried page', async () => {
+          const freshPaginator = await queryFirstPageAfterIngesting(b, [a, b, d]);
+
+          expect(idHomes(freshPaginator, b.id)).toBe(1);
+          expect(freshPaginator.items).toStrictEqual([a, b, d]);
+          expect(intervalsOf(freshPaginator)).toStrictEqual([
+            { id: expect.any(String), itemIds: ['a', 'b', 'd'] },
+          ]);
+        });
+
+        it('moves an ingested item the queried page sorts above to the other side', async () => {
+          // z(1) is the oldest item — it sorts past the tail of the page
+          const freshPaginator = await queryFirstPageAfterIngesting(z, [a, b, d]);
+
+          // stored exactly once, and no longer in the live head — that side means "newer than the
+          // loaded window", which the page just disproved
+          expect(idHomes(freshPaginator, z.id)).toBe(1);
+          expect(
+            intervalsOf(freshPaginator).find((itv) => itv.itemIds.includes(z.id))?.id,
+          ).toBe(LOGICAL_TAIL_INTERVAL_ID);
+          expect(freshPaginator.items).toStrictEqual([a, b, d]);
+        });
+
+        it('treats the query after resetState as a first page again', () => {
+          const freshPaginator = new Paginator({
+            itemIndex: new StoreBackedItemIndex<TestItem>({
+              getEntityId: ({ id }) => id,
+            }),
+          });
+          freshPaginator.sortComparator = makeComparator<TestItem>({
+            sort: [{ field: 'age', direction: -1 }],
+          });
+
+          freshPaginator.placeQueryPage({
+            direction: 'tailward',
+            isFirstPage: true,
+            queryShape: defaultNextQueryShape,
+            requestedPageSize: 3,
+            results: { items: [a, b, c] },
+          });
+          expect(freshPaginator.isInitialized).toBe(true);
+
+          freshPaginator.resetState();
+
+          // same shape as before — only the reset tells the paginator nothing is loaded
+          expect(freshPaginator.isInitialized).toBe(false);
+          expect(
+            freshPaginator.isFirstPageQuery({ queryShape: defaultNextQueryShape }),
+          ).toBe(true);
+        });
+      });
+
+      it('marks head and tail anchored intervals and removes existing logical intervals', () => {
+        paginator.ingestItem(b);
+        paginator.ingestPage({ page: [d] });
+        paginator.ingestItem(y);
+        // @ts-expect-error accessing protected property _itemIntervals
+        expect(Array.from(paginator._itemIntervals.values())).toStrictEqual([
+          {
+            id: LOGICAL_HEAD_INTERVAL_ID,
+            itemIds: ['b'],
+          },
+          {
+            id: expect.any(String),
+            hasMoreHead: true,
+            hasMoreTail: true,
+            isHead: false,
+            isTail: false,
+            itemIds: ['d'],
+          },
+          {
+            id: LOGICAL_TAIL_INTERVAL_ID,
+            itemIds: ['y'],
+          },
+        ]);
+
+        paginator.ingestPage({ page: [a], isHead: true });
+        paginator.ingestPage({ page: [z], isTail: true });
+
+        // @ts-expect-error accessing protected property _itemIntervals
+        expect(Array.from(paginator._itemIntervals.values())).toStrictEqual([
+          {
+            id: expect.any(String),
+            hasMoreHead: false,
+            hasMoreTail: true,
+            isHead: true,
+            isTail: false,
+            itemIds: ['a'],
+          },
+          {
+            id: expect.any(String),
+            hasMoreHead: true,
+            hasMoreTail: true,
+            isHead: false,
+            isTail: false,
+            itemIds: ['b'],
+          },
+          {
+            id: expect.any(String),
+            hasMoreHead: true,
+            hasMoreTail: true,
+            isHead: false,
+            isTail: false,
+            itemIds: ['d'],
+          },
+          {
+            id: expect.any(String),
+            hasMoreHead: true,
+            hasMoreTail: true,
+            isHead: false,
+            isTail: false,
+            itemIds: ['y'],
+          },
+          {
+            id: expect.any(String),
+            hasMoreHead: true,
+            hasMoreTail: false,
+            isHead: false,
+            isTail: true,
+            itemIds: ['z'],
+          },
+        ]);
+      });
+
+      it('merges incomplete head intervals with existing logical intervals and sorts their items', () => {
+        paginator.ingestItem(a); // logical head
+        paginator.ingestPage({ page: [d] }); // anchored interval
+        paginator.ingestItem(y); // logical tail
+
+        paginator.ingestPage({ page: [c], isHead: true });
+        paginator.ingestPage({ page: [x], isTail: true });
+
+        // @ts-expect-error accessing protected property _itemIntervals
+        expect(Array.from(paginator._itemIntervals.values())).toStrictEqual([
+          {
+            id: expect.any(String),
+            hasMoreHead: false,
+            hasMoreTail: true,
+            isHead: true,
+            isTail: false,
+            itemIds: ['a', 'c'],
+          },
+          {
+            id: expect.any(String),
+            hasMoreHead: true,
+            hasMoreTail: true,
+            isHead: false,
+            isTail: false,
+            itemIds: ['d'],
+          },
+          {
+            id: expect.any(String),
+            hasMoreHead: true,
+            hasMoreTail: false,
+            isHead: false,
+            isTail: true,
+            itemIds: ['x', 'y'],
+          },
+        ]);
+      });
+
+      it('ignores targetInterval if it is a logical interval', () => {
+        paginator.ingestItem(a); // logical head
+        paginator.ingestPage({ page: [c, d] }); // anchored interval
+        paginator.ingestPage({ page: [b], targetIntervalId: LOGICAL_HEAD_INTERVAL_ID });
+        // @ts-expect-error accessing protected property _itemIntervals
+        expect(Array.from(paginator._itemIntervals.values())).toStrictEqual([
+          {
+            id: LOGICAL_HEAD_INTERVAL_ID,
+            itemIds: ['a'],
+          },
+          {
+            id: expect.any(String),
+            hasMoreHead: true,
+            hasMoreTail: true,
+            isHead: false,
+            isTail: false,
+            itemIds: ['c', 'b', 'd'], // according to sort c === b and thus b is inserted at the next free slot
+          },
+        ]);
+
+        paginator.ingestPage({ page: [x], targetIntervalId: LOGICAL_HEAD_INTERVAL_ID });
+
+        // @ts-expect-error accessing protected property _itemIntervals
+        expect(Array.from(paginator._itemIntervals.values())).toStrictEqual([
+          {
+            id: LOGICAL_HEAD_INTERVAL_ID,
+            itemIds: ['a'],
+          },
+          {
+            id: expect.any(String),
+            hasMoreHead: true,
+            hasMoreTail: true,
+            isHead: false,
+            isTail: false,
+            itemIds: ['c', 'b', 'd'],
+          },
+          {
+            id: expect.any(String),
+            hasMoreHead: true,
+            hasMoreTail: true,
+            isHead: false,
+            isTail: false,
+            itemIds: ['x'],
+          },
+        ]);
+      });
+
+      it('merges to target interval within the neighbour interval bounds (does not overlap with neighbours) - paginator.toTail()', () => {
+        paginator.ingestPage({ page: [a, b] });
+        paginator.ingestPage({ page: [x, y] });
+        // @ts-expect-error accessing protected property _itemIntervals
+        const keys = Array.from(paginator._itemIntervals.keys());
+        paginator.ingestPage({ page: [c, d], targetIntervalId: keys[0] });
+
+        // @ts-expect-error accessing protected property _itemIntervals
+        expect(Array.from(paginator._itemIntervals.values())).toStrictEqual([
+          {
+            id: keys[0],
+            hasMoreHead: true,
+            hasMoreTail: true,
+            isHead: false,
+            isTail: false,
+            itemIds: ['a', 'b', 'c', 'd'],
+          },
+          {
+            id: keys[1],
+            hasMoreHead: true,
+            hasMoreTail: true,
+            isHead: false,
+            isTail: false,
+            itemIds: ['x', 'y'],
+          },
+        ]);
+      });
+
+      it('uses anchored target interval as base even if non-overlapping', () => {
+        paginator.ingestPage({ page: [a] });
+        paginator.ingestPage({ page: [b, d] });
+        // @ts-expect-error accessing protected property _itemIntervals
+        const keys = Array.from(paginator._itemIntervals.keys());
+        paginator.ingestPage({ page: [c], targetIntervalId: keys[0] });
+
+        // @ts-expect-error accessing protected property _itemIntervals
+        expect(Array.from(paginator._itemIntervals.values())).toStrictEqual([
+          {
+            id: keys[0],
+            hasMoreHead: true,
+            hasMoreTail: true,
+            isHead: false,
+            isTail: false,
+            itemIds: ['a', 'b', 'c', 'd'],
+          },
+        ]);
+      });
+
+      it('merges page into anchored target interval even if disjoint', () => {
+        paginator.ingestPage({ page: [a] });
+        paginator.ingestPage({ page: [b, d] });
+        // @ts-expect-error accessing protected property _itemIntervals
+        let keys = Array.from(paginator._itemIntervals.keys());
+        paginator.ingestPage({ page: [x], targetIntervalId: keys[0] });
+
+        // @ts-expect-error accessing protected property _itemIntervals
+        expect(Array.from(paginator._itemIntervals.values())).toStrictEqual([
+          {
+            id: keys[0],
+            hasMoreHead: true,
+            hasMoreTail: true,
+            isHead: false,
+            isTail: false,
+            itemIds: ['a', 'x'],
+          },
+          {
+            id: keys[1],
+            hasMoreHead: true,
+            hasMoreTail: true,
+            isHead: false,
+            isTail: false,
+            itemIds: ['b', 'd'],
+          },
+        ]);
+
+        paginator.resetState();
+        paginator.ingestPage({ page: [a] });
+        paginator.ingestPage({ page: [d] });
+        paginator.ingestPage({ page: [x] });
+        // @ts-expect-error accessing protected property _itemIntervals
+        expect(paginator._itemIntervals.size).toBe(3);
+
+        // @ts-expect-error accessing protected property _itemIntervals
+        keys = Array.from(paginator._itemIntervals.keys());
+        // ingesting into the interval with x will merge b into x
+        paginator.ingestPage({ page: [b], targetIntervalId: keys[2] });
+
+        // @ts-expect-error accessing protected property _itemIntervals
+        expect(paginator._itemIntervals.size).toBe(3);
+        // @ts-expect-error accessing protected property _itemIntervals
+        const values = Array.from(paginator._itemIntervals.values());
+        expect(values).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              id: keys[0],
+              isHead: false,
+              isTail: false,
+              itemIds: ['a'],
+            }),
+            expect.objectContaining({
+              isHead: false,
+              isTail: false,
+              itemIds: ['d'],
+            }),
+            expect.objectContaining({
+              id: keys[2],
+              isHead: false,
+              isTail: false,
+              itemIds: ['b', 'x'],
+            }),
+          ]),
+        );
+      });
+
+      it('does not ingest if page has no items', () => {
+        paginator.ingestPage({ page: [] });
+        expect(paginator.items).toBeUndefined();
+        // @ts-expect-error accessing protected property _itemIntervals
+        expect(Array.from(paginator._itemIntervals.values())).toStrictEqual([]);
+      });
+    });
+
+    describe('re-ingesting the sole item of the active interval', () => {
+      it('keeps the item visible in state.items after an update', () => {
+        const paginator = new Paginator({
+          itemIndex: new StoreBackedItemIndex<TestItem>({ getEntityId: ({ id }) => id }),
+        });
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
+        });
+
+        const optimistic: TestItem = { id: 'r1', age: 10, name: 'sending' };
+        const confirmed: TestItem = { id: 'r1', age: 10, name: 'received' };
+
+        // Optimistic ingest into the empty paginator -> sole item of the (active) logical head.
+        paginator.ingestItem(optimistic);
+        expect(paginator.items).toStrictEqual([optimistic]);
+        // @ts-expect-error accessing protected property _activeIntervalId
+        expect(paginator._activeIntervalId).toBe(LOGICAL_HEAD_INTERVAL_ID);
+
+        // Confirmed re-ingest of the same id must keep it visible (not vanish).
+        paginator.ingestItem(confirmed);
+        expect(paginator.items).toStrictEqual([confirmed]);
+        // @ts-expect-error accessing protected property _activeIntervalId
+        expect(paginator._activeIntervalId).toBe(LOGICAL_HEAD_INTERVAL_ID);
+      });
+    });
+
+    // A `Channel` is a mutable instance the paginator holds by reference: the event handler writes
+    // the new sort value into the very object the loaded page already contains, so by the time the
+    // paginator is asked to re-ingest it, the page is unsorted at exactly that one slot and the
+    // "previous snapshot" in the item index IS the updated object. Re-ingesting must still relocate
+    // it. The failure was position-dependent (only a slot the binary search probes compares the
+    // item with itself), so every index is covered.
+    describe('ingestItem for an item mutated in place', () => {
+      const indices = Array.from({ length: 10 }, (_, index) => index);
+
+      const setupLoadedPage = () => {
+        const page: TestItem[] = indices.map((i) => ({
+          id: `id-${i}`,
+          age: 100 - i * 10, // descending, matching the comparator below
+        }));
+        const paginator = new Paginator({
+          itemIndex: new StoreBackedItemIndex<TestItem>({ getEntityId: ({ id }) => id }),
+        });
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
+        });
+        // first AND last page: the loaded window is the whole list, so an item moving to either end
+        // still belongs to it (mirrors a channel list that has loaded everything)
+        paginator.setItems({
+          isFirstPage: true,
+          isLastPage: true,
+          valueOrFactory: page,
+        });
+        return { page, paginator };
+      };
+
+      it.each(indices)('moves an item that became the first, from index %i', (index) => {
+        const { page, paginator } = setupLoadedPage();
+        const item = page[index];
+
+        item.age = 1000; // mutated in place — same object the paginator holds
+        paginator.ingestItem(item);
+
+        expect(paginator.items?.map(({ id }) => id)).toEqual([
+          item.id,
+          ...page.filter(({ id }) => id !== item.id).map(({ id }) => id),
+        ]);
+      });
+
+      it.each(indices)('moves an item that became the last, from index %i', (index) => {
+        const { page, paginator } = setupLoadedPage();
+        const item = page[index];
+
+        item.age = -1000;
+        paginator.ingestItem(item);
+
+        expect(paginator.items?.map(({ id }) => id)).toEqual([
+          ...page.filter(({ id }) => id !== item.id).map(({ id }) => id),
+          item.id,
+        ]);
+      });
+
+      it.each(indices)(
+        'moves an item into the middle of the page, from index %i',
+        (index) => {
+          const { page, paginator } = setupLoadedPage();
+          const item = page[index];
+
+          item.age = 45; // between the items aged 50 and 40
+          paginator.ingestItem(item);
+
+          const others = page.filter(({ id }) => id !== item.id);
+          const insertAt = others.findIndex(({ age }) => (age as number) < 45);
+          const expected = [
+            ...others.slice(0, insertAt),
+            item,
+            ...others.slice(insertAt),
+          ].map(({ id }) => id);
+          expect(paginator.items?.map(({ id }) => id)).toEqual(expected);
+        },
+      );
+
+      it.each(indices)('keeps an unchanged item in place, at index %i', (index) => {
+        const { page, paginator } = setupLoadedPage();
+
+        paginator.ingestItem(page[index]);
+
+        expect(paginator.items?.map(({ id }) => id)).toEqual(page.map(({ id }) => id));
+      });
+
+      // A partially loaded list (more pages tailward) whose loaded item moves to or past the end of
+      // the window: it is still an item the list has loaded, so it must stay visible. Exiling it to
+      // the pending region makes it vanish from the UI — unpin a channel sitting at the bottom of
+      // the loaded channel list and it disappears instead of settling back into place.
+      describe('an item moving to the edge of a partially loaded window', () => {
+        const setupPartiallyLoadedPage = () => {
+          const page: TestItem[] = indices.map((i) => ({
+            id: `id-${i}`,
+            age: 100 - i * 10,
+          }));
+          const paginator = new Paginator({
+            itemIndex: new StoreBackedItemIndex<TestItem>({
+              getEntityId: ({ id }) => id,
+            }),
+          });
+          paginator.sortComparator = makeComparator<TestItem>({
+            sort: [{ field: 'age', direction: -1 }],
+          });
+          // first page of several: the head is loaded, the tail is not
+          paginator.setItems({
+            isFirstPage: true,
+            isLastPage: false,
+            valueOrFactory: page,
+          });
+          return { page, paginator };
+        };
+
+        const intervalsHolding = (paginator: Paginator, id: string) =>
+          // @ts-expect-error accessing protected property _itemIntervals
+          Array.from(paginator._itemIntervals.values()).filter((itv) =>
+            itv.itemIds.includes(id),
+          );
+
+        // The item is the same object the interval holds, so by the time it is ingested the
+        // interval's bounds no longer contain it — a bounds-based lookup then fails to find it in
+        // the very interval it is a member of, and the stale entry is never taken out.
+        it('leaves no stale entry behind when an item moves past the loaded tail', () => {
+          const { page, paginator } = setupPartiallyLoadedPage();
+          const item = page[3];
+
+          item.age = -1000; // mutated in place, now sorts below everything loaded
+          paginator.ingestItem(item);
+
+          expect(intervalsHolding(paginator, item.id)).toHaveLength(1);
+        });
+
+        it('keeps an item that slid to the bottom of the head window', () => {
+          const { page, paginator } = setupPartiallyLoadedPage();
+          const item = page[3];
+
+          item.age = -1000;
+          paginator.ingestItem(item);
+
+          // it is still one of the first N the list has loaded — it must not disappear
+          expect(paginator.items?.map(({ id }) => id)).toEqual([
+            ...page.filter(({ id }) => id !== item.id).map(({ id }) => id),
+            item.id,
+          ]);
+        });
+
+        it('returns the last loaded item to its place across a pin/unpin round trip', () => {
+          const { page, paginator } = setupPartiallyLoadedPage();
+          const last = page[page.length - 1];
+
+          last.age = 1000; // pinned to the top
+          paginator.ingestItem(last);
+          expect(paginator.items?.[0]?.id).toBe(last.id);
+          expect(intervalsHolding(paginator, last.id)).toHaveLength(1);
+
+          last.age = 10; // unpinned — back to the end of the window
+          paginator.ingestItem(last);
+
+          expect(paginator.items?.map(({ id }) => id)).toEqual(page.map(({ id }) => id));
+          expect(intervalsHolding(paginator, last.id)).toHaveLength(1);
+        });
+
+        it('still hands an item leaving a floating middle window to the pending region', () => {
+          const page: TestItem[] = indices.map((i) => ({
+            id: `mid-${i}`,
+            age: 100 - i * 10,
+          }));
+          const paginator = new Paginator({
+            itemIndex: new StoreBackedItemIndex<TestItem>({
+              getEntityId: ({ id }) => id,
+            }),
+          });
+          paginator.sortComparator = makeComparator<TestItem>({
+            sort: [{ field: 'age', direction: -1 }],
+          });
+          // neither end of the list is loaded — the item really does belong to another page
+          paginator.ingestPage({ page, setActive: true });
+
+          const item = page[3];
+          item.age = -1000;
+          paginator.ingestItem(item);
+
+          expect(intervalsHolding(paginator, item.id).map((itv) => itv.id)).toEqual([
+            LOGICAL_TAIL_INTERVAL_ID,
+          ]);
+          expect(paginator.items?.map(({ id }) => id)).toEqual(
+            page.filter(({ id }) => id !== item.id).map(({ id }) => id),
+          );
+        });
+      });
+    });
+
+    describe('ingestItem with itemIndex', () => {
+      beforeEach(() => {
+        itemIndex.clear();
+      });
+
+      it('updates an item that lives only in the logical head interval re-inserts the item back to logical interval', () => {
+        const paginator = new Paginator({ itemIndex });
+
+        // Sort by age desc so we can create "head" and "tail" logically
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
+        });
+
+        // First ingestion: item2 (age 101) → logical head
+        expect(paginator.ingestItem(item2)).toBe(true);
+
+        // Second ingestion: item1 (age 100, younger than item2) → logical tail
+        expect(paginator.ingestItem(item1)).toBe(true);
+
+        // We should now have only logical intervals: head + tail
+        // @ts-expect-error accessing protected property
+        let intervals = Array.from(paginator._itemIntervals.values());
+        expect(intervals).toStrictEqual([
+          {
+            id: LOGICAL_HEAD_INTERVAL_ID,
+            itemIds: [item2.id],
+          },
+          {
+            id: LOGICAL_TAIL_INTERVAL_ID,
+            itemIds: [item1.id],
+          },
+        ]);
+
+        // Update the tail item snapshot (change sort-relevant field)
+        const updatedHead: TestItem = {
+          ...item2,
+          age: 150, // arbitrary change
+        };
+
+        expect(paginator.ingestItem(updatedHead)).toBe(true);
+
+        // ItemIndex snapshot for id1 is updated
+        // @ts-expect-error accessing protected property
+        expect(paginator._itemIndex!.get(item2.id)).toStrictEqual(updatedHead);
+
+        // We still have exactly the same logical head + tail intervals by ID and membership
+        // (the "still belongs to previous logical interval when only logical intervals exist" rule)
+        // @ts-expect-error accessing protected property
+        intervals = Array.from(paginator._itemIntervals.values());
+        expect(intervals).toStrictEqual([
+          {
+            id: LOGICAL_HEAD_INTERVAL_ID,
+            itemIds: [item2.id],
+          },
+          {
+            id: LOGICAL_TAIL_INTERVAL_ID,
+            itemIds: [item1.id],
+          },
+        ]);
+      });
+
+      it('keeps updated existing item in logical tail when only logical intervals exist', () => {
+        const paginator = new Paginator({ itemIndex });
+
+        // Sort by age desc so we can create "head" and "tail" logically
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
+        });
+
+        // First ingestion: item2 (age 101) → logical head
+        expect(paginator.ingestItem(item2)).toBe(true);
+
+        // Second ingestion: item1 (age 100, younger than item2) → logical tail
+        expect(paginator.ingestItem(item1)).toBe(true);
+
+        // We should now have only logical intervals: head + tail
+        // @ts-expect-error accessing protected property
+        let intervals = Array.from(paginator._itemIntervals.values());
+        expect(intervals).toStrictEqual([
+          {
+            id: LOGICAL_HEAD_INTERVAL_ID,
+            itemIds: [item2.id],
+          },
+          {
+            id: LOGICAL_TAIL_INTERVAL_ID,
+            itemIds: [item1.id],
+          },
+        ]);
+
+        // Update the tail item snapshot (change sort-relevant field)
+        const updatedTail: TestItem = {
+          ...item1,
+          age: 50, // arbitrary change
+        };
+
+        expect(paginator.ingestItem(updatedTail)).toBe(true);
+
+        // ItemIndex snapshot for id1 is updated
+        // @ts-expect-error accessing protected property
+        expect(paginator._itemIndex!.get(item1.id)).toStrictEqual(updatedTail);
+
+        // We still have exactly the same logical head + tail intervals by ID and membership
+        // (the "still belongs to previous logical interval when only logical intervals exist" rule)
+        // @ts-expect-error accessing protected property
+        intervals = Array.from(paginator._itemIntervals.values());
+        expect(intervals).toStrictEqual([
+          {
+            id: LOGICAL_HEAD_INTERVAL_ID,
+            itemIds: [item2.id],
+          },
+          {
+            id: LOGICAL_TAIL_INTERVAL_ID,
+            itemIds: [item1.id],
+          },
+        ]);
+      });
+
+      it.each([
+        ['on lockItemOrder: false', false],
+        ['on lockItemOrder: true', true],
+      ])(
+        'item exists but does not match the filter anymore removes the item %s',
+        (_, lockItemOrder) => {
+          const paginator = new Paginator({ itemIndex, lockItemOrder });
+
+          // @ts-expect-error accessing protected property
+          paginator.buildMatchFilters = () => ({
+            teams: { $eq: ['abc', 'efg'] }, // required membership in these two teams
+          });
+
+          paginator.ingestPage({
+            page: [item3, item2, item1],
+            setActive: true,
+          });
+
+          // @ts-expect-error accessing protected property _itemIndex
+          expect(Array.from(paginator._itemIndex!.values())).toStrictEqual([
+            item3,
+            item2,
+            item1,
+          ]);
+
+          const adjustedItem1 = {
+            ...item1,
+            teams: ['efg'], // removed from the team abc
+          };
+
+          expect(paginator.ingestItem(adjustedItem1)).toBeTruthy(); // item removed
+          expect(paginator.items).toStrictEqual([item3, item2]);
+
+          // @ts-expect-error accessing protected property _itemIntervals
+          expect(Array.from(paginator._itemIntervals.values())).toStrictEqual([
+            {
+              id: expect.any(String),
+              hasMoreHead: true,
+              hasMoreTail: true,
+              isHead: false,
+              isTail: false,
+              itemIds: ['id3', 'id2'],
+            },
+          ]);
+
+          // item index keeps the reference
+          // @ts-expect-error accessing protected property _itemIndex
+          expect(Array.from(paginator._itemIndex!.values())).toStrictEqual([
+            item3,
+            item2,
+            adjustedItem1,
+          ]);
+        },
+      );
+
+      it.each([
+        [' does not adjust the order on lockItemOrder: true', true],
+        [' adjusts the order on lockItemOrder: false', false],
+      ])('exists and matches the filter updates the item and %s', (_, lockItemOrder) => {
+        const paginator = new Paginator({ lockItemOrder, itemIndex });
+        paginator.ingestPage({
+          page: [item1, item2, item3],
+          setActive: true,
+        });
+        // @ts-expect-error accessing protected property
+        paginator.buildMatchFilters = () => ({
+          age: { $gt: 100 },
+        });
+
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: 1 }],
+        });
+
+        const adjustedItem1 = {
+          ...item1,
+          age: 103,
+        };
+
+        expect(paginator.ingestItem(adjustedItem1)).toBeTruthy(); // item updated
+
+        if (lockItemOrder) {
+          expect(paginator.items).toStrictEqual([adjustedItem1, item2, item3]);
+        } else {
+          // moved to next page that may be disjoint and would be retrieved by pagination
+          expect(paginator.items).toStrictEqual([item2, item3]);
+        }
+
+        // intervals are independent of the UI layer in state.items
+        // @ts-expect-error accessing protected property _itemIntervals
+        expect(Array.from(paginator._itemIntervals.values())).toStrictEqual([
+          {
+            id: expect.any(String),
+            hasMoreHead: true,
+            hasMoreTail: true,
+            isHead: false,
+            isTail: false,
+            itemIds: ['id2', 'id3'],
+          },
+          {
+            id: LOGICAL_TAIL_INTERVAL_ID,
+            itemIds: ['id1'],
+          },
+        ]);
+
+        // item index keeps the reference
+        // @ts-expect-error accessing protected property _itemIndex
+        expect(Array.from(paginator._itemIndex!.values())).toStrictEqual([
+          adjustedItem1,
+          item2,
+          item3,
+        ]);
+      });
+
+      it('keeps the locked order when the ingest runs inside a coalescing batch', () => {
+        // A coalescing batch suspends the window publish, and the suspended path used to exit
+        // through a re-projection from the active interval — which reorders a locked list and drops
+        // whatever the interval no longer holds. Here `id1` moves to the logical tail, so a
+        // re-projection yields 2 items where the locked order must still show 3.
+        const paginator = new Paginator({ lockItemOrder: true, itemIndex });
+        paginator.ingestPage({ page: [item1, item2, item3], setActive: true });
+        // @ts-expect-error accessing protected property
+        paginator.buildMatchFilters = () => ({ age: { $gt: 100 } });
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: 1 }],
+        });
+
+        const adjustedItem1 = { ...item1, age: 103 };
+        paginator.batch(() => paginator.ingestItem(adjustedItem1), { coalesce: true });
+
+        expect(paginator.items).toStrictEqual([adjustedItem1, item2, item3]);
+      });
+
+      it('emits once per ingest, and once for a whole coalescing batch', () => {
+        const paginator = new Paginator({ itemIndex });
+        paginator.ingestPage({ page: [item1, item2, item3], setActive: true });
+
+        let emits = 0;
+        const unsubscribe = paginator.state.subscribe(() => {
+          emits += 1;
+        });
+        emits = 0; // discard the synchronous initial emit
+
+        // A replace is remove-then-insert internally; both halves must land in one emit.
+        paginator.ingestItem({ ...item2, age: 42 });
+        expect(emits).toBe(1);
+
+        emits = 0;
+        paginator.batch(
+          () => {
+            paginator.ingestItem({ ...item1, age: 43 });
+            paginator.ingestItem({ ...item3, age: 44 });
+          },
+          { coalesce: true },
+        );
+        expect(emits).toBe(1);
+
+        unsubscribe();
+      });
+
+      it('emits before ingestItem returns — nothing is deferred past the call', () => {
+        // The single-publish fence must open and close inside one synchronous call. If it ever grows
+        // to span more than that, a caller reading `state` straight after an ingest sees stale items
+        // — which is what stream-chat-react-native's `useMarkRead` does from a `message.new` handler.
+        const paginator = new Paginator({ itemIndex });
+        paginator.ingestPage({ page: [item1, item2, item3], setActive: true });
+
+        const order: string[] = [];
+        const unsubscribe = paginator.state.subscribe(() => order.push('published'));
+        order.length = 0;
+
+        const updated = { ...item2, age: 42 };
+        paginator.ingestItem(updated);
+        order.push('returned');
+
+        expect(order).toEqual(['published', 'returned']);
+        // and the window that landed is the settled one — the new snapshot is in it, and the
+        // intermediate "removed but not yet re-inserted" state was never emitted
+        expect(paginator.items).toHaveLength(3);
+        expect(paginator.items?.find((i) => i.id === item2.id)).toStrictEqual(updated);
+
+        unsubscribe();
+      });
+
+      it.each([
+        ['on lockItemOrder: false', false],
+        ['on lockItemOrder: true', true],
+      ])(
+        'does not exist and does not match the filter results in no action %s',
+        (_, lockItemOrder) => {
+          const paginator = new Paginator({ lockItemOrder, itemIndex });
+          paginator.ingestPage({
+            page: [item1], // age: 100
+            setActive: true,
+          });
+
+          // @ts-expect-error accessing protected property
+          paginator.buildMatchFilters = () => ({
+            age: { $gt: 100 },
+          });
+
+          const adjustedItem = {
+            ...item1,
+            id: 'id2',
+            name: 'test2',
+          };
+
+          expect(paginator.ingestItem(adjustedItem)).toBeFalsy(); // no action
+          expect(paginator.items).toStrictEqual([item1]);
+          // @ts-expect-error accessing protected property _itemIntervals
+          expect(Array.from(paginator._itemIntervals.values())).toStrictEqual([
+            {
+              id: expect.any(String),
+              hasMoreHead: true,
+              hasMoreTail: true,
+              isHead: false,
+              isTail: false,
+              itemIds: ['id1'],
+            },
+          ]);
+        },
+      );
+
+      it.each([
+        ['on lockItemOrder: false', false],
+        ['on lockItemOrder: true', true],
+      ])(
+        'does not exist and matches the filter inserts according to default sort order (append) %s',
+        (_, lockItemOrder) => {
+          const paginator = new Paginator({ lockItemOrder, itemIndex });
+          paginator.ingestPage({
+            page: [item3, item1],
+            setActive: true,
+          });
+
+          // @ts-expect-error accessing protected property
+          paginator.buildMatchFilters = () => ({
+            teams: { $contains: 'abc' },
+          });
+
+          expect(paginator.ingestItem(item2)).toBeTruthy();
+          expect(paginator.items).toStrictEqual([item3, item1, item2]);
+          // @ts-expect-error accessing protected property _itemIntervals
+          expect(Array.from(paginator._itemIntervals.values())).toStrictEqual([
+            {
+              id: expect.any(String),
+              hasMoreHead: true,
+              hasMoreTail: true,
+              isHead: false,
+              isTail: false,
+              itemIds: ['id3', 'id1', 'id2'],
+            },
+          ]);
+        },
+      );
+
+      it.each([
+        ['on lockItemOrder: false', false],
+        ['on lockItemOrder: true', true],
+      ])(
+        'does not exist and matches the filter inserts according to sort order %s',
+        (_, lockItemOrder) => {
+          const paginator = new Paginator({ lockItemOrder, itemIndex });
+          paginator.ingestPage({
+            page: [item3, item1],
+            setActive: true,
+          });
+
+          // @ts-expect-error accessing protected property
+          paginator.buildMatchFilters = () => ({
+            teams: { $contains: 'abc' },
+          });
+          paginator.sortComparator = makeComparator<TestItem>({
+            sort: [{ field: 'age', direction: -1 }],
+          });
+
+          expect(paginator.ingestItem(item2)).toBeTruthy();
+          expect(paginator.items).toHaveLength(3);
+          expect(paginator.items).toStrictEqual([item3, item2, item1]);
+          // @ts-expect-error accessing protected property _itemIntervals
+          expect(Array.from(paginator._itemIntervals.values())).toStrictEqual([
+            {
+              id: expect.any(String),
+              hasMoreHead: true,
+              hasMoreTail: true,
+              isHead: false,
+              isTail: false,
+              itemIds: ['id3', 'id2', 'id1'],
+            },
+          ]);
+        },
+      );
+
+      it.each([
+        ['on lockItemOrder: false', false],
+        ['on lockItemOrder: true', true],
+      ])(
+        'does not exist, matches the filter, is out of the current interval bounds, inserts according to sort order %s to a new interval',
+        (_, lockItemOrder) => {
+          const paginator = new Paginator({ lockItemOrder, itemIndex });
+          paginator.ingestPage({
+            page: [item3, item1],
+            setActive: true,
+          });
+
+          // @ts-expect-error accessing protected property
+          paginator.buildMatchFilters = () => ({
+            teams: { $contains: 'abc' },
+          });
+          paginator.sortComparator = makeComparator<TestItem>({
+            sort: [{ field: 'age', direction: -1 }],
+          });
+
+          const item4 = {
+            id: 'id4',
+            name: 'test',
+            age: 99,
+            teams: ['abc'],
+          };
+          expect(paginator.ingestItem(item4)).toBeTruthy();
+          expect(paginator.items).toStrictEqual([item3, item1]);
+          // @ts-expect-error accessing protected property _itemIntervals
+          expect(Array.from(paginator._itemIntervals.values())).toStrictEqual([
+            {
+              id: expect.any(String),
+              hasMoreHead: true,
+              hasMoreTail: true,
+              isHead: false,
+              isTail: false,
+              itemIds: ['id3', 'id1'],
+            },
+            {
+              id: LOGICAL_TAIL_INTERVAL_ID,
+              itemIds: ['id4'],
+            },
+          ]);
+        },
+      );
+
+      it.each([
+        ['on lockItemOrder: false', false],
+        ['on lockItemOrder: true', true],
+      ])(
+        '%s is not reflected in a previously non-active interval we jump to',
+        (_, lockItemOrder) => {
+          const paginator = new Paginator({ itemIndex, lockItemOrder });
+          // @ts-expect-error accessing protected property
+          paginator.buildMatchFilters = () => ({
+            teams: { $contains: 'abc' },
+          });
+          paginator.sortComparator = makeComparator<TestItem>({
+            sort: [{ field: 'age', direction: -1 }],
+          });
+
+          const firstPage = paginator.ingestPage({
+            page: [item3, item1],
+            setActive: true,
+          });
+
+          const item4 = {
+            id: 'id4',
+            name: 'test',
+            age: 96,
+            teams: ['abc'],
+          };
+          const item5 = {
+            id: 'id5',
+            name: 'test',
+            age: 97,
+            teams: ['abc'],
+          };
+          const item6 = {
+            id: 'id6',
+            name: 'test',
+            age: 98,
+            teams: ['abc'],
+          };
+          const secondPage = paginator.ingestPage({
+            page: [item6, item5, item4],
+            setActive: true,
+          });
+          // @ts-expect-error accessing protected property _itemIntervals
+          expect(Array.from(paginator._itemIntervals.values())).toStrictEqual([
+            {
+              id: firstPage!.id,
+              hasMoreHead: true,
+              hasMoreTail: true,
+              isHead: false,
+              isTail: false,
+              itemIds: ['id3', 'id1'],
+            },
+            {
+              id: secondPage!.id,
+              hasMoreHead: true,
+              hasMoreTail: true,
+              isHead: false,
+              isTail: false,
+              itemIds: ['id6', 'id5', 'id4'],
+            },
+          ]);
+
+          const adjustedItem4 = {
+            ...item4,
+            age: 98,
+          };
+          expect(paginator.ingestItem(adjustedItem4)).toBeTruthy();
+
+          // @ts-expect-error accessing protected property _itemIntervals
+          expect(Array.from(paginator._itemIntervals.values())).toStrictEqual([
+            {
+              id: firstPage!.id,
+              hasMoreHead: true,
+              hasMoreTail: true,
+              isHead: false,
+              isTail: false,
+              itemIds: ['id3', 'id1'],
+            },
+            {
+              id: secondPage!.id,
+              hasMoreHead: true,
+              hasMoreTail: true,
+              isHead: false,
+              isTail: false,
+              itemIds: ['id6', 'id4', 'id5'],
+            },
+          ]);
+          expect(
+            // @ts-expect-error accessing protected property _itemIntervals
+            paginator.intervalToItems(paginator._itemIntervals.get(secondPage!.id)!),
+          ).toStrictEqual([item6, adjustedItem4, item5]);
+        },
+      );
+
+      it.each([
+        ['on lockItemOrder: false', false],
+        ['on lockItemOrder: true', true],
+      ])(
+        'existing item with changed sort-relevant properties is removed altogether if falls between existing intervals',
+        (_, lockItemOrder) => {
+          const paginator = new Paginator({ itemIndex, lockItemOrder });
+          // @ts-expect-error accessing protected property
+          paginator.buildMatchFilters = () => ({
+            teams: { $contains: 'abc' },
+          });
+          paginator.sortComparator = makeComparator<TestItem>({
+            sort: [{ field: 'age', direction: -1 }],
+          });
+
+          const firstPage = paginator.ingestPage({
+            page: [item3, item1],
+            setActive: true,
+          });
+
+          const item4 = {
+            id: 'id4',
+            name: 'test',
+            age: 96,
+            teams: ['abc'],
+          };
+          const item5 = {
+            id: 'id5',
+            name: 'test',
+            age: 97,
+            teams: ['abc'],
+          };
+          const item6 = {
+            id: 'id6',
+            name: 'test',
+            age: 98,
+            teams: ['abc'],
+          };
+          const secondPage = paginator.ingestPage({
+            page: [item6, item5, item4],
+            setActive: true,
+          });
+          // @ts-expect-error accessing protected property _itemIntervals
+          expect(Array.from(paginator._itemIntervals.values())).toStrictEqual([
+            {
+              id: firstPage!.id,
+              hasMoreHead: true,
+              hasMoreTail: true,
+              isHead: false,
+              isTail: false,
+              itemIds: ['id3', 'id1'],
+            },
+            {
+              id: secondPage!.id,
+              hasMoreHead: true,
+              hasMoreTail: true,
+              isHead: false,
+              isTail: false,
+              itemIds: ['id6', 'id5', 'id4'],
+            },
+          ]);
+
+          const adjustedItem5 = {
+            ...item5,
+            age: 99,
+          };
+          expect(paginator.ingestItem(adjustedItem5)).toBeTruthy();
+
+          // @ts-expect-error accessing protected property _itemIntervals
+          expect(Array.from(paginator._itemIntervals.values())).toStrictEqual([
+            {
+              id: firstPage!.id,
+              hasMoreHead: true,
+              hasMoreTail: true,
+              isHead: false,
+              isTail: false,
+              itemIds: ['id3', 'id1'],
+            },
+            {
+              id: secondPage!.id,
+              hasMoreHead: true,
+              hasMoreTail: true,
+              isHead: false,
+              isTail: false,
+              itemIds: ['id6', 'id4'],
+            },
+          ]);
+          expect(
+            // @ts-expect-error accessing protected property _itemIntervals
+            paginator.intervalToItems(paginator._itemIntervals.get(secondPage!.id)!),
+          ).toStrictEqual([item6, item4]);
+        },
+      );
+
+      it.each([
+        ['on lockItemOrder: false', 'is', false],
+        ['on lockItemOrder: true', 'is not', true],
+      ])(
+        '%s boost %s reflected in a previously non-active interval we jump to',
+        (_, __, lockItemOrder) => {
+          const paginator = new Paginator({ itemIndex, lockItemOrder });
+          // @ts-expect-error accessing protected property
+          paginator.buildMatchFilters = () => ({
+            teams: { $contains: 'abc' },
+          });
+          paginator.sortComparator = makeComparator<TestItem>({
+            sort: [{ field: 'age', direction: -1 }],
+          });
+
+          const firstPage = paginator.ingestPage({
+            page: [item3, item1],
+            setActive: true,
+          });
+
+          const item4 = {
+            id: 'id4',
+            name: 'test',
+            age: 97,
+            teams: ['abc'],
+          };
+          const item5 = {
+            id: 'id5',
+            name: 'test',
+            age: 98,
+            teams: ['abc'],
+          };
+          const item6 = {
+            id: 'id6',
+            name: 'test',
+            age: 99,
+            teams: ['abc'],
+          };
+          const secondPage = paginator.ingestPage({
+            page: [item6, item5, item4],
+            setActive: true,
+          });
+          // @ts-expect-error accessing protected property _itemIntervals
+          expect(Array.from(paginator._itemIntervals.values())).toStrictEqual([
+            {
+              id: firstPage!.id,
+              hasMoreHead: true,
+              hasMoreTail: true,
+              isHead: false,
+              isTail: false,
+              itemIds: ['id3', 'id1'],
+            },
+            {
+              id: secondPage!.id,
+              hasMoreHead: true,
+              hasMoreTail: true,
+              isHead: false,
+              isTail: false,
+              itemIds: ['id6', 'id5', 'id4'],
+            },
+          ]);
+
+          paginator.boost(item5.id, { until: 9999999999999999 });
+          expect(paginator.ingestItem(item5)).toBeTruthy();
+
+          // @ts-expect-error accessing protected property _itemIntervals
+          expect(Array.from(paginator._itemIntervals.values())).toStrictEqual([
+            {
+              id: firstPage!.id,
+              hasMoreHead: true,
+              hasMoreTail: true,
+              isHead: false,
+              isTail: false,
+              itemIds: ['id3', 'id1'],
+            },
+            {
+              id: secondPage!.id,
+              hasMoreHead: true,
+              hasMoreTail: true,
+              isHead: false,
+              isTail: false,
+              itemIds: ['id6', 'id5', 'id4'],
+            },
+          ]);
+          if (lockItemOrder) {
+            expect(
+              // @ts-expect-error accessing protected property _itemIntervals
+              paginator.intervalToItems(paginator._itemIntervals.get(secondPage!.id)!),
+            ).toStrictEqual([item6, item5, item4]);
+          } else {
+            expect(
+              // @ts-expect-error accessing protected property _itemIntervals
+              paginator.intervalToItems(paginator._itemIntervals.get(secondPage!.id)!),
+            ).toStrictEqual([item5, item6, item4]);
+          }
+        },
+      );
+
+      it('reflects the boost priority on lockItemOrder: false for newly ingested items in state.items only', () => {
+        const paginator = new Paginator({ itemIndex });
+        paginator.ingestPage({
+          page: [item3, item1],
+          setActive: true,
+        });
+        // @ts-expect-error accessing protected property
+        paginator.buildMatchFilters = () => ({
+          teams: { $contains: 'abc' },
+        });
+
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
+        });
+
+        paginator.boost(item2.id);
+        expect(paginator.ingestItem(item2)).toBeTruthy();
+        expect(paginator.items).toStrictEqual([item2, item3, item1]);
+        // @ts-expect-error accessing protected property _itemIntervals
+        expect(Array.from(paginator._itemIntervals.values())).toStrictEqual([
+          {
+            id: expect.any(String),
+            hasMoreHead: true,
+            hasMoreTail: true,
+            isHead: false,
+            isTail: false,
+            itemIds: ['id3', 'id2', 'id1'],
+          },
+        ]);
+      });
+
+      it('reflects the boost priority on lockItemOrder: false for newly ingested items ingested outside the existing interval only in state.items', () => {
+        const paginator = new Paginator({ itemIndex });
+        paginator.ingestPage({
+          page: [item3, item1],
+          setActive: true,
+        });
+        // @ts-expect-error accessing protected property
+        paginator.buildMatchFilters = () => ({
+          teams: { $contains: 'abc' },
+        });
+
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
+        });
+
+        const item4 = {
+          id: 'id4',
+          name: 'test',
+          age: 99,
+          teams: ['abc'],
+        };
+        paginator.boost(item4.id, { until: 9999999999999999 });
+        expect(paginator.ingestItem(item4)).toBeTruthy();
+        expect(paginator.items).toStrictEqual([item3, item1]);
+        // @ts-expect-error accessing protected property _itemIntervals
+        expect(Array.from(paginator._itemIntervals.values())).toStrictEqual([
+          {
+            id: expect.any(String),
+            hasMoreHead: true,
+            hasMoreTail: true,
+            isHead: false,
+            isTail: false,
+            itemIds: ['id3', 'id1'],
+          },
+          {
+            id: LOGICAL_TAIL_INTERVAL_ID,
+            itemIds: ['id4'],
+          },
+        ]);
+
+        const item5 = {
+          id: 'id5',
+          name: 'test',
+          age: 98,
+          teams: ['abc'],
+        };
+        paginator.boost(item5.id, { until: 9999999999999999, seq: 1 });
+        expect(paginator.ingestItem(item5)).toBeTruthy();
+        expect(paginator.items).toStrictEqual([item3, item1]);
+        // @ts-expect-error accessing protected property _itemIntervals
+        expect(Array.from(paginator._itemIntervals.values())).toStrictEqual([
+          {
+            id: expect.any(String),
+            hasMoreHead: true,
+            hasMoreTail: true,
+            isHead: false,
+            isTail: false,
+            itemIds: ['id3', 'id1'],
+          },
+          {
+            id: LOGICAL_TAIL_INTERVAL_ID,
+            itemIds: ['id4', 'id5'],
+          },
+        ]);
+        expect(
+          paginator.intervalToItems(
+            // @ts-expect-error accessing protected property _itemIntervals
+            paginator._itemIntervals.get(LOGICAL_TAIL_INTERVAL_ID)!,
+          ),
+        ).toStrictEqual([item5, item4]);
+      });
+
+      it('boosted existing item in an anchored interval moves ahead of non-boosted items (lockItemOrder: false) only in state.items', () => {
+        const paginator = new Paginator({ itemIndex });
+        paginator.ingestPage({
+          page: [item1, item2, item3],
+          setActive: true,
+        });
+
+        // @ts-expect-error accessing protected property
+        paginator.buildMatchFilters = () => ({
+          age: { $gt: 100 },
+        });
+
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: 1 }],
+        });
+
+        paginator.boost(item2.id);
+        expect(paginator.ingestItem(item2)).toBeTruthy(); // item updated
+        expect(paginator.items).toStrictEqual([item2, item1, item3]);
+        // @ts-expect-error accessing protected property _itemIntervals
+        expect(Array.from(paginator._itemIntervals.values())).toStrictEqual([
+          {
+            id: expect.any(String),
+            hasMoreHead: true,
+            hasMoreTail: true,
+            isHead: false,
+            isTail: false,
+            itemIds: ['id1', 'id2', 'id3'],
+          },
+        ]);
+      });
+
+      it('does not reflect the boost priority of existing on lockItemOrder: true', () => {
+        const paginator = new Paginator({ itemIndex, lockItemOrder: true });
+        paginator.ingestPage({
+          page: [item1, item2, item3],
+          setActive: true,
+        });
+
+        // @ts-expect-error accessing protected property
+        paginator.buildMatchFilters = () => ({
+          age: { $gt: 100 },
+        });
+
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: 1 }],
+        });
+
+        paginator.boost(item2.id);
+        expect(paginator.ingestItem(item2)).toBeTruthy(); // item updated
+        expect(paginator.items).toStrictEqual([item1, item2, item3]);
+        // @ts-expect-error accessing protected property _itemIntervals
+        expect(Array.from(paginator._itemIntervals.values())).toStrictEqual([
+          {
+            id: expect.any(String),
+            hasMoreHead: true,
+            hasMoreTail: true,
+            isHead: false,
+            isTail: false,
+            itemIds: ['id1', 'id2', 'id3'],
+          },
+        ]);
+      });
+
+      it('does not reflect the boost priority on lockItemOrder: true when ingesting a new item only in state.items', () => {
+        const paginator = new Paginator({ itemIndex, lockItemOrder: true });
+        paginator.ingestPage({ page: [item3, item1], setActive: true });
+
+        // @ts-expect-error accessing protected property
+        paginator.buildMatchFilters = () => ({
+          teams: { $contains: 'abc' },
+        });
+
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
+        });
+
+        paginator.boost(item2.id);
+        expect(paginator.ingestItem(item2)).toBeTruthy();
+        expect(paginator.items).toStrictEqual([item3, item2, item1]);
+        // @ts-expect-error accessing protected property _itemIntervals
+        expect(Array.from(paginator._itemIntervals.values())).toStrictEqual([
+          {
+            id: expect.any(String),
+            hasMoreHead: true,
+            hasMoreTail: true,
+            isHead: false,
+            isTail: false,
+            itemIds: ['id3', 'id2', 'id1'],
+          },
+        ]);
+      });
+    });
+
+    describe('intervalViews (per-interval reactivity)', () => {
+      const makeItem = (id: string, age: number): TestItem => ({ id, age, name: id });
+      const descByAge = () =>
+        makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }], // newest (highest age) is the head
+        });
+      const withItemIndex = () =>
+        new Paginator({
+          itemIndex: new StoreBackedItemIndex<TestItem>({ getEntityId: ({ id }) => id }),
+        });
+
+      // Subscribe to a single `intervalViews` field via a scoped selector (as `useStateStore` does),
+      // ignoring the initial synchronous emit so `fires` counts only post-subscribe changes.
+      const trackKey = (
+        paginator: Paginator,
+        key: 'logicalHead' | 'logicalTail' | 'anchoredHead',
+      ) => {
+        const tracker = { fires: 0, last: [] as string[] };
+        const unsub = paginator.intervalViews.subscribeWithSelector(
+          (s) => ({ items: s[key] }),
+          ({ items }) => {
+            tracker.fires += 1;
+            tracker.last = items.map((i) => i.id);
+          },
+        );
+        tracker.fires = 0;
+        return { tracker, unsub };
+      };
+
+      it('all views start empty', () => {
+        const paginator = withItemIndex();
+        expect(paginator.intervalViews.getLatestValue()).toEqual({
+          logicalHead: [],
+          logicalTail: [],
+          anchoredHead: [],
+        });
+        expect(paginator.logicalHeadItems).toEqual([]);
+        expect(paginator.logicalTailItems).toEqual([]);
+        expect(paginator.anchoredHeadItems).toEqual([]);
+        expect(paginator.anchoredHeadItems).toEqual([]);
+      });
+
+      it('an out-of-order head ingest publishes logicalHead only, leaving the active interval, logicalTail, and anchoredHead untouched', () => {
+        const paginator = withItemIndex();
+        paginator.sortComparator = descByAge();
+
+        // A bounded (non-head) anchored interval, loaded and active. No isHead page → anchoredHead empty.
+        paginator.ingestPage({
+          page: [makeItem('m1', 50), makeItem('m2', 40)],
+          isHead: false,
+          isTail: false,
+          setActive: true,
+        });
+        expect(paginator.items?.map((i) => i.id)).toEqual(['m1', 'm2']);
+        expect(paginator.logicalHeadItems).toEqual([]);
+        expect(paginator.anchoredHeadItems).toEqual([]);
+
+        const activeItemsBefore = paginator.items;
+        const logicalHead = trackKey(paginator, 'logicalHead');
+        const logicalTail = trackKey(paginator, 'logicalTail');
+        const anchoredHead = trackKey(paginator, 'anchoredHead');
+
+        // Ingest an item newer (more headward) than the bounded interval → logical head, which is NOT
+        // the active interval.
+        paginator.ingestItem(makeItem('x', 100));
+
+        // Active interval untouched (state.items reference unchanged)...
+        expect(paginator.items).toBe(activeItemsBefore);
+        // ...only logicalHead's own ingest published it...
+        expect(paginator.logicalHeadItems.map((i) => i.id)).toEqual(['x']);
+        expect(logicalHead.tracker).toEqual({ fires: 1, last: ['x'] });
+        // ...selectors on the untouched logicalTail / anchoredHead never fired...
+        expect(logicalTail.tracker.fires).toBe(0);
+        expect(anchoredHead.tracker.fires).toBe(0);
+        // ...and a live item is not an anchored head: the dataset head is still not loaded.
+        expect(paginator.anchoredHeadItem).toBeUndefined();
+        expect(paginator.anchoredHeadItems).toEqual([]);
+
+        logicalHead.unsub();
+        logicalTail.unsub();
+        anchoredHead.unsub();
+      });
+
+      it('publishes anchoredHead when the isHead page loads and when it ingests, without waking logical selectors', () => {
+        const paginator = withItemIndex();
+        paginator.sortComparator = descByAge();
+
+        // An isHead page (the newest loaded page) populates anchoredHead on load.
+        paginator.ingestPage({
+          page: [makeItem('m1', 50), makeItem('m2', 40)],
+          isHead: true,
+          isTail: false,
+          setActive: true,
+        });
+        expect(paginator.anchoredHeadItems.map((i) => i.id)).toEqual(['m1', 'm2']);
+
+        const anchoredHead = trackKey(paginator, 'anchoredHead');
+        const logicalHead = trackKey(paginator, 'logicalHead');
+        const logicalTail = trackKey(paginator, 'logicalTail');
+
+        // A newer message merges into the isHead page → anchoredHead grows.
+        paginator.ingestItem(makeItem('m0', 60));
+
+        expect(paginator.anchoredHeadItems.map((i) => i.id)).toEqual(['m0', 'm1', 'm2']);
+        expect(anchoredHead.tracker).toEqual({ fires: 1, last: ['m0', 'm1', 'm2'] });
+        // No logical interval was touched.
+        expect(logicalHead.tracker.fires).toBe(0);
+        expect(logicalTail.tracker.fires).toBe(0);
+
+        anchoredHead.unsub();
+        logicalHead.unsub();
+        logicalTail.unsub();
+      });
+
+      it('an out-of-order tail ingest publishes logicalTail without waking logicalHead / anchoredHead selectors', () => {
+        const paginator = withItemIndex();
+        paginator.sortComparator = descByAge();
+
+        // A bounded interval (tail open) loaded and active.
+        paginator.ingestPage({
+          page: [makeItem('m1', 50), makeItem('m2', 40)],
+          isHead: false,
+          isTail: false,
+          setActive: true,
+        });
+        expect(paginator.logicalTailItems).toEqual([]);
+
+        const tail = trackKey(paginator, 'logicalTail');
+        const head = trackKey(paginator, 'logicalHead');
+        const anchoredHead = trackKey(paginator, 'anchoredHead');
+
+        // Ingest an item older (more tailward) than the loaded window → logical tail.
+        paginator.ingestItem(makeItem('z', 10));
+
+        expect(paginator.logicalTailItems.map((i) => i.id)).toEqual(['z']);
+        expect(tail.tracker).toEqual({ fires: 1, last: ['z'] });
+        // Neither the logical head nor the anchored head was touched.
+        expect(head.tracker.fires).toBe(0);
+        expect(anchoredHead.tracker.fires).toBe(0);
+        expect(paginator.logicalHeadItems).toEqual([]);
+
+        tail.unsub();
+        head.unsub();
+        anchoredHead.unsub();
+      });
+
+      it('clears all views on reset', () => {
+        const paginator = withItemIndex();
+        paginator.sortComparator = descByAge();
+        paginator.ingestPage({
+          page: [makeItem('m1', 50)],
+          isHead: true,
+          isTail: false,
+          setActive: true,
+        });
+        paginator.ingestItem(makeItem('z', 10)); // logical tail
+        expect(paginator.anchoredHeadItems.map((i) => i.id)).toEqual(['m1']);
+        expect(paginator.logicalTailItems.map((i) => i.id)).toEqual(['z']);
+
+        paginator.resetState();
+        expect(paginator.intervalViews.getLatestValue()).toEqual({
+          logicalHead: [],
+          logicalTail: [],
+          anchoredHead: [],
+        });
+      });
+
+      // A sibling holder (another paginator / WS echo) writes new content for an item held in a
+      // tracked interval view. Only the active window used to be refreshed on a sibling update, so
+      // the off-window views (logicalHead/logicalTail/anchoredHead) kept stale item references. These
+      // two tests drive the store-agnostic reconcile hook (reconcileChangedIds) directly after
+      // replacing the stored item, mimicking a sibling write.
+      it('refreshes logicalHead on a sibling update to an item that is off the active window', () => {
+        const index = new StoreBackedItemIndex<TestItem>({ getEntityId: ({ id }) => id });
+        const paginator = new Paginator({ itemIndex: index });
+        paginator.sortComparator = descByAge();
+
+        // A bounded (non-head) window, loaded and active.
+        paginator.ingestPage({
+          page: [makeItem('m1', 50), makeItem('m2', 40)],
+          isHead: false,
+          isTail: false,
+          setActive: true,
+        });
+        // An out-of-order head item lands in the logical head (NOT the active interval).
+        paginator.ingestItem(makeItem('x', 100));
+        expect(paginator.logicalHeadItems.map((i) => i.id)).toEqual(['x']);
+
+        const activeItemsBefore = paginator.items;
+        const logicalHead = trackKey(paginator, 'logicalHead');
+        const logicalTail = trackKey(paginator, 'logicalTail');
+        const anchoredHead = trackKey(paginator, 'anchoredHead');
+
+        // A sibling holder rewrites x's content (same id/order, e.g. a reaction) and notifies.
+        index.setOne({ id: 'x', age: 100, name: 'x-reacted' });
+        // @ts-expect-error driving the protected store-agnostic reconcile hook directly
+        paginator.reconcileChangedIds(new Set(['x']));
+
+        // logicalHead republished with the new content...
+        expect(logicalHead.tracker.fires).toBe(1);
+        expect(paginator.logicalHeadItems.map((i) => i.name)).toEqual(['x-reacted']);
+        // ...the active window (x is not in it) and the other views are untouched.
+        expect(paginator.items).toBe(activeItemsBefore);
+        expect(logicalTail.tracker.fires).toBe(0);
+        expect(anchoredHead.tracker.fires).toBe(0);
+
+        logicalHead.unsub();
+        logicalTail.unsub();
+        anchoredHead.unsub();
+      });
+
+      it('refreshes anchoredHead on a sibling update to a message it holds', () => {
+        const index = new StoreBackedItemIndex<TestItem>({ getEntityId: ({ id }) => id });
+        const paginator = new Paginator({ itemIndex: index });
+        paginator.sortComparator = descByAge();
+
+        // The isHead page populates anchoredHead (and is the active interval).
+        paginator.ingestPage({
+          page: [makeItem('m1', 50), makeItem('m2', 40)],
+          isHead: true,
+          isTail: false,
+          setActive: true,
+        });
+        expect(paginator.anchoredHeadItems.map((i) => i.id)).toEqual(['m1', 'm2']);
+
+        const anchoredHead = trackKey(paginator, 'anchoredHead');
+        const logicalHead = trackKey(paginator, 'logicalHead');
+        const logicalTail = trackKey(paginator, 'logicalTail');
+
+        // A sibling holder rewrites m2's content (same id/order) and notifies.
+        index.setOne({ id: 'm2', age: 40, name: 'm2-reacted' });
+        // @ts-expect-error driving the protected store-agnostic reconcile hook directly
+        paginator.reconcileChangedIds(new Set(['m2']));
+
+        // anchoredHead republished with the new content, unchanged siblings preserved by id order...
+        expect(anchoredHead.tracker.fires).toBe(1);
+        expect(paginator.anchoredHeadItems.map((i) => i.name)).toEqual([
+          'm1',
+          'm2-reacted',
+        ]);
+        // ...no logical view was touched.
+        expect(logicalHead.tracker.fires).toBe(0);
+        expect(logicalTail.tracker.fires).toBe(0);
+
+        anchoredHead.unsub();
+        logicalHead.unsub();
+        logicalTail.unsub();
+      });
+    });
+
+    describe('removeItem', () => {
+      it('removes existing item', () => {
+        const paginator = new Paginator();
+        paginator.state.partialNext({
+          items: [item3, item2, item1],
+        });
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
+        });
+        expect(paginator.removeItem({ item: item3 })).toStrictEqual({
+          state: { currentIndex: 0, insertionIndex: 0 },
+        });
+        expect(paginator.items).toHaveLength(2);
+        expect(paginator.items![0]).toStrictEqual(item2);
+        expect(paginator.items![1]).toStrictEqual(item1);
+      });
+
+      it('results in no action for non-existent item', () => {
+        const paginator = new Paginator();
+        paginator.state.partialNext({
+          items: [item2, item1],
+        });
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
+        });
+        expect(paginator.removeItem({ item: item3 })).toStrictEqual({
+          state: { currentIndex: -1, insertionIndex: -1 },
+        });
+        expect(paginator.items).toHaveLength(2);
+        expect(paginator.items![0]).toStrictEqual(item2);
+        expect(paginator.items![1]).toStrictEqual(item1);
+      });
+
+      it('removes item from both state and anchored intervals when itemIndex is present', () => {
+        const paginator = new Paginator({ itemIndex });
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
+        });
+
+        paginator.ingestPage({ page: [item3, item2, item1], setActive: true });
+
+        const result = paginator.removeItem({ id: item2.id });
+
+        expect(result.state?.currentIndex).toBe(1);
+        // Interval no longer contains id2
+        // @ts-expect-error accessing protected property
+        const intervals = Array.from(paginator._itemIntervals.values());
+        expect(intervals).toHaveLength(1);
+        expect(intervals[0].itemIds).toEqual(['id3', 'id1']);
+
+        expect(paginator.items!.map((i) => i.id)).toEqual(['id3', 'id1']);
+      });
+
+      it('removeItem is a no-op when itemIndex exists but does not have the interval for the given id', () => {
+        const paginator = new Paginator({ itemIndex });
+        paginator.state.partialNext({ items: [item1] });
+
+        const res = paginator.removeItem({ id: 'missing' });
+
+        expect(res).toEqual({ state: { currentIndex: -1, insertionIndex: -1 } });
+        expect(paginator.items).toEqual([item1]);
+        // @ts-expect-error accessing protected property
+        expect(paginator._itemIntervals.size).toBe(0);
+      });
+
+      it('removeItem is a no-op when itemIndex exists and has the interval but id is unknown', () => {
+        const paginator = new Paginator({ itemIndex });
+        paginator.ingestPage({ page: [item1], setActive: true });
+
+        const res = paginator.removeItem({ id: 'missing' });
+
+        expect(res).toEqual({ state: { currentIndex: -1, insertionIndex: -1 } });
+        expect(paginator.items).toEqual([item1]);
+        // @ts-expect-error accessing protected property
+        expect(paginator._itemIntervals.size).toBe(1);
+      });
+
+      it('removes last item and removes the parent interval', () => {
+        const paginator = new Paginator({ itemIndex });
+        paginator.ingestPage({ page: [item1], setActive: true });
+
+        const res = paginator.removeItem({ id: item1.id });
+
+        expect(res).toEqual({
+          state: { currentIndex: 0, insertionIndex: 0 },
+          interval: {
+            interval: res.interval!.interval,
+            currentIndex: 0,
+            insertionIndex: 0,
+          },
+        });
+        // we are not returning to undefined as a sign that we have not reset the pagination
+        expect(paginator.items).toStrictEqual([]);
+        // @ts-expect-error accessing protected property
+        expect(Array.from(paginator._itemIntervals.values())).toStrictEqual([]);
+      });
+
+      it('removes last item and removes the parent interval from a non-active page', () => {
+        const paginator = new Paginator({ itemIndex });
+        paginator.ingestPage({ page: [item1] });
+
+        const res = paginator.removeItem({ id: item1.id });
+
+        expect(res).toEqual({
+          // the state has no data so we get -1 for indices
+          state: { currentIndex: -1, insertionIndex: -1 },
+          interval: {
+            interval: res.interval!.interval,
+            currentIndex: 0,
+            insertionIndex: 0,
+          },
+        });
+        expect(paginator.items).toBeUndefined();
+        // @ts-expect-error accessing protected property
+        expect(Array.from(paginator._itemIntervals.values())).toStrictEqual([]);
+      });
+
+      it('drops item-index membership so the id is no longer addressable', () => {
+        // Fresh index so the shared module-level one is not polluted across tests.
+        const index = new StoreBackedItemIndex<TestItem>({ getEntityId: ({ id }) => id });
+        const paginator = new Paginator({ itemIndex: index });
+        paginator.ingestPage({ page: [item1, item2, item3], setActive: true });
+        expect(paginator.getItem(item2.id)).toStrictEqual(item2);
+
+        paginator.removeItem({ id: item2.id });
+
+        // Regression: removeItem used to remove from intervals/state.items but leave the id in the
+        // item index. With a store-backed index that leaked a refcount (the message was never
+        // GC'd) and left getItem returning a no-longer-listed "ghost". Membership must drop too.
+        expect(paginator.getItem(item2.id)).toBeUndefined();
+        // untouched siblings stay addressable
+        expect(paginator.getItem(item1.id)).toStrictEqual(item1);
+        expect(paginator.getItem(item3.id)).toStrictEqual(item3);
+      });
+    });
+
+    describe('anchoredHeadItems (the window that reaches the dataset head)', () => {
+      it('is empty before the first load and mirrors a first page in flat mode', () => {
+        const paginator = new Paginator();
+        expect(paginator.anchoredHeadItems).toEqual([]);
+
+        const loaded = [{ id: 'a' }];
+        paginator.setItems({ valueOrFactory: loaded, isFirstPage: true });
+
+        expect(paginator.anchoredHeadItems).toStrictEqual(loaded);
+        expect(paginator.anchoredHeadItem).toStrictEqual(loaded[0]);
+      });
+
+      it('stays empty for items not known to reach the head', () => {
+        const paginator = new Paginator();
+
+        paginator.setItems({ valueOrFactory: [{ id: 'a' }] });
+
+        expect(paginator.anchoredHeadItems).toEqual([]);
+        expect(paginator.anchoredHeadItem).toBeUndefined();
+      });
+
+      it('materializes the head window in interval-storage mode', () => {
+        const paginator = new Paginator({ itemIndex });
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
+        });
+
+        paginator.ingestPage({
+          page: [item2, item1],
+          isHead: true,
+          isTail: true,
+          setActive: true,
+        });
+
+        expect(paginator.anchoredHeadItems.length).toBeGreaterThan(0);
+        expect(paginator.anchoredHeadItems.map((item) => item.id)).toEqual(
+          paginator.items?.map((item) => item.id),
+        );
+        itemIndex.clear();
+      });
+    });
+
+    /**
+     * `offset` addresses a position in the server's result set. An item that leaves the loaded window
+     * because it stopped matching the query is gone from that result set too, so the offset has to
+     * follow it down - otherwise the next page starts too far and skips whatever moved up.
+     */
+    describe('offset over a mutable result set', () => {
+      beforeEach(() => {
+        itemIndex.clear();
+      });
+
+      const loadedPaginator = () => {
+        const paginator = new Paginator({ itemIndex });
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
+        });
+        paginator.ingestPage({ page: [item3, item2, item1], setActive: true });
+        paginator.state.partialNext({ offset: 3 });
+        return paginator;
+      };
+
+      it('shrinks when a loaded item is removed', () => {
+        const paginator = loadedPaginator();
+
+        paginator.removeItem({ item: item2 });
+
+        expect(paginator.items).toHaveLength(2);
+        expect(paginator.offset).toBe(2);
+      });
+
+      it('is left alone when the removal finds nothing', () => {
+        const paginator = loadedPaginator();
+
+        paginator.removeItem({ id: 'missing' });
+
+        expect(paginator.offset).toBe(3);
+      });
+
+      it('shrinks when an ingested item no longer matches the filter', () => {
+        const paginator = loadedPaginator();
+        // @ts-expect-error accessing protected property
+        paginator.buildMatchFilters = () => ({ name: { $ne: 'renamed' } });
+
+        expect(paginator.ingestItem({ ...item2, name: 'renamed' })).toBe(true);
+
+        expect(paginator.items).toHaveLength(2);
+        expect(paginator.offset).toBe(2);
+      });
+
+      it('is left alone by the remove-and-reinsert of an item that still matches', () => {
+        const paginator = loadedPaginator();
+
+        expect(paginator.ingestItem({ ...item2, name: 'renamed' })).toBe(true);
+
+        expect(paginator.items).toHaveLength(3);
+        expect(paginator.offset).toBe(3);
+      });
+
+      it('does not grow when an item arrives through an event', () => {
+        const paginator = loadedPaginator();
+
+        paginator.ingestItem({ ...item1, id: 'id4', age: 101.5 });
+
+        // an offset that is too small only re-requests an item already held, one that is too large
+        // drops it for good - so insertions are deliberately not mirrored
+        expect(paginator.items).toHaveLength(4);
+        expect(paginator.offset).toBe(3);
+      });
+
+      it('does not go below zero', () => {
+        const paginator = loadedPaginator();
+        paginator.state.partialNext({ offset: 0 });
+
+        paginator.removeItem({ item: item2 });
+
+        expect(paginator.offset).toBe(0);
+      });
+
+      it('is left alone under cursor pagination', () => {
+        const paginator = loadedPaginator();
+        paginator.state.partialNext({ cursor: { tailward: 'next', headward: null } });
+
+        paginator.removeItem({ item: item2 });
+
+        expect(paginator.offset).toBe(3);
+      });
+    });
+
+    describe('setItems', () => {
+      it('overrides all the items in the state with provided value', () => {
+        const paginator = new Paginator();
+        const items1 = [{ id: 'test-item1' }];
+        const items2 = [{ id: 'test-item2' }];
+        paginator.setItems({ valueOrFactory: items1 });
+        expect(paginator.items).toStrictEqual(items1);
+        paginator.setItems({ valueOrFactory: items2 });
+        expect(paginator.items).toStrictEqual(items2);
+      });
+
+      const items = [{ id: 'test-item1' }];
+      const expectedStateEmissions = [
+        {
+          cursor: undefined,
+          hasMoreTail: true,
+          hasMoreHead: true,
+          isLoading: false,
+          items: undefined,
+          lastQueryError: undefined,
+          offset: 0,
+        },
+        {
+          cursor: undefined,
+          hasMoreTail: true,
+          hasMoreHead: true,
+          isLoading: false,
+          items,
+          lastQueryError: undefined,
+          offset: 1,
+        },
+      ];
+
+      it('emits state change as long as the items are not the same', () => {
+        const paginator = new Paginator();
+        const subscriptionHandler = vi.fn();
+        const unsubscribe = paginator.state.subscribe(subscriptionHandler);
+        expect(subscriptionHandler).toHaveBeenCalledTimes(1);
+        expect(subscriptionHandler).toHaveBeenCalledWith(
+          expectedStateEmissions[0],
+          undefined,
+        );
+
+        paginator.setItems({ valueOrFactory: items });
+        expect(paginator.items).toStrictEqual(items);
+        expect(subscriptionHandler).toHaveBeenCalledTimes(2);
+        expect(subscriptionHandler).toHaveBeenCalledWith(
+          expectedStateEmissions[1],
+          expectedStateEmissions[0],
+        );
+
+        // setting an object with the same reference
+        paginator.setItems({ valueOrFactory: items });
+        expect(paginator.items).toStrictEqual(items);
+        expect(subscriptionHandler).toHaveBeenCalledTimes(2);
+        expect(subscriptionHandler).toHaveBeenCalledWith(
+          expectedStateEmissions[1],
+          expectedStateEmissions[0],
+        );
+
+        unsubscribe();
+      });
+
+      it('emits state change as long as the state factory returns objects with different reference', () => {
+        const paginator = new Paginator();
+        const subscriptionHandler = vi.fn();
+        const unsubscribe = paginator.state.subscribe(subscriptionHandler);
+
+        paginator.setItems({ valueOrFactory: () => items });
+        expect(paginator.items).toStrictEqual(items);
+        // first call is on subscribe
+        expect(subscriptionHandler).toHaveBeenCalledTimes(2);
+        expect(subscriptionHandler).toHaveBeenCalledWith(
+          expectedStateEmissions[1],
+          expectedStateEmissions[0],
+        );
+
+        // setting an object with the same reference
+        paginator.setItems({ valueOrFactory: () => items });
+        expect(paginator.items).toStrictEqual(items);
+        expect(subscriptionHandler).toHaveBeenCalledTimes(2);
+        expect(subscriptionHandler).toHaveBeenCalledWith(
+          expectedStateEmissions[1],
+          expectedStateEmissions[0],
+        );
+
+        unsubscribe();
+      });
+
+      it('updates the cursor if provided', () => {
+        const paginator = new Paginator();
+        const cursors: PaginatorCursor[] = [
+          { tailward: 'next1', headward: 'prev1' },
+          { tailward: 'next2', headward: 'prev1' },
+        ];
+        const subscriptionHandler = vi.fn();
+        const unsubscribe = paginator.state.subscribe(subscriptionHandler);
+
+        paginator.setItems({ valueOrFactory: items, cursor: cursors[0] });
+        expect(subscriptionHandler).toHaveBeenCalledTimes(2);
+        expect(subscriptionHandler).toHaveBeenCalledWith(
+          { ...expectedStateEmissions[1], cursor: cursors[0], offset: 0 },
+          { ...expectedStateEmissions[0], cursor: undefined, offset: 0 },
+        );
+
+        unsubscribe();
+      });
+
+      it('prioritizes isFirstPage: true and isLastPage: true', () => {
+        const paginator = new Paginator({ itemIndex });
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
+        });
+
+        const page = [item2, item1];
+
+        paginator.setItems({
+          valueOrFactory: page,
+          isFirstPage: true,
+          isLastPage: true,
+        });
+
+        // @ts-expect-error accessing protected property
+        expect(Array.from(paginator._itemIntervals.values())).toStrictEqual([
+          {
+            id: expect.any(String),
+            hasMoreHead: false,
+            hasMoreTail: false,
+            isHead: true,
+            isTail: true,
+            itemIds: ['id2', 'id1'],
+          },
+        ]);
+
+        paginator.setItems({
+          valueOrFactory: [item3],
+          isFirstPage: false,
+          isLastPage: false,
+        });
+
+        // @ts-expect-error accessing protected property
+        expect(Array.from(paginator._itemIntervals.values())).toStrictEqual([
+          {
+            id: expect.any(String),
+            hasMoreHead: false,
+            hasMoreTail: false,
+            isHead: true,
+            isTail: true,
+            itemIds: ['id3', 'id2', 'id1'],
+          },
+        ]);
+      });
+
+      it('with itemIndex creates an anchored interval and sets it active', () => {
+        const paginator = new Paginator({ itemIndex });
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
+        });
+
+        const page = [item3, item1];
+
+        paginator.setItems({
+          valueOrFactory: page,
+          isFirstPage: true,
+          isLastPage: false,
+        });
+
+        expect(paginator.items).toEqual(page);
+        expect(paginator.offset).toBe(page.length);
+
+        // @ts-expect-error accessing protected property
+        const intervals = Array.from(paginator._itemIntervals.values());
+        expect(intervals).toHaveLength(1);
+        expect(intervals[0]).toMatchObject({
+          isHead: true,
+          isTail: false,
+          itemIds: ['id3', 'id1'],
+        });
+
+        // @ts-expect-error accessing protected property
+        expect(paginator._activeIntervalId).toBe(intervals[0].id);
+      });
+
+      describe('hasLoadedPage', () => {
+        it('is false until a page is loaded', () => {
+          const paginator = new Paginator();
+          expect(paginator.hasLoadedPage).toBe(false);
+        });
+
+        it('counts an empty page as loaded, without initializing the query shape', () => {
+          const paginator = new Paginator();
+
+          // e.g. a catch-all list seeded so it never runs its own query
+          paginator.setItems({ isLastPage: true, valueOrFactory: [] });
+
+          expect(paginator.hasLoadedPage).toBe(true);
+          // still skipped by connection recovery: there is no query to re-run
+          expect(paginator.isInitialized).toBe(false);
+        });
+
+        it('does not count items ingested into a list that was never queried', () => {
+          const paginator = new Paginator({ itemIndex });
+          paginator.sortComparator = makeComparator<TestItem>({
+            sort: [{ field: 'age', direction: -1 }],
+          });
+
+          paginator.ingestItem(v);
+
+          // the item is shown, but no page was loaded: the first query still has to run
+          expect(paginator.items).toEqual([v]);
+          expect(paginator.hasLoadedPage).toBe(false);
+
+          paginator.removeItem({ item: v });
+
+          expect(paginator.items).toEqual([]);
+          expect(paginator.hasLoadedPage).toBe(false);
+        });
+
+        it('is true after a query placed a page and false again after resetState', () => {
+          const paginator = new Paginator({ itemIndex });
+          paginator.sortComparator = makeComparator<TestItem>({
+            sort: [{ field: 'age', direction: -1 }],
+          });
+
+          paginator.placeQueryPage({
+            direction: 'tailward',
+            isFirstPage: true,
+            queryShape: defaultNextQueryShape,
+            requestedPageSize: 3,
+            results: { items: [] },
+          });
+          expect(paginator.hasLoadedPage).toBe(true);
+
+          paginator.resetState();
+          expect(paginator.hasLoadedPage).toBe(false);
+
+          paginator.setItems({ valueOrFactory: [] });
+          paginator.resetState();
+          expect(paginator.hasLoadedPage).toBe(false);
+        });
+
+        it('is already current when the state change is published', () => {
+          // a UI selector reads it from inside the state subscription
+          const paginator = new Paginator();
+          const seen: boolean[] = [];
+          const unsubscribe = paginator.state.subscribe(() => {
+            seen.push(paginator.hasLoadedPage);
+          });
+
+          paginator.setItems({ valueOrFactory: [] });
+          paginator.resetState();
+          paginator.setItems({ valueOrFactory: [a] });
+          paginator.resetState();
+          unsubscribe();
+
+          // initial call on subscribe, then each setItems / resetState
+          expect(seen).toEqual([false, true, false, true, false]);
+        });
+      });
+    });
+
+    describe('reload', () => {
+      // The request itself has to be built from the restart position: `getNextQueryShape()` reads
+      // the position out of state, so a reload that reset the state only afterwards would re-query
+      // the page the previous pagination had reached. Recording the position at shape-build time is
+      // what pins that down — asserting the resulting state cannot, since it is reset either way.
+      const recordPositionAtShapeBuild = (paginator: Paginator) => {
+        const positions: Array<{ cursor?: PaginatorCursor; offset: number }> = [];
+        paginator.getNextQueryShape = vi.fn(() => {
+          positions.push({ cursor: paginator.cursor, offset: paginator.offset });
+          return defaultNextQueryShape;
+        });
+        return positions;
+      };
+
+      it('builds the request from offset 0, not from where pagination stopped [offset pagination]', async () => {
+        const paginator = new Paginator({ pageSize: 2 });
+        paginator.state.next({
+          hasMoreHead: false,
+          hasMoreTail: true,
+          isLoading: false,
+          items: [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }],
+          offset: 4,
+        });
+        const positions = recordPositionAtShapeBuild(paginator);
+
+        const reloadPromise = paginator.reload();
+        await sleep(0);
+        paginator.queryResolve({ items: [{ id: 'id1' }] });
+        await reloadPromise;
+
+        expect(positions).toEqual([{ cursor: undefined, offset: 0 }]);
+      });
+
+      it('builds the request from the initial cursor, not from the last one [cursor pagination]', async () => {
+        const paginator = new Paginator({ initialCursor: ZERO_PAGE_CURSOR, pageSize: 2 });
+        paginator.state.next({
+          cursor: { headward: 'headward1', tailward: 'tailward1' },
+          hasMoreHead: false,
+          hasMoreTail: true,
+          isLoading: false,
+          items: [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }],
+        });
+        const positions = recordPositionAtShapeBuild(paginator);
+
+        const reloadPromise = paginator.reload();
+        await sleep(0);
+        paginator.queryResolve({ items: [{ id: 'id1' }] });
+        await reloadPromise;
+
+        expect(positions).toEqual([{ cursor: ZERO_PAGE_CURSOR, offset: 0 }]);
+      });
+
+      it('starts the ended pagination from the beginning [offset pagination]', async () => {
+        const paginator = new Paginator({ pageSize: 2 });
+        paginator.state.next({
+          hasMoreTail: false,
+          hasMoreHead: false,
+          isLoading: false,
+          items: [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }],
+          offset: 4,
+        });
+        let reloadPromise = paginator.reload();
+        // wait for the DB data first page load
+        await sleep(0);
+        expect(paginator.isLoading).toBe(true);
+        expect(paginator.hasMoreTail).toBe(true);
+        // reload() restarts offset pagination from the beginning (offset 0), so the head is loaded
+        // as soon as the reload query begins — before it resolves.
+        expect(paginator.hasMoreHead).toBe(false);
+
+        paginator.queryResolve({ items: [{ id: 'id1' }] });
+        await reloadPromise;
+        expect(paginator.isLoading).toBe(false);
+        expect(paginator.hasMoreTail).toBe(false);
+        expect(paginator.hasMoreHead).toBe(false);
+        expect(paginator.items).toEqual([{ id: 'id1' }]);
+        expect(paginator.cursor).toBeUndefined();
+        expect(paginator.offset).toBe(1);
+        expect(paginator.mockClientQuery).toHaveBeenCalledWith({
+          direction: 'tailward',
+          queryShape: defaultNextQueryShape,
+          reset: 'yes',
+          retryCount: 0,
+        });
+
+        reloadPromise = paginator.reload();
+        // wait for the DB data first page load
+        await sleep(0);
+        expect(paginator.isLoading).toBe(true);
+        expect(paginator.hasMoreTail).toBe(true);
+        // Offset-0 reload again: head loaded from the start of the reload query.
+        expect(paginator.hasMoreHead).toBe(false);
+
+        paginator.queryResolve({ items: [{ id: 'id2' }], tailward: 'next2' });
+        await reloadPromise;
+        expect(paginator.isLoading).toBe(false);
+        expect(paginator.hasMoreTail).toBe(false);
+        expect(paginator.hasMoreHead).toBe(false);
+        expect(paginator.items).toEqual([{ id: 'id2' }]);
+        expect(paginator.cursor).toBeUndefined();
+        expect(paginator.offset).toBe(1);
+        expect(paginator.mockClientQuery).toHaveBeenCalledWith({
+          direction: 'tailward',
+          queryShape: defaultNextQueryShape,
+          reset: 'yes',
+          retryCount: 0,
+        });
+      });
+      it('starts the ended pagination from the beginning [cursor pagination]', async () => {
+        const paginator = new Paginator({ initialCursor: ZERO_PAGE_CURSOR, pageSize: 2 });
+        paginator.state.next({
+          hasMoreTail: false,
+          hasMoreHead: false,
+          isLoading: false,
+          items: [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }],
+          cursor: { tailward: 'tailward1', headward: 'headward1' },
+        });
+        let reloadPromise = paginator.reload();
+        // wait for the DB data first page load
+        await sleep(0);
+        expect(paginator.isLoading).toBe(true);
+        expect(paginator.hasMoreTail).toBe(true);
+        expect(paginator.hasMoreHead).toBe(true);
+
+        paginator.queryResolve({ items: [{ id: 'id1' }] });
+        await reloadPromise;
+        expect(paginator.isLoading).toBe(false);
+        expect(paginator.hasMoreTail).toBe(false);
+        expect(paginator.hasMoreHead).toBe(false);
+        expect(paginator.items).toEqual([{ id: 'id1' }]);
+        expect(paginator.cursor).toStrictEqual({ tailward: null, headward: null });
+        expect(paginator.offset).toBe(0);
+        expect(paginator.mockClientQuery).toHaveBeenCalledWith({
+          direction: 'tailward',
+          queryShape: defaultNextQueryShape,
+          reset: 'yes',
+          retryCount: 0,
+        });
+
+        reloadPromise = paginator.reload();
+        // wait for the DB data first page load
+        await sleep(0);
+        expect(paginator.isLoading).toBe(true);
+        expect(paginator.hasMoreTail).toBe(true);
+        expect(paginator.hasMoreHead).toBe(true);
+
+        paginator.queryResolve({ items: [{ id: 'id2' }], tailward: 'tailward2' });
+        await reloadPromise;
+        expect(paginator.isLoading).toBe(false);
+        expect(paginator.hasMoreTail).toBe(true);
+        expect(paginator.hasMoreHead).toBe(false);
+        expect(paginator.items).toEqual([{ id: 'id2' }]);
+        expect(paginator.cursor).toStrictEqual({ tailward: 'tailward2', headward: null });
+        expect(paginator.offset).toBe(0);
+        expect(paginator.mockClientQuery).toHaveBeenCalledWith({
+          direction: 'tailward',
+          queryShape: defaultNextQueryShape,
+          reset: 'yes',
+          retryCount: 0,
+        });
+
+        // reset in another direction
+        reloadPromise = paginator.reload();
+        // wait for the DB data first page load
+        await sleep(0);
+        expect(paginator.isLoading).toBe(true);
+        expect(paginator.hasMoreTail).toBe(true);
+        expect(paginator.hasMoreHead).toBe(true);
+        expect(paginator.items).toBe(undefined);
+
+        paginator.queryResolve({ items: [{ id: 'id2' }], headward: 'headward2' });
+        await reloadPromise;
+        expect(paginator.isLoading).toBe(false);
+        expect(paginator.hasMoreTail).toBe(false);
+        expect(paginator.hasMoreHead).toBe(true);
+        expect(paginator.items).toEqual([{ id: 'id2' }]);
+        expect(paginator.cursor).toStrictEqual({ headward: 'headward2', tailward: null });
+        expect(paginator.offset).toBe(0);
+      });
+    });
+
+    describe('resetState', () => {
+      it('restores initial state and clears intervals', () => {
+        const paginator = new Paginator({ itemIndex });
+        paginator.ingestPage({ page: [item3, item2], setActive: true });
+
+        // Sanity: mutated state + intervals
+        expect(paginator.items).toEqual([item3, item2]);
+        // @ts-expect-error
+        expect(paginator._itemIntervals.size).toBe(1);
+
+        paginator.resetState();
+
+        expect(paginator.state.getLatestValue()).toEqual(paginator.initialState);
+        // @ts-expect-error
+        expect(paginator._itemIntervals.size).toBe(0);
+      });
+    });
+
+    describe('filter resolvers', () => {
+      const resolvers1 = [{ matchesField: () => true, resolve: () => 'abc' }];
+      const resolvers2 = [
+        { matchesField: () => false, resolve: () => 'efg' },
+        { matchesField: () => true, resolve: () => 'hij' },
+      ];
+      it('get overridden with setFilterResolvers', () => {
+        const paginator = new Paginator();
+        // @ts-expect-error accessing protected property
+        expect(paginator._filterFieldToDataResolvers).toHaveLength(0);
+
+        paginator.setFilterResolvers(resolvers1);
+
+        // @ts-expect-error accessing protected property
+        expect(paginator._filterFieldToDataResolvers).toHaveLength(resolvers1.length);
+        // @ts-expect-error accessing protected property
+        expect(paginator._filterFieldToDataResolvers).toStrictEqual(resolvers1);
+
+        paginator.setFilterResolvers(resolvers2);
+
+        // @ts-expect-error accessing protected property
+        expect(paginator._filterFieldToDataResolvers).toHaveLength(resolvers2.length);
+        // @ts-expect-error accessing protected property
+        expect(paginator._filterFieldToDataResolvers).toStrictEqual(resolvers2);
+
+        paginator.setFilterResolvers([]);
+        // @ts-expect-error accessing protected property
+        expect(paginator._filterFieldToDataResolvers).toHaveLength(0);
+      });
+
+      it('get added ahead of the existing ones with addFilterResolvers', () => {
+        const paginator = new Paginator();
+        paginator.addFilterResolvers(resolvers1);
+
+        // @ts-expect-error accessing protected property
+        expect(paginator._filterFieldToDataResolvers).toStrictEqual(resolvers1);
+
+        paginator.addFilterResolvers(resolvers2);
+
+        // @ts-expect-error accessing protected property
+        expect(paginator._filterFieldToDataResolvers).toStrictEqual([
+          ...resolvers2,
+          ...resolvers1,
+        ]);
+
+        paginator.addFilterResolvers([]);
+        // @ts-expect-error accessing protected property
+        expect(paginator._filterFieldToDataResolvers).toStrictEqual([
+          ...resolvers2,
+          ...resolvers1,
+        ]);
+      });
+    });
+
+    describe('item boosting', () => {
+      const a = { id: 'a', age: 10, name: 'A' } as TestItem;
+      const b = { id: 'b', age: 20, name: 'B' } as TestItem;
+      const c = { id: 'c', age: 30, name: 'C' } as TestItem;
+
+      const byIdAsc = (l: TestItem, r: TestItem) =>
+        l.id < r.id ? -1 : l.id > r.id ? 1 : 0;
+
+      describe('clearExpiredBoosts', () => {
+        it('removes expired boosts and updates maxBoostSeq', () => {
+          const paginator = new Paginator();
+          // @ts-expect-error accessing protected property
+          paginator.boosts.clear();
+          const now = 1000000;
+
+          paginator.boost('fresh', { until: now + 1000, seq: 1 });
+          paginator.boost('stale', { until: now - 1, seq: 5 });
+
+          // @ts-expect-error accessing protected method
+          paginator.clearExpiredBoosts(now);
+
+          // @ts-expect-error accessing protected property
+          expect(Array.from(paginator.boosts.keys())).toEqual(['fresh']);
+          expect(paginator.maxBoostSeq).toBe(1);
+        });
+
+        it('sets maxBoostSeq to 0 when no boosts remain', () => {
+          const paginator = new Paginator();
+          // two expired boosts at "now"
+          paginator.boost('x', { until: 1000, seq: 1 });
+          paginator.boost('y', { until: 1500, seq: 3 });
+
+          // @ts-expect-error accessing protected method
+          paginator.clearExpiredBoosts(10000);
+
+          // @ts-expect-error accessing protected property
+          expect(paginator.boosts.size).toBe(0);
+          expect(paginator.maxBoostSeq).toBe(0);
+        });
+      });
+
+      describe('boostComparator', () => {
+        it('prioritizes boosted over non-boosted', () => {
+          vi.useFakeTimers();
+          const now = new Date('2025-01-01T00:00:00Z');
+          vi.setSystemTime(now);
+
+          const paginator = new Paginator();
+          paginator.sortComparator = byIdAsc;
+
+          // Boost only "a"
+          paginator.boost('b', { ttlMs: 10000, seq: 0 });
+
+          // @ts-expect-error: protected method
+          expect(paginator.boostComparator(a, b)).toBe(1); // a after b
+          // @ts-expect-error
+          expect(paginator.boostComparator(b, a)).toBe(-1); // b stays before a
+
+          // Let boost expire
+          vi.setSystemTime(new Date(now.getTime() + 11000));
+          // @ts-expect-error
+          expect(paginator.boostComparator(a, b)).toBe(-1); // fallback to byIdAsc
+          vi.useRealTimers();
+        });
+
+        it('when both boosted, higher seq comes first; ties fall back to sortComparator', () => {
+          vi.useFakeTimers();
+          const now = new Date('2025-01-01T00:00:00Z');
+          vi.setSystemTime(now);
+
+          const paginator = new Paginator();
+          // Fallback comparator id asc
+          paginator.sortComparator = byIdAsc;
+
+          paginator.boost('a', { ttlMs: 60000, seq: 1 });
+          paginator.boost('b', { ttlMs: 60000, seq: 3 });
+
+          // b has higher seq → should come first → comparator(a,b) > 0
+          // @ts-expect-error
+          expect(paginator.boostComparator(a, b)).toBe(1);
+          // reverse check
+          // @ts-expect-error
+          expect(paginator.boostComparator(b, a)).toBe(-1);
+
+          // Equal seq → fall back to sortComparator (id asc => a before b)
+          paginator.boost('a', { ttlMs: 60000, seq: 2 });
+          paginator.boost('b', { ttlMs: 60000, seq: 2 });
+          // @ts-expect-error
+          expect(paginator.boostComparator(a, b)).toBe(-1);
+
+          vi.useRealTimers();
+        });
+
+        it('ignores expired boosts automatically during comparison', () => {
+          vi.useFakeTimers();
+          const now = new Date('2025-01-01T00:00:00Z');
+          vi.setSystemTime(now);
+
+          const paginator = new Paginator();
+          paginator.sortComparator = byIdAsc;
+
+          paginator.boost('b', { ttlMs: 5000, seq: 10 });
+          // Initially boosted
+          // @ts-expect-error
+          expect(paginator.boostComparator(a, b)).toBe(1);
+
+          // Advance beyond TTL so boost is expired; comparator should fall back
+          vi.setSystemTime(new Date(now.getTime() + 6000));
+          // @ts-expect-error
+          expect(paginator.boostComparator(a, b)).toBe(-1); // byIdAsc, not boost
+          vi.useRealTimers();
+        });
+      });
+
+      describe('boost', () => {
+        it('assigns default TTL (15s) and default seq=0; updates maxBoostSeq only upward', () => {
+          vi.useFakeTimers();
+          const now = new Date('2025-01-01T00:00:00Z');
+          vi.setSystemTime(now);
+
+          const paginator = new Paginator();
+
+          paginator.boost('k'); // default 15s, seq 0
+          const b1 = paginator.getBoost('k')!;
+          expect(b1.seq).toBe(0);
+          expect(b1.until).toBe(now.getTime() + 15000);
+          expect(paginator.maxBoostSeq).toBe(0);
+
+          // Raise max seq
+          paginator.boost('m', { ttlMs: 1000, seq: 5 });
+          expect(paginator.maxBoostSeq).toBe(5);
+
+          // Lower seq should NOT decrease maxBoostSeq
+          paginator.boost('n', { ttlMs: 1000, seq: 2 });
+          expect(paginator.maxBoostSeq).toBe(5);
+
+          vi.useRealTimers();
+        });
+
+        it('accepts explicit until and seq', () => {
+          const paginator = new Paginator();
+          paginator.boost('z', { until: 42, seq: 7 });
+          const b = paginator.getBoost('z')!;
+          expect(b.until).toBe(42);
+          expect(b.seq).toBe(7);
+          expect(paginator.maxBoostSeq).toBe(7);
+        });
+      });
+
+      describe('getBoost', () => {
+        it('returns the boost record when present; otherwise undefined', () => {
+          const paginator = new Paginator();
+          expect(paginator.getBoost('missing')).toBeUndefined();
+          paginator.boost('a', { ttlMs: 1000, seq: 1 });
+          const b = paginator.getBoost('a');
+          expect(b).toBeDefined();
+          expect(b!.seq).toBe(1);
+        });
+      });
+
+      describe('removeBoost', () => {
+        it('removes a boost and recalculates maxBoostSeq', () => {
+          const paginator = new Paginator();
+          paginator.boost('a', { ttlMs: 60000, seq: 1 });
+          paginator.boost('b', { ttlMs: 60000, seq: 5 });
+          paginator.boost('c', { ttlMs: 60000, seq: 2 });
+          expect(paginator.maxBoostSeq).toBe(5);
+
+          paginator.removeBoost('b'); // remove current max
+          expect(paginator.getBoost('b')).toBeUndefined();
+          expect(paginator.maxBoostSeq).toBe(2);
+
+          paginator.removeBoost('c');
+          expect(paginator.getBoost('c')).toBeUndefined();
+          expect(paginator.maxBoostSeq).toBe(1);
+
+          paginator.removeBoost('a');
+          expect(paginator.getBoost('a')).toBeUndefined();
+          expect(paginator.maxBoostSeq).toBe(0);
+        });
+      });
+
+      describe('isBoosted', () => {
+        it('returns true when boost exists and now <= until; false otherwise', () => {
+          vi.useFakeTimers();
+          const now = new Date('2025-01-01T00:00:00Z');
+          vi.setSystemTime(now);
+
+          const paginator = new Paginator();
+          expect(paginator.isBoosted('x')).toBe(false);
+
+          paginator.boost('x', { ttlMs: 5000, seq: 0 });
+          expect(paginator.isBoosted('x')).toBe(true);
+
+          // Exactly at until is still considered boosted per <= check
+          vi.setSystemTime(new Date(now.getTime() + 5000));
+          expect(paginator.isBoosted('x')).toBe(true);
+
+          // After until → false
+          vi.setSystemTime(new Date(now.getTime() + 5001));
+          expect(paginator.isBoosted('x')).toBe(false);
+
+          vi.useRealTimers();
+        });
+      });
+
+      describe('integration: ingestion respects boostComparator implicitly', () => {
+        it('newly ingested boosted items float above non-boosted regardless of fallback sort', () => {
+          vi.useFakeTimers();
+          vi.setSystemTime(new Date('2025-01-01T00:00:00Z'));
+
+          const paginator = new Paginator();
+          paginator.sortComparator = makeComparator<TestItem>({
+            sort: [{ field: 'age', direction: 1 }], // ascending age
+          });
+
+          // Load the non-boosted items as a single anchored (active) interval.
+          paginator.setItems({
+            valueOrFactory: [a, b],
+            isFirstPage: true,
+            isLastPage: true,
+          });
+
+          // Boost "c" before ingest → it floats ahead of the non-boosted items regardless of where
+          // the fallback age sort would otherwise place it.
+          paginator.boost('c', { ttlMs: 60000, seq: 1 });
+          expect(paginator.ingestItem(c)).toBeTruthy();
+
+          const ids = paginator.items!.map((i) => i.id);
+          expect(ids[0]).toBe('c');
+          expect([...ids].sort()).toEqual(['a', 'b', 'c']);
+
+          vi.useRealTimers();
+        });
+      });
+    });
+  });
+});

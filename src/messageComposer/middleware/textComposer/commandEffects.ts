@@ -1,5 +1,5 @@
 import type { Middleware } from '../../../middleware';
-import type { CommandResponse } from '../../../types';
+import type { Command } from '../../../types';
 import type {
   CommandSuggestion,
   TextComposerCommandActivationEffect,
@@ -18,14 +18,14 @@ const emptyCommandStateToRestore: TextComposerCommandActivationStateToRestore = 
 };
 
 const createCommandActivationEffect = (
-  command: CommandResponse,
+  command: Command,
 ): TextComposerCommandActivationEffect => ({
   command,
   stateToRestore: emptyCommandStateToRestore,
   type: 'command.activate',
 });
 
-const isCommandResponse = (suggestion: unknown): suggestion is CommandSuggestion =>
+const isCommand = (suggestion: unknown): suggestion is CommandSuggestion =>
   typeof (suggestion as CommandSuggestion | undefined)?.name === 'string';
 
 export const createCommandEffectsMiddleware = (): CommandEffectsMiddleware => ({
@@ -34,7 +34,7 @@ export const createCommandEffectsMiddleware = (): CommandEffectsMiddleware => ({
     onSuggestionItemSelect: ({ state, next, forward }) => {
       const { selectedSuggestion } = state.change ?? {};
       if (
-        !isCommandResponse(selectedSuggestion) ||
+        !isCommand(selectedSuggestion) ||
         !state.command ||
         state.command.name !== selectedSuggestion.name
       ) {

@@ -1,4 +1,5 @@
 import type { MiddlewareHandlerParams } from '../../../../middleware';
+import { CORE_NOTIFICATION_TYPE } from '../../../../notifications';
 import type { MessageComposer } from '../../../messageComposer';
 import type {
   AttachmentPostUploadMiddleware,
@@ -19,8 +20,7 @@ export const createUploadErrorHandlerMiddleware = (
       const { attachment, error } = state;
       if (!error) return forward();
       if (!attachment) return discard();
-      // A cancellation is the user getting what they asked for, so it gets no error
-      // notification. `StreamChat.doAxiosRequest` draws the same line for the same reason.
+      // A cancellation is not an error: no notification.
       if (isUploadCancellation(error)) return forward();
 
       const reason = error instanceof Error ? error.message : 'unknown error';
@@ -28,10 +28,10 @@ export const createUploadErrorHandlerMiddleware = (
         message: 'Error uploading attachment',
         origin: {
           emitter: 'AttachmentManager',
-          context: { attachment },
+          context: { attachment, composer },
         },
         options: {
-          type: 'api:attachment:upload:failed',
+          type: CORE_NOTIFICATION_TYPE.attachmentUploadFailed,
           metadata: { reason },
           originalError: error,
         },

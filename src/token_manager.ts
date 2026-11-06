@@ -1,49 +1,43 @@
-import type jwt from 'jsonwebtoken';
-
-import { JWTServerToken, JWTUserToken, UserFromToken } from './signing';
+import { chatLoggerSystem } from './logger';
+import { UserFromToken } from './signing';
 import { isFunction } from './utils';
-import type { TokenOrProvider, UserResponse } from './types';
+import type { TokenOrProvider } from './types';
 
-/**
- * TokenManager
- *
- * Handles all the operations around user token.
- */
+const logger = chatLoggerSystem.getLogger('token-manager');
+
+export type TokenManagerMinimalUser = { id: string; anon?: boolean };
+/** Holds the user token, either static or loaded from a provider. */
 export class TokenManager {
   loadTokenPromise: Promise<string> | null;
   type: 'static' | 'provider';
-  secret?: jwt.Secret;
   token?: string;
   tokenProvider?: TokenOrProvider;
-  user?: UserResponse;
-  /**
-   * Constructor
-   *
-   * @param {Secret} secret
-   */
-  constructor(secret?: jwt.Secret) {
+  user?: TokenManagerMinimalUser;
+  private _isAnonymous = false;
+  constructor() {
     this.loadTokenPromise = null;
-    if (secret) {
-      this.secret = secret;
-    }
 
     this.type = 'static';
+  }
 
-    if (this.secret) {
-      this.token = JWTServerToken(this.secret);
-    }
+  get isAnonymous() {
+    return this._isAnonymous;
   }
 
   /**
-   * Set the static string token or token provider.
-   * Token provider should return a token string or a promise which resolves to string token.
+   * Sets a static token or a token provider, then loads the token.
    *
-   * @param {TokenOrProvider} tokenOrProvider
-   * @param {UserResponse} user
+   * @param tokenOrProvider - A token string, or an async provider that resolves to one.
+   * @param user - The user the token belongs to.
+   * @throws When the token is not a string or function, or a string token does not match `user.id`.
    */
-  setTokenOrProvider = async (tokenOrProvider: TokenOrProvider, user: UserResponse) => {
+  setTokenOrProvider = async (
+    tokenOrProvider: TokenOrProvider,
+    user: TokenManagerMinimalUser,
+  ) => {
     this.validateToken(tokenOrProvider, user);
     this.user = user;
+    this._isAnonymous = !!user.anon;
 
     if (isFunction(tokenOrProvider)) {
       this.tokenProvider = tokenOrProvider;
@@ -55,19 +49,17 @@ export class TokenManager {
       this.type = 'static';
     }
 
-    if (!tokenOrProvider && this.user && this.secret) {
-      this.token = JWTUserToken(this.secret, user.id, {}, {});
-      this.type = 'static';
-    }
-
     await this.loadToken();
   };
 
   /**
-   * Resets the token manager.
-   * Useful for client disconnection or switching user.
+   * Clears the token, the provider and the user. Called by the client on `disconnectUser()` and
+   * after an anonymous `createGuest()`.
+   *
+   * @internal
    */
   reset = () => {
+    this._isAnonymous = false;
     this.token = undefined;
     this.tokenProvider = undefined;
     this.type = 'static';
@@ -75,15 +67,9 @@ export class TokenManager {
     this.loadTokenPromise = null;
   };
 
-  // Validates the user token.
-  validateToken = (tokenOrProvider: TokenOrProvider, user: UserResponse) => {
-    // allow empty token for anon user
+  validateToken = (tokenOrProvider: TokenOrProvider, user: TokenManagerMinimalUser) => {
+    // Anonymous users may have an empty token.
     if (user && user.anon && !tokenOrProvider) return;
-
-    // Don't allow empty token for non-server side client.
-    if (!this.secret && !tokenOrProvider) {
-      throw new Error('User token can not be empty');
-    }
 
     if (
       tokenOrProvider &&
@@ -94,7 +80,6 @@ export class TokenManager {
     }
 
     if (typeof tokenOrProvider === 'string') {
-      // Allow empty token for anonymous users
       if (user.anon && tokenOrProvider === '') return;
 
       const tokenUserId = UserFromToken(tokenOrProvider);
@@ -109,12 +94,10 @@ export class TokenManager {
     }
   };
 
-  // Resolves when token is ready. This function is simply to check if loadToken is in progress, in which
-  // case a function should wait.
+  // The in-flight token load, for callers that must wait for it.
   tokenReady = () => this.loadTokenPromise;
 
-  // Fetches a token from tokenProvider function and sets in tokenManager.
-  // In case of static token, it will simply resolve to static token.
+  // Fetches the token from the provider and stores it. A static token resolves as is.
   loadToken = () => {
     // eslint-disable-next-line no-async-promise-executor
     this.loadTokenPromise = new Promise(async (resolve, reject) => {
@@ -126,6 +109,9 @@ export class TokenManager {
         try {
           this.token = await this.tokenProvider();
         } catch (e) {
+          logger
+            .withExtraTags('loadToken')
+            .error('The token provider threw an error.', { error: e });
           return reject(
             new Error(`Call to tokenProvider failed with message: ${e}`, { cause: e }),
           );
@@ -137,22 +123,17 @@ export class TokenManager {
     return this.loadTokenPromise;
   };
 
-  // Returns a current token
   getToken = () => {
     if (this.token) {
       return this.token;
     }
 
-    if (this.user && this.user.anon && !this.token) {
-      return this.token;
-    }
-
-    if (this.secret) {
-      return JWTServerToken(this.secret);
+    if (this._isAnonymous) {
+      return '';
     }
 
     throw new Error(
-      `Both secret and user tokens are not set. Either client.connectUser wasn't called or client.disconnect was called`,
+      `User token is not set. Either client.connectUser wasn't called or client.disconnectUser was called`,
     );
   };
 

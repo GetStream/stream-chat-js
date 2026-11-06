@@ -1,25 +1,4 @@
-import { StateStore } from '../store';
-import type { ArrayOneOrMore, ArrayTwoOrMore, QueryFilter } from '../types';
-
-type ElementType<T> = T extends (infer U)[] ? U : T;
-
-// redeclared because QueryFilter does not account for the additional operators
-export type ExtendedQueryFilter<T = string> = QueryFilter<T> & {
-  $autocomplete?: T extends string ? string : never;
-  $contains?: ElementType<T>;
-  $in?: ElementType<T>[];
-  $q?: T extends string ? string : never;
-};
-
-export type ExtendedQueryLogicalOperators<T> = {
-  $and?: ArrayOneOrMore<ExtendedQueryFilters<T>>;
-  $nor?: ArrayOneOrMore<ExtendedQueryFilters<T>>;
-  $or?: ArrayTwoOrMore<ExtendedQueryFilters<T>>;
-};
-
-export type ExtendedQueryFilters<T> = {
-  [K in keyof T]?: ExtendedQueryFilter<T[K]>;
-} & ExtendedQueryLogicalOperators<T>;
+import { StateStore } from '@stream-io/state-store';
 
 export type FilterBuilderGenerators<
   TFilters,
@@ -31,7 +10,10 @@ export type FilterBuilderGenerators<
   };
 };
 
-export type FilterBuilderOptions<TFilters, TContext extends Record<string, unknown>> = {
+export type FilterBuilderOptions<
+  TFilters,
+  TContext extends Record<string, unknown> = Record<string, unknown>,
+> = {
   initialFilterConfig?: FilterBuilderGenerators<TFilters, TContext>;
   initialContext?: TContext;
 };

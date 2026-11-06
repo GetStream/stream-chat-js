@@ -1,51 +1,146 @@
 import sinon from 'sinon';
 import url from 'url';
-import { Server as WsServer } from 'isomorphic-ws';
 
 import { StableWSConnection } from '../../src/connection';
 import { StreamChat } from '../../src/client';
 import { TokenManager } from '../../src/token_manager';
 import { sleep } from '../../src/utils';
-import { InsightMetrics } from '../../src/insights';
 
-import { describe, expect, it, afterAll } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+
+// A test-only WebSocket that immediately opens and pushes the canned hello frame
+// the real Stream backend sends on the first message. Used with
+// `wsConnection.config.webSocketImpl` so tests never touch the network.
+const HEALTH_CHECK_PAYLOAD =
+	'{"type":"health.check","connection_id":"61112366-0a15-3891-0000-000000000009","cid":"*","me":{"id":"amin","role":"user","created_at":1627391903293696000,"updated_at":1627392008047284000,"last_active":1628678564213510048,"banned":false,"online":true,"invisible":false,"devices":[],"mutes":[],"channel_mutes":[],"unread_count":98,"total_unread_count":98,"unread_channels":18,"language":"","image":"https://cdn.fakercloud.com/avatars/Shriiiiimp_128.jpg","name":"amin"},"created_at":1628678564222203145}';
+
+// The `/api/v2/connect` hello frame. Unlike `health.check` it has no `cid`, and it
+// carries the duplicate `chat` block alongside `me`.
+const CONNECTION_OK_PAYLOAD =
+	'{"type":"connection.ok","connection_id":"61112366-0a15-3891-0000-000000000009","me":{"id":"amin","role":"user","created_at":1627391903293696000,"updated_at":1627392008047284000,"last_active":1628678564213510048,"banned":false,"online":true,"invisible":false,"devices":[],"mutes":[],"channel_mutes":[],"unread_count":98,"total_unread_count":98,"unread_channels":18,"language":"","image":"https://cdn.fakercloud.com/avatars/Shriiiiimp_128.jpg","name":"amin"},"chat":{"mutes":[],"channel_mutes":[],"total_unread_count":98,"unread_channels":18,"unread_threads":0,"latest_hidden_channels":null},"created_at":1628678564222203145}';
+
+class MockWebSocket {
+	static CONNECTING = 0;
+	static OPEN = 1;
+	static CLOSING = 2;
+	static CLOSED = 3;
+
+	CONNECTING = 0;
+	OPEN = 1;
+	CLOSING = 2;
+	CLOSED = 3;
+
+	onopen = null;
+	onclose = null;
+	onerror = null;
+	onmessage = null;
+
+	// Frames the client sent us, in order. The first is the auth message.
+	sent = [];
+
+	// Mirrors the server: it only replies once the auth frame has arrived. Override
+	// per-test to assert on a different hello event.
+	static helloPayload = HEALTH_CHECK_PAYLOAD;
+	// Set to make send() throw, exercising the auth-frame failure path.
+	static sendThrows = false;
+	// Every instance constructed during a test, so tests can assert one was (not) made.
+	static instances = [];
+
+	static reset() {
+		MockWebSocket.helloPayload = HEALTH_CHECK_PAYLOAD;
+		MockWebSocket.sendThrows = false;
+		MockWebSocket.instances = [];
+	}
+
+	constructor(url) {
+		this.url = url;
+		this.readyState = MockWebSocket.CONNECTING;
+		MockWebSocket.instances.push(this);
+
+		queueMicrotask(() => {
+			this.readyState = MockWebSocket.OPEN;
+			this.onopen?.({ type: 'open' });
+		});
+	}
+
+	send(data) {
+		if (MockWebSocket.sendThrows) throw new Error('send failed');
+		this.sent.push(data);
+		// The server answers only after it has read the auth message.
+		if (this.sent.length === 1) {
+			this.onmessage?.({ data: MockWebSocket.helloPayload });
+		}
+	}
+
+	close() {
+		this.readyState = MockWebSocket.CLOSED;
+		this.onclose?.({ code: 1000, reason: '', wasClean: true });
+	}
+}
+
+// A test-only WebSocket that fails to connect — mirrors a real WebSocket
+// against an unreachable host (fires an error, then a code 1006 close).
+class FailingWebSocket {
+	static CONNECTING = 0;
+	static OPEN = 1;
+	static CLOSING = 2;
+	static CLOSED = 3;
+
+	CONNECTING = 0;
+	OPEN = 1;
+	CLOSING = 2;
+	CLOSED = 3;
+
+	onopen = null;
+	onclose = null;
+	onerror = null;
+	onmessage = null;
+
+	constructor(url) {
+		this.url = url;
+		this.readyState = FailingWebSocket.CONNECTING;
+
+		queueMicrotask(() => {
+			this.readyState = FailingWebSocket.CLOSED;
+			this.onerror?.({ type: 'error' });
+			this.onclose?.({ code: 1006, reason: '', wasClean: false });
+		});
+	}
+
+	send() {}
+
+	close() {
+		this.readyState = FailingWebSocket.CLOSED;
+	}
+}
 
 describe('connection', function () {
-	const wsBaseURL = 'http://localhost:9999';
-	const tokenManager = new TokenManager('secret');
+	const wsBaseURL = 'ws://localhost:9999';
+	const tokenManager = new TokenManager();
+	tokenManager.token = 't.oke.n';
 	const user = { name: 'amin', id: 'amin' };
 	const newStreamChat = () => {
 		const client = new StreamChat('key');
+		client.wsConnection.updateConfig({ webSocketImpl: MockWebSocket });
 		client.wsBaseURL = wsBaseURL;
 		client.tokenManager = tokenManager;
 		client._user = user;
-		client.userID = user.id;
-		client.logger = () => null;
-		client.options.enableInsights = true;
 		client.userAgent = 'agent';
-		client.clientID = 'clientID';
-		client.insightMetrics = new InsightMetrics();
+		client.clientId = 'clientID';
 		client.dispatchEvent = () => null;
-		client.recoverState = () => null;
 		return client;
 	};
-
-	// dummy server to use instead of actual Stream API
-	const wss = new WsServer({ port: 9999 });
-	wss.on('connection', (ws) =>
-		ws.send(
-			'{"type":"health.check","connection_id":"61112366-0a15-3891-0000-000000000009","cid":"*","me":{"id":"amin","role":"user","created_at":"2021-07-27T13:18:23.293696Z","updated_at":"2021-07-27T13:20:08.047284Z","last_active":"2021-08-11T10:42:44.213510048Z","banned":false,"online":true,"invisible":false,"devices":[],"mutes":[],"channel_mutes":[],"unread_count":98,"total_unread_count":98,"unread_channels":18,"language":"","image":"https://cdn.fakercloud.com/avatars/Shriiiiimp_128.jpg","name":"amin"},"created_at":"2021-08-11T10:42:44.222203145Z"}',
-		),
-	);
-
-	afterAll(() => wss.close());
 
 	describe('Connection tokenProvider', () => {
 		it('should handle token provider rejection ', async () => {
 			const client = new StreamChat('apiKey', {
-				allowServerSideConnect: true,
+				client: { allowServerSideConnect: true },
 			});
-			client.defaultWSTimeout = 20;
+			client.config.set({
+				client: {
+					wsConnection: { connectTimeoutMs: 20, webSocketImpl: MockWebSocket },
+				},
+			});
 			const tokenProvider = () => Promise.reject(new Error('network failure'));
 			await expect(client.connectUser({ id: 'amin' }, tokenProvider)).rejects.toThrow(
 				/tokenProvider failed/,
@@ -54,25 +149,44 @@ describe('connection', function () {
 	});
 
 	describe('Connection _buildUrl', function () {
-		const device = { id: 'device_id', push_provider: 'firebase' };
 		const client = newStreamChat();
-		client.options.device = device;
 		client.wsBaseURL = 'https://stream-dummy-test.com';
-		const ws = new StableWSConnection({ client });
+		const ws = new StableWSConnection({ wsConnection: client.wsConnection });
 
 		it('should create the correct url', function () {
 			const { host, pathname, query } = url.parse(ws._buildUrl(), true);
 
 			expect(host).to.be.eq('stream-dummy-test.com');
-			expect(pathname).to.be.eq('/connect');
+			expect(pathname).to.be.eq('/api/v2/connect');
 			expect(query['api_key']).to.be.eq('key');
 			expect(query['stream-auth-type']).to.be.eq('jwt');
-			expect(query['authorization']).to.be.eq(tokenManager.token);
 			expect(query['X-Stream-Client']).to.be.eq('agent');
+		});
 
-			const data = JSON.parse(query.json);
-			expect(data.user_details).to.deep.equal(user);
-			expect(data.device).to.deep.equal(device);
+		it('should not carry the auth payload in the query string', function () {
+			// /api/v2/connect authenticates off the first WS frame, not the URL. A token
+			// in the query would leak into logs and proxies for no benefit.
+			const { query } = url.parse(ws._buildUrl(), true);
+
+			expect(query.json).to.be.undefined;
+			expect(query.authorization).to.be.undefined;
+		});
+
+		it('should use stream-auth-type=anonymous for anonymous users', function () {
+			const anonClient = newStreamChat();
+			anonClient.wsBaseURL = 'https://stream-dummy-test.com';
+			// getAuthType() reads client.anonymous, which is backed by tokenManager.isAnonymous
+			const anonUser = { id: 'anon-id', anon: true };
+			anonClient.tokenManager = new TokenManager();
+			anonClient.tokenManager.setTokenOrProvider('', anonUser);
+			anonClient.user = anonUser;
+			anonClient._user = anonUser;
+			const { query } = url.parse(
+				new StableWSConnection({ wsConnection: anonClient.wsConnection })._buildUrl(),
+				true,
+			);
+
+			expect(query['stream-auth-type']).to.be.eq('anonymous');
 		});
 
 		it('should properly encode X-Stream-Client', () => {
@@ -86,16 +200,11 @@ describe('connection', function () {
 			expect(url).to.contain(searchParams.toString());
 		});
 
-		it('should not include device if not there', function () {
-			ws.client.options.device = undefined;
-			const { query } = url.parse(ws._buildUrl(), true);
-			const data = JSON.parse(query.json);
-			expect(data.device).to.deep.undefined;
-		});
-
 		it('should include extra params when building url if provided', function () {
 			const { query: prevQuery } = url.parse(ws._buildUrl(), true);
-			ws.client.options.wsUrlParams = new URLSearchParams({ foo: '1', bar: '2' });
+			ws.client.wsConnection.updateConfig({
+				urlParams: new URLSearchParams({ foo: '1', bar: '2' }),
+			});
 			const { query } = url.parse(ws._buildUrl(), true);
 
 			// all of the previous query params should remain intact
@@ -108,16 +217,202 @@ describe('connection', function () {
 		});
 	});
 
+	describe('Connection auth frame', () => {
+		beforeEach(() => MockWebSocket.reset());
+		afterEach(() => MockWebSocket.reset());
+
+		const connectAndGetFrame = async (client) => {
+			const c = new StableWSConnection({ wsConnection: client.wsConnection });
+			await c.connect();
+			const [socket] = MockWebSocket.instances;
+			return { c, socket, frame: JSON.parse(socket.sent[0]) };
+		};
+
+		/**
+		 * The invariant every watched request depends on: by the time the socket reports itself online,
+		 * there is a connection id to watch on — in the socket's own field *and* in
+		 * `client.wsConnection.state`, which is what `api-client` sends as `connection_id`.
+		 *
+		 * It was broken: `connectionID` was assigned from the resolved `connectionOpen` promise, a
+		 * microtask after `onmessage` had already called `_setHealth(true)`. So the store went online
+		 * carrying `connectionId: undefined`, and `_setStatus` ignores a repeat of the same `isOnline`,
+		 * so nothing ever filled it in. Every watched query then came back 400 with "Watch or
+		 * ChatPresence requires an active websocket connection".
+		 */
+		it('has a connection id by the time it reports online', async () => {
+			const client = newStreamChat();
+			const { c } = await connectAndGetFrame(client);
+			client.wsConnection.connection = c;
+
+			expect(c.isHealthy).to.be.true;
+			expect(client.wsConnection.isHealthy).to.be.true;
+			// Published before the status goes up, so "the socket is up" implies there is an id to
+			// watch on. `ApiClient` holds every subscribing request until this exists.
+			expect(client.connectionIdManager.connectionId).to.equal(
+				'61112366-0a15-3891-0000-000000000009',
+			);
+		});
+
+		it('does not republish the hello id after it was invalidated during the handshake', async () => {
+			const client = newStreamChat();
+			// Drops the id synchronously the moment the socket reports healthy, before `connect()` resumes.
+			const unsubscribe = client.wsConnection.state.subscribeWithSelector(
+				({ isHealthy }) => ({ isHealthy }),
+				({ isHealthy }) => {
+					if (isHealthy) client.connectionIdManager.invalidate();
+				},
+			);
+
+			await connectAndGetFrame(client);
+			unsubscribe();
+
+			expect(client.connectionIdManager.connectionId).to.be.undefined;
+		});
+
+		it('should send exactly one auth frame with the token, user and products', async () => {
+			const { socket, frame } = await connectAndGetFrame(newStreamChat());
+
+			expect(socket.sent).to.have.length(1);
+			expect(frame.token).to.equal('t.oke.n');
+			expect(frame.user_details).to.deep.equal(user);
+			// Without 'chat' the server treats the connection as video-only and drops
+			// every chat event and unread count.
+			expect(frame.products).to.deep.equal(['chat']);
+		});
+
+		it('should not send v1-only fields', async () => {
+			const { frame } = await connectAndGetFrame(newStreamChat());
+
+			// The v2 auth message has no device / client_request_id / user_id field;
+			// sending them would be silently dropped and is misleading.
+			expect(frame).to.not.have.property('device');
+			expect(frame).to.not.have.property('client_request_id');
+			expect(frame).to.not.have.property('user_id');
+		});
+
+		it('should send a non-empty placeholder token for anonymous users', async () => {
+			const client = newStreamChat();
+			client.user = { id: 'anon-id', anon: true };
+			client._user = { id: 'anon-id', anon: true };
+			client.tokenManager = new TokenManager();
+			client.tokenManager.setTokenOrProvider('', { id: 'anon-id', anon: true });
+
+			const { frame } = await connectAndGetFrame(client);
+
+			// The server rejects an empty token on `required` validation, but skips JWT
+			// parsing for anything that is not shaped like a JWT — so a placeholder works.
+			expect(frame.token).to.be.a('string').and.not.equal('');
+			expect(frame.token.split('.')).to.not.have.length(3);
+			// literal `!anon` would fail the server's user-id regex; the server assigns it
+			expect(frame.user_details.id).to.match(/^[@\w .-]*$/);
+		});
+
+		it('should reject before opening a socket when the token is unavailable', async () => {
+			const client = newStreamChat();
+			client.tokenManager = new TokenManager();
+
+			const c = new StableWSConnection({ wsConnection: client.wsConnection });
+			await expect(c.connect(200)).rejects.toThrow();
+			// Failing fast matters: an opened-but-unauthenticated socket would otherwise
+			// sit there until the server's 10s auth deadline killed it.
+			expect(MockWebSocket.instances).to.have.length(0);
+		});
+
+		it('should not send the auth frame for a superseded socket', async () => {
+			const c = new StableWSConnection({ wsConnection: newStreamChat().wsConnection });
+			const socket = {
+				readyState: MockWebSocket.OPEN,
+				OPEN: MockWebSocket.OPEN,
+				sent: [],
+				send(d) {
+					this.sent.push(d);
+				},
+			};
+			c.ws = socket;
+			const staleWsID = c.wsID;
+			c.wsID += 1;
+
+			c.onopen(staleWsID, '{"token":"t.oke.n"}');
+
+			expect(socket.sent).to.have.length(0);
+		});
+
+		it('should not send the auth frame when the socket is already gone', async () => {
+			const c = new StableWSConnection({ wsConnection: newStreamChat().wsConnection });
+			c.ws = undefined;
+
+			expect(() => c.onopen(c.wsID, '{"token":"t.oke.n"}')).to.not.throw();
+		});
+
+		it('should reject the connection when the auth frame cannot be sent', async () => {
+			MockWebSocket.sendThrows = true;
+			const c = new StableWSConnection({ wsConnection: newStreamChat().wsConnection });
+
+			await expect(c.connect(200)).rejects.toThrow();
+		});
+	});
+
+	describe('connection.ok hello event', () => {
+		beforeEach(() => {
+			MockWebSocket.reset();
+			MockWebSocket.helloPayload = CONNECTION_OK_PAYLOAD;
+		});
+		afterEach(() => MockWebSocket.reset());
+
+		it('should resolve the connection and publish the connection id', async () => {
+			const client = newStreamChat();
+			const c = new StableWSConnection({ wsConnection: client.wsConnection });
+			const health = await c.connect();
+
+			expect(health.type).to.equal('connection.ok');
+			expect(health.connection_id).to.equal('61112366-0a15-3891-0000-000000000009');
+			// The manager is the only holder of the id - the connection keeps no copy.
+			expect(client.connectionIdManager.connectionId).to.equal(
+				'61112366-0a15-3891-0000-000000000009',
+			);
+			expect(client._getConnectionID()).to.equal('61112366-0a15-3891-0000-000000000009');
+			expect(c.isHealthy).to.be.true;
+		});
+
+		it('passes wire timestamps through untouched', async () => {
+			const c = new StableWSConnection({ wsConnection: newStreamChat().wsConnection });
+			const health = await c.connect();
+
+			// Nothing decodes frames any more: every timestamp stays the unix-nanosecond number the
+			// API put on the wire, `connection.ok` included.
+			expect(health.created_at).to.be.a('number');
+			expect(health.me.created_at).to.be.a('number');
+		});
+
+		it('should schedule the next ping', async () => {
+			const c = new StableWSConnection({ wsConnection: newStreamChat().wsConnection });
+			const spy = sinon.spy(c, 'scheduleNextPing');
+			await c.connect();
+
+			// The server only echoes health checks in reply to an inbound frame. Failing
+			// to ping here means the 35s connection check tears the socket down, in a loop.
+			expect(spy.called).to.be.true;
+		});
+
+		it('should reject when the first frame is connection.error', async () => {
+			MockWebSocket.helloPayload =
+				'{"type":"connection.error","error":{"code":42,"message":"nope","StatusCode":401}}';
+			const c = new StableWSConnection({ wsConnection: newStreamChat().wsConnection });
+
+			await expect(c.connect(200)).rejects.toThrow();
+		});
+	});
+
 	describe('isResolved flag', () => {
 		it('should set isResolved', async () => {
-			const c = new StableWSConnection({ client: newStreamChat() });
+			const c = new StableWSConnection({ wsConnection: newStreamChat().wsConnection });
 			expect(c.isResolved).to.be.false;
-			const res = await c.connect();
+			await c.connect();
 			expect(c.isResolved).to.be.true;
 		});
 
 		it('onmessage should ignore calling isResolved after promise is resolved', () => {
-			const c = new StableWSConnection({ client: newStreamChat() });
+			const c = new StableWSConnection({ wsConnection: newStreamChat().wsConnection });
 			expect(c.isResolved).to.be.false;
 			c.rejectPromise = sinon.spy();
 			c.resolvePromise = sinon.spy();
@@ -135,7 +430,7 @@ describe('connection', function () {
 		it('onmessage parses event.data once and dispatches the parsed payload', () => {
 			const client = newStreamChat();
 			client.dispatchEvent = sinon.spy();
-			const c = new StableWSConnection({ client });
+			const c = new StableWSConnection({ wsConnection: client.wsConnection });
 			c.isResolved = true;
 			c.scheduleConnectionCheck = () => null;
 
@@ -149,13 +444,13 @@ describe('connection', function () {
 
 	describe('isConnecting flag', () => {
 		it('connect should throw if already connecting', async () => {
-			const c = new StableWSConnection({ client: newStreamChat() });
+			const c = new StableWSConnection({ wsConnection: newStreamChat().wsConnection });
 			c.isConnecting = true;
 			await expect(c.connect()).rejects.toThrow(/called connect twice/);
 		});
 
 		it('_recover should not call _connect if isConnecting is set', async () => {
-			const c = new StableWSConnection({ client: newStreamChat() });
+			const c = new StableWSConnection({ wsConnection: newStreamChat().wsConnection });
 			c._connect = sinon.spy();
 			c.isConnecting = true;
 			await c._reconnect();
@@ -163,7 +458,7 @@ describe('connection', function () {
 		});
 
 		it('onclose should update isConnecting and call _reconnect', async () => {
-			const c = new StableWSConnection({ client: newStreamChat() });
+			const c = new StableWSConnection({ wsConnection: newStreamChat().wsConnection });
 			c._reconnect = sinon.spy();
 			c.isConnecting = true;
 			c.onclose(c.wsID, {});
@@ -172,7 +467,7 @@ describe('connection', function () {
 		});
 
 		it('onerror should update isConnecting and call _reconnect', async () => {
-			const c = new StableWSConnection({ client: newStreamChat() });
+			const c = new StableWSConnection({ wsConnection: newStreamChat().wsConnection });
 			c._reconnect = sinon.spy();
 			c.isConnecting = true;
 			c.onerror(c.wsID, {});
@@ -182,8 +477,9 @@ describe('connection', function () {
 
 		it('should set and unset the flag correctly without opening WS', async () => {
 			const client = newStreamChat();
+			client.wsConnection.updateConfig({ webSocketImpl: FailingWebSocket });
 			client.wsBaseURL = 'https://stream-dummy-test.com';
-			const c = new StableWSConnection({ client });
+			const c = new StableWSConnection({ wsConnection: client.wsConnection });
 
 			expect(c.isConnecting).to.be.false;
 			const connection = c.connect(1000);
@@ -195,7 +491,7 @@ describe('connection', function () {
 		});
 
 		it('should set and unset the flag correctly with opening WS', async () => {
-			const c = new StableWSConnection({ client: newStreamChat() });
+			const c = new StableWSConnection({ wsConnection: newStreamChat().wsConnection });
 			expect(c.isConnecting).to.be.false;
 			let connection = c.connect();
 			expect(c.isConnecting).to.be.true;
@@ -205,6 +501,163 @@ describe('connection', function () {
 			expect(c.isConnecting).to.be.true;
 			await connection;
 			expect(c.isConnecting).to.be.false;
+		});
+	});
+
+	describe('connection id lifecycle', () => {
+		const token =
+			'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYW1pbiJ9.dN0CCAW5CayCq0dsTXxLZvjxhQuZvlaeIfrJmxk9NkU';
+
+		it('publishes the id the handshake answered with', async () => {
+			const client = newStreamChat();
+			const c = new StableWSConnection({ wsConnection: client.wsConnection });
+
+			await c.connect();
+
+			expect(client.connectionIdManager.connectionId).to.equal(
+				'61112366-0a15-3891-0000-000000000009',
+			);
+			expect(client._getConnectionID()).to.equal('61112366-0a15-3891-0000-000000000009');
+		});
+
+		it('arms the deferred synchronously, so an un-awaited connectUser still gates requests', () => {
+			const client = new StreamChat('apiKey', {
+				client: { allowServerSideConnect: true },
+			});
+			client.wsConnection.updateConfig({ webSocketImpl: MockWebSocket });
+			client.setBaseURL(wsBaseURL);
+
+			// deliberately not awaited - this is the documented "fire connectUser, query immediately"
+			// shape, and it only works if arm() runs before the first await inside _connect()
+			const connecting = client.connectUser({ id: 'amin' }, token);
+
+			expect(client.connectionIdManager.loadConnectionIdPromise).to.be.instanceOf(
+				Promise,
+			);
+			expect(() => client.connectionIdManager.getConnectionId()).not.to.throw();
+
+			return connecting;
+		});
+
+		it('releases a request that queued up during the handshake', async () => {
+			const client = new StreamChat('apiKey', {
+				client: { allowServerSideConnect: true },
+			});
+			client.wsConnection.updateConfig({ webSocketImpl: MockWebSocket });
+			client.setBaseURL(wsBaseURL);
+
+			const connecting = client.connectUser({ id: 'amin' }, token);
+			const waiter = client.connectionIdManager.getConnectionId();
+
+			await connecting;
+
+			expect(await waiter).to.equal('61112366-0a15-3891-0000-000000000009');
+		});
+
+		it('drops the id the moment the socket stops being healthy', async () => {
+			const client = newStreamChat();
+			const c = new StableWSConnection({ wsConnection: client.wsConnection });
+			await c.connect();
+			expect(client._hasConnectionID()).to.be.true;
+
+			// what onclose / onerror / the 35s health check all funnel through
+			c._setHealth(false);
+
+			// the server tore the watches down with the socket, so the id is dead from here
+			expect(client.connectionIdManager.connectionId).to.be.undefined;
+			expect(client._hasConnectionID()).to.be.false;
+		});
+
+		it('arms in the same step, so a request never sees the socket down with nothing pending', async () => {
+			const client = newStreamChat();
+			const c = new StableWSConnection({ wsConnection: client.wsConnection });
+			await c.connect();
+
+			c._setHealth(false);
+
+			// no await in between: the id is gone and a deferred is already in its place
+			expect(client.connectionIdManager.loadConnectionIdPromise).to.be.instanceOf(
+				Promise,
+			);
+			expect(() => client.connectionIdManager.getConnectionId()).not.to.throw();
+
+			c.isDisconnected = true;
+		});
+
+		it('holds a watching request across the outage and sends it with the new id', async () => {
+			const client = newStreamChat();
+			const c = new StableWSConnection({ wsConnection: client.wsConnection });
+			client.wsConnection = c;
+			await c.connect();
+			const requestSpy = sinon
+				.stub(client.axiosInstance, 'request')
+				.resolves({ data: { channels: [] }, status: 200, headers: {} });
+
+			// an abnormal close - the socket died and a reconnect is on its way
+			c.onclose(c.wsID, { code: 1006, reason: '', wasClean: false });
+
+			const inFlight = client.queryChannels({ watch: true });
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			expect(requestSpy.called).to.be.false;
+
+			client.connectionIdManager.resolveConnectionId('reconnected-id');
+			await inFlight;
+
+			// the dead id never reached the wire; the watch registers against the live connection
+			expect(requestSpy.firstCall.args[0].params.connection_id).to.equal(
+				'reconnected-id',
+			);
+			requestSpy.restore();
+			c.isDisconnected = true;
+		});
+
+		it('drops the id when the socket is closed', async () => {
+			const client = newStreamChat();
+			const c = new StableWSConnection({ wsConnection: client.wsConnection });
+			await c.connect();
+
+			await c.disconnect();
+
+			expect(client.connectionIdManager.connectionId).to.be.undefined;
+			expect(client._hasConnectionID()).to.be.false;
+		});
+
+		it('fails a request still waiting when a reconnect gives up', async () => {
+			const client = newStreamChat();
+			const c = new StableWSConnection({ wsConnection: client.wsConnection });
+			client.wsConnection = c;
+			await c.connect();
+
+			// a non-WS failure is the "don't reconnect, there is a code bug" branch: no retry follows,
+			// so the deferred armed when the socket went unhealthy has nothing left to settle it
+			c._connect = () =>
+				Promise.reject(Object.assign(new Error('boom'), { isWSFailure: false }));
+
+			c._setHealth(false);
+			const waiter = client.connectionIdManager.getConnectionId();
+
+			await c._reconnect({ interval: 1 });
+
+			await expect(waiter).rejects.toThrow('boom');
+			expect(client.connectionIdManager.loadConnectionIdPromise).to.be.undefined;
+			c.isDisconnected = true;
+		});
+
+		it('fails a request still waiting when the initial connect gives up', async () => {
+			const client = new StreamChat('apiKey', {
+				client: { allowServerSideConnect: true, baseURL: 'http://localhost:1111' },
+			});
+			client.config.set({
+				client: {
+					wsConnection: { connectTimeoutMs: 500, webSocketImpl: FailingWebSocket },
+				},
+			});
+
+			const connecting = client.connectUser({ id: 'amin' }, token);
+			const waiter = client.connectionIdManager.getConnectionId();
+
+			await expect(connecting).rejects.toThrow();
+			await expect(waiter).rejects.toThrow();
 		});
 	});
 
@@ -225,8 +678,11 @@ describe('connection', function () {
 			return tm;
 		};
 
+		beforeEach(() => MockWebSocket.reset());
+		afterEach(() => MockWebSocket.reset());
+
 		const resolvedConnection = (client) => {
-			const c = new StableWSConnection({ client });
+			const c = new StableWSConnection({ wsConnection: client.wsConnection });
 			c.isResolved = true;
 			c.scheduleConnectionCheck = () => null;
 			c._reconnect = sinon.spy();
@@ -341,13 +797,13 @@ describe('connection', function () {
 			expect(c.tokenExpiredByServer).to.be.false;
 		});
 
-		it('lets only one of two concurrent refreshing reconnects connect and recover', async () => {
+		it('lets only one of two concurrent refreshing reconnects connect and settle', async () => {
 			const client = newStreamChat();
 			client.tokenManager = await providerTokenManager(() =>
 				sleep(10).then(() => 'token'),
 			);
-			client.recoverState = sinon.spy(() => Promise.resolve());
-			const c = new StableWSConnection({ client });
+			client._settleConnectPromises = sinon.spy();
+			const c = new StableWSConnection({ wsConnection: client.wsConnection });
 			// Mirrors the real _connect: a second call while connecting returns early.
 			c._connect = sinon.spy(async () => {
 				if (c.isConnecting) return;
@@ -363,7 +819,7 @@ describe('connection', function () {
 			]);
 
 			expect(c._connect.calledOnce).to.be.true;
-			expect(client.recoverState.calledOnce).to.be.true;
+			expect(client._settleConnectPromises.calledOnce).to.be.true;
 		});
 
 		it('retries the refresh with backoff when the tokenProvider rejects', async () => {
@@ -372,7 +828,7 @@ describe('connection', function () {
 			client.tokenManager = await providerTokenManager(() =>
 				++calls === 1 ? Promise.resolve('token') : Promise.reject(new Error('offline')),
 			);
-			const c = new StableWSConnection({ client });
+			const c = new StableWSConnection({ wsConnection: client.wsConnection });
 			c._connect = sinon.spy();
 			c._reconnect = sinon.spy();
 
@@ -390,62 +846,57 @@ describe('connection', function () {
 			expect(c._reconnect.firstCall.args[0]).to.deep.equal({ refreshToken: true });
 		});
 
-		it('does not retry the refresh after disconnect', async () => {
+		it('stops retrying the refresh after disconnect', async () => {
 			const client = newStreamChat();
 			let calls = 0;
-			client.tokenManager = await providerTokenManager(() =>
-				++calls === 1 ? Promise.resolve('token') : Promise.reject(new Error('offline')),
-			);
-			const c = new StableWSConnection({ client });
+			const c = new StableWSConnection({ wsConnection: client.wsConnection });
+			client.tokenManager = await providerTokenManager(() => {
+				if (++calls === 1) return Promise.resolve('token');
+				// disconnect() lands while the refresh is in flight
+				c.isDisconnected = true;
+				return Promise.reject(new Error('offline'));
+			});
 			c._connect = sinon.spy();
-			c._reconnect = sinon.spy();
-			c.isDisconnected = true;
+			const reconnect = c._reconnect.bind(c);
+			c._reconnect = (options = {}) => reconnect({ ...options, interval: 1 });
 
-			await expect(
-				StableWSConnection.prototype._reconnect.call(c, {
-					interval: 1,
-					refreshToken: true,
-				}),
-			).resolves.toBeUndefined();
+			await c._reconnect({ refreshToken: true });
+			await sleep(20);
 
+			expect(calls).to.equal(2);
 			expect(c._connect.notCalled).to.be.true;
-			expect(c._reconnect.notCalled).to.be.true;
 		});
 
 		it('reconnects with a new token from the tokenProvider', async () => {
-			const authorizations = [];
-			const server = new WsServer({ port: 9998 });
-			server.on('connection', (socket, req) => {
-				const { query } = url.parse(req.url, true);
-				authorizations.push(query.authorization);
-				socket.send(
-					JSON.stringify({ type: 'health.check', connection_id: 'connection-id' }),
-				);
-				if (authorizations.length === 1) {
-					socket.send(tokenExpiredEvent);
-					socket.close(1008, 'token expired');
-				}
-			});
+			let calls = 0;
+			const client = newStreamChat();
+			client.tokenManager = await providerTokenManager(() =>
+				Promise.resolve(`token-${++calls}`),
+			);
+			const c = new StableWSConnection({ wsConnection: client.wsConnection });
+			// The real reconnect, without its randomized 0.25-2.5s backoff.
+			const reconnect = c._reconnect.bind(c);
+			const reconnectOptions = [];
+			c._reconnect = (options = {}) => {
+				reconnectOptions.push(options);
+				return reconnect({ ...options, interval: 1 });
+			};
 
-			try {
-				let calls = 0;
-				const client = newStreamChat();
-				client.wsBaseURL = 'http://localhost:9998';
-				client.tokenManager = await providerTokenManager(() =>
-					Promise.resolve(`token-${++calls}`),
-				);
-				const c = new StableWSConnection({ client });
+			await c.connect();
+			const [first] = MockWebSocket.instances;
+			first.onmessage?.({ data: tokenExpiredEvent });
+			first.readyState = MockWebSocket.CLOSED;
+			first.onclose?.({ code: 1008, reason: 'token expired', wasClean: true });
 
-				await c.connect();
-				for (let i = 0; i < 100 && authorizations.length < 2; i++) {
-					await sleep(50);
-				}
-				c.disconnect();
-
-				expect(authorizations).to.deep.equal(['token-1', 'token-2']);
-			} finally {
-				server.close();
+			for (let i = 0; i < 100 && !MockWebSocket.instances[1]?.sent.length; i++) {
+				await sleep(10);
 			}
+			c.disconnect();
+
+			expect(reconnectOptions).to.deep.equal([{ refreshToken: true }]);
+
+			const tokens = MockWebSocket.instances.map((ws) => JSON.parse(ws.sent[0]).token);
+			expect(tokens).to.deep.equal(['token-1', 'token-2']);
 		});
 	});
 
@@ -455,29 +906,92 @@ describe('connection', function () {
 
 		it('should fail with invalid URL', async function () {
 			const client = new StreamChat('apiKey', {
-				allowServerSideConnect: true,
-				baseURL: 'http://localhost:1111', // invalid base url
+				client: {
+					allowServerSideConnect: true,
+					baseURL: 'http://localhost:1111', // invalid base url
+				},
 			});
-			client.defaultWSTimeout = 2000;
+			client.config.set({
+				client: {
+					wsConnection: { connectTimeoutMs: 2000, webSocketImpl: FailingWebSocket },
+				},
+			});
 
 			await expect(client.connectUser({ id: 'amin' }, token)).rejects.toThrow(
 				/initial WS connection could not be established/,
 			);
 		});
 
+		it('reconnects when the network returns after the initial connect timed out', async function () {
+			// Cold start with no network: `connectUser` rejects once `_waitForHealthy` gives up,
+			// and the SDKs then hand that failure to `closeConnection()` (what
+			// `persistUserOnConnectionFailure` selects). The retry loop must survive that, because
+			// nothing else re-opens the socket when connectivity comes back — the UI SDKs only
+			// forward the network change via `onlineStatusChanged`.
+			const client = new StreamChat('apiKey', {
+				client: { allowServerSideConnect: true, baseURL: 'http://localhost:1111' },
+			});
+			client.config.set({
+				client: {
+					wsConnection: { connectTimeoutMs: 1000, webSocketImpl: FailingWebSocket },
+				},
+			});
+			client.config.setConfig('client', { persistUserOnConnectionFailure: true });
+
+			await expect(client.connectUser({ id: 'amin' }, token)).rejects.toThrow(
+				/initial WS connection could not be established/,
+			);
+
+			// The network comes back, well after the initial attempt gave up.
+			client.wsConnection.updateConfig({ webSocketImpl: MockWebSocket });
+			client.setBaseURL(wsBaseURL);
+
+			client.wsConnection.onlineStatusChanged({ type: 'online' });
+
+			for (let i = 0; i < 100 && !client.wsConnection.isHealthy; i++) {
+				await sleep(50);
+			}
+
+			expect(client.wsConnection.isHealthy).to.be.true;
+		});
+
+		it('closes the connection when the initial connect fails for a non-WebSocket reason', async function () {
+			// The counterpart of the test above: a failure the retry loop cannot fix must still be
+			// cleaned up, so nothing is left retrying against a connection that will never succeed.
+			const client = new StreamChat('apiKey', {
+				client: { allowServerSideConnect: true, baseURL: 'http://localhost:1111' },
+			});
+			client.wsConnection.updateConfig({ webSocketImpl: MockWebSocket });
+			client.wsBaseURL = wsBaseURL;
+			client.config.setConfig('client', { persistUserOnConnectionFailure: true });
+			const closeConnection = sinon.spy(client, 'closeConnection');
+
+			await expect(
+				client.connectUser({ id: 'amin' }, () =>
+					Promise.reject(new Error('token provider exploded')),
+				),
+			).rejects.toThrow();
+
+			expect(closeConnection.called).to.be.true;
+		});
+
 		it('should retry until connection is established', async function () {
 			const client = new StreamChat('apiKey', {
-				allowServerSideConnect: true,
-				baseURL: 'http://localhost:1111', // invalid base url
+				client: { allowServerSideConnect: true, baseURL: 'http://localhost:1111' },
 			});
-			client.defaultWSTimeout = 5000;
+			client.config.set({
+				client: {
+					wsConnection: { connectTimeoutMs: 5000, webSocketImpl: FailingWebSocket },
+				},
+			});
 
 			await Promise.all([
 				client.connectUser({ id: 'amin' }, token).then((health) => {
 					expect(health.type).to.be.equal('health.check');
 				}),
 				sleep(1000).then(() => {
-					// set the correct url after connectUser failed and is trying to connect
+					// swap in the healthy mock so the retrying connect will succeed
+					client.wsConnection.updateConfig({ webSocketImpl: MockWebSocket });
 					client.setBaseURL(wsBaseURL);
 					client.wsConnection.wsBaseURL = client.wsBaseURL;
 				}),

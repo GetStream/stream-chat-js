@@ -4,12 +4,13 @@ import { StreamChat } from '../../../../../src/client';
 import { MessageComposer } from '../../../../../src/messageComposer/messageComposer';
 import { createCommandInjectionMiddleware } from '../../../../../src/messageComposer/middleware/messageComposer/commandInjection';
 import {
-  CommandResponse,
+  Command,
   createDraftCommandInjectionMiddleware,
   MessageComposerMiddlewareState,
   MessageDraftComposerMiddlewareValueState,
   MiddlewareStatus,
 } from '../../../../../src';
+import { convertDateToTimestamp } from '../../../test-utils/time';
 
 const setup = (initialState: MessageComposerMiddlewareState) => {
   return {
@@ -45,7 +46,7 @@ describe('stream-io/message-composer-middleware/command-injection', () => {
 
   beforeEach(() => {
     client = {
-      userID: 'currentUser',
+      userId: 'currentUser',
       user: { id: 'currentUser' },
     } as any;
 
@@ -71,7 +72,7 @@ describe('stream-io/message-composer-middleware/command-injection', () => {
       get mentionedUsers() {
         return [];
       },
-      setCommand: (command: CommandResponse | null) => {},
+      setCommand: (command: Command | null) => {},
     };
 
     const attachmentManager = {
@@ -146,7 +147,7 @@ describe('stream-io/message-composer-middleware/command-injection', () => {
         },
         localMessage: {
           attachments: [],
-          created_at: new Date(),
+          created_at: convertDateToTimestamp(new Date()),
           deleted_at: null,
           error: undefined,
           id: 'test-id',
@@ -157,7 +158,7 @@ describe('stream-io/message-composer-middleware/command-injection', () => {
           status: 'sending',
           text: 'haha',
           type: 'regular',
-          updated_at: new Date(),
+          updated_at: convertDateToTimestamp(new Date()),
         },
         sendOptions: {},
       }),
@@ -182,7 +183,7 @@ describe('stream-io/message-composer-middleware/command-injection', () => {
         },
         localMessage: {
           attachments: [],
-          created_at: new Date(),
+          created_at: convertDateToTimestamp(new Date()),
           deleted_at: null,
           error: undefined,
           id: 'test-id',
@@ -193,7 +194,7 @@ describe('stream-io/message-composer-middleware/command-injection', () => {
           status: 'sending',
           text: 'haha',
           type: 'regular',
-          updated_at: new Date(),
+          updated_at: convertDateToTimestamp(new Date()),
         },
         sendOptions: {},
       }),
@@ -201,6 +202,41 @@ describe('stream-io/message-composer-middleware/command-injection', () => {
 
     expect(result.status).toBeUndefined;
     expect(result.state.message.text).toBe('/giphy haha');
+    expect(result.state.localMessage.text).toBe('/giphy haha');
+  });
+
+  it('should not inject the command into text that already starts with it', async () => {
+    vi.spyOn(messageComposer.textComposer, 'command', 'get').mockReturnValue({
+      name: 'giphy',
+      description: 'Send a giphy',
+    });
+
+    const result = await textComposerMiddleware.handlers.compose(
+      setup({
+        message: {
+          id: 'test-id',
+          parent_id: undefined,
+          type: 'regular',
+        },
+        localMessage: {
+          attachments: [],
+          created_at: convertDateToTimestamp(new Date()),
+          deleted_at: null,
+          error: undefined,
+          id: 'test-id',
+          mentioned_users: [],
+          parent_id: undefined,
+          pinned_at: null,
+          reaction_groups: null,
+          status: 'sending',
+          text: '/giphy haha',
+          type: 'regular',
+          updated_at: convertDateToTimestamp(new Date()),
+        },
+        sendOptions: {},
+      }),
+    );
+
     expect(result.state.localMessage.text).toBe('/giphy haha');
   });
 });
@@ -215,7 +251,7 @@ describe('stream-io/message-composer-middleware/draft-command-injection', () => 
 
   beforeEach(() => {
     client = {
-      userID: 'currentUser',
+      userId: 'currentUser',
       user: { id: 'currentUser' },
     } as any;
 
@@ -241,7 +277,7 @@ describe('stream-io/message-composer-middleware/draft-command-injection', () => 
       get mentionedUsers() {
         return [];
       },
-      setCommand: (command: CommandResponse | null) => {},
+      setCommand: (command: Command | null) => {},
     };
 
     const attachmentManager = {
@@ -333,6 +369,25 @@ describe('stream-io/message-composer-middleware/draft-command-injection', () => 
           id: 'test-id',
           parent_id: undefined,
           text: 'haha',
+        },
+      }),
+    );
+
+    expect(result.state.draft.text).toBe('/giphy haha');
+  });
+
+  it('should not inject the command into draft text that already starts with it', async () => {
+    vi.spyOn(messageComposer.textComposer, 'command', 'get').mockReturnValue({
+      name: 'giphy',
+      description: 'Send a giphy',
+    });
+
+    const result = await draftTextComposerMiddleware.handlers.compose(
+      setupDraft({
+        draft: {
+          id: 'test-id',
+          parent_id: undefined,
+          text: '/giphy haha',
         },
       }),
     );

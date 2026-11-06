@@ -1,0 +1,1075 @@
+import type { AxiosRequestConfig } from 'axios';
+import { AxiosError } from 'axios';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { requiresConnectionId } from '../../src/api-client';
+import { isAlreadyExistsError, parseError } from '../../src/errors';
+import { getClientWithUser } from './test-utils/getClient';
+
+import { StreamChat } from '../../src/client';
+import { StreamAPIError } from '../../src/types';
+import type { StreamRequestOptions } from '../../src/types';
+
+describe('ApiClient request options', () => {
+  let client: StreamChat;
+  let requestSpy: ReturnType<typeof vi.spyOn>;
+
+  const configOfCall = (index: number) =>
+    requestSpy.mock.calls[index][0] as { signal?: AbortSignal };
+  const firstConfig = () => configOfCall(0);
+
+  beforeEach(() => {
+    client = getClientWithUser();
+    requestSpy = vi
+      .spyOn(client.axiosInstance, 'request')
+      .mockResolvedValue({ data: {}, status: 200, headers: {} });
+  });
+
+  const sendRequest = (options?: { signal?: AbortSignal }) =>
+    client.api.sendRequest(
+      'GET',
+      '/api/v2/chat/channels',
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      options,
+    );
+
+  it('sends no signal when no options are given', async () => {
+    await sendRequest();
+
+    expect(requestSpy).toHaveBeenCalledTimes(1);
+    expect(firstConfig().signal).to.be.undefined;
+  });
+
+  it('forwards the signal from the request options to axios', async () => {
+    const controller = new AbortController();
+
+    await sendRequest({ signal: controller.signal });
+
+    expect(firstConfig().signal).to.equal(controller.signal);
+  });
+
+  it('aborts the request when the caller aborts the signal', async () => {
+    const controller = new AbortController();
+
+    await sendRequest({ signal: controller.signal });
+    const { signal } = firstConfig();
+
+    expect(signal?.aborted).to.be.false;
+    controller.abort();
+    expect(signal?.aborted).to.be.true;
+  });
+
+  it('forwards an already aborted signal', async () => {
+    const controller = new AbortController();
+    controller.abort();
+
+    await sendRequest({ signal: controller.signal });
+
+    expect(firstConfig().signal?.aborted).to.be.true;
+  });
+
+  // An offline-db task payload carries the method's `requestOptions`, so a task that was
+  // persisted and replayed after a restart arrives with a JSON-revived signal: an inert `{}`.
+  // Axios reaches for `signal.addEventListener` unconditionally, so it must not get through.
+  it('drops a signal that did not survive JSON persistence', async () => {
+    const revived = JSON.parse(
+      JSON.stringify({ signal: new AbortController().signal }),
+    ) as { signal: AbortSignal };
+
+    expect(revived.signal.addEventListener).to.be.undefined;
+
+    await sendRequest(revived);
+
+    expect(firstConfig().signal).to.be.undefined;
+  });
+
+  it('applies the options to a single request only', async () => {
+    const controller = new AbortController();
+
+    await sendRequest({ signal: controller.signal });
+    await sendRequest();
+
+    expect(configOfCall(1).signal).to.be.undefined;
+  });
+
+  it('keeps the same signal across retries', async () => {
+    const controller = new AbortController();
+    client.tokenManager.tokenProvider = async () => 'fresh-token';
+    client.tokenManager.type = 'provider';
+    requestSpy.mockRejectedValueOnce(
+      Object.assign(new AxiosError('token expired'), {
+        response: {
+          data: { code: 40, message: 'token expired' },
+          headers: {},
+          status: 401,
+        },
+        status: 401,
+      }),
+    );
+
+    await sendRequest({ signal: controller.signal });
+
+    expect(requestSpy).toHaveBeenCalledTimes(2);
+    expect(configOfCall(1).signal).to.equal(controller.signal);
+  });
+
+  it('forwards onUploadProgress from the request options to axios', async () => {
+    const onUploadProgress = vi.fn();
+
+    await sendRequest({ onUploadProgress } as StreamRequestOptions);
+
+    expect((firstConfig() as { onUploadProgress?: unknown }).onUploadProgress).to.equal(
+      onUploadProgress,
+    );
+  });
+
+  // Same reasoning as the revived-signal case above: a persisted offline-db task payload
+  // loses its functions.
+  it('drops an onUploadProgress that did not survive JSON persistence', async () => {
+    const revived = JSON.parse(JSON.stringify({ onUploadProgress: () => {} }));
+
+    await sendRequest(revived);
+
+    expect((firstConfig() as { onUploadProgress?: unknown }).onUploadProgress).to.be
+      .undefined;
+  });
+
+  it('forwards the timeout from the request options to axios', async () => {
+    await sendRequest({ timeout: 30000 } as StreamRequestOptions);
+
+    expect((firstConfig() as AxiosRequestConfig).timeout).to.equal(30000);
+  });
+
+  // An explicit `undefined` makes axios fall back to the instance timeout.
+  it('sends no timeout key when none is given', async () => {
+    await sendRequest({ signal: new AbortController().signal });
+
+    expect(firstConfig()).not.toHaveProperty('timeout');
+  });
+});
+
+describe('ApiClient rate limit metadata', () => {
+  const sendWithHeaders = async (headers: Record<string, string>) => {
+    const client = getClientWithUser();
+    vi.spyOn(client.axiosInstance, 'request').mockResolvedValue({
+      data: {},
+      status: 200,
+      headers,
+    });
+    const { metadata } = await client.api.sendRequest('GET', '/api/v2/chat/channels');
+    return metadata.rate_limit;
+  };
+
+  it('reads x-ratelimit-reset as unix seconds', async () => {
+    const rateLimit = await sendWithHeaders({
+      'x-ratelimit-limit': '60',
+      'x-ratelimit-remaining': '59',
+      'x-ratelimit-reset': '1700000000',
+    });
+
+    expect(rateLimit?.rate_limit).toBe(60);
+    expect(rateLimit?.rate_limit_remaining).toBe(59);
+    expect(rateLimit?.rate_limit_reset?.toISOString()).toBe('2023-11-14T22:13:20.000Z');
+  });
+
+  it('leaves the reset unset rather than producing an Invalid Date', async () => {
+    expect(
+      (await sendWithHeaders({ 'x-ratelimit-reset': 'garbage' }))?.rate_limit_reset,
+    ).toBe(undefined);
+    expect((await sendWithHeaders({}))?.rate_limit_reset).toBe(undefined);
+  });
+});
+
+describe('ApiClient response shape', () => {
+  let client: StreamChat;
+
+  beforeEach(() => {
+    client = getClientWithUser();
+    vi.spyOn(client.axiosInstance, 'request').mockResolvedValue({
+      data: { duration: '1ms', channels: [] },
+      status: 200,
+      headers: {},
+    });
+  });
+
+  it('resolves to the response body with the metadata merged in', async () => {
+    const response = await client.api.sendRequest('GET', '/api/v2/chat/channels');
+
+    expect(response).toEqual({
+      duration: '1ms',
+      channels: [],
+      metadata: expect.objectContaining({ response_code: 200 }),
+    });
+    expect(response).not.toHaveProperty('body');
+  });
+
+  it('rejects rather than throws when the request cannot be built', async () => {
+    // The generated methods return this promise without awaiting it, so a synchronous throw would
+    // escape a caller's `.catch()`. A lone surrogate makes `encodeURIComponent` throw on the path.
+    let request: Promise<unknown> | undefined;
+    expect(() => {
+      request = client.api.sendRequest('GET', '/api/v2/chat/channels/{id}', {
+        id: '\uD800',
+      });
+    }).not.toThrow();
+
+    await expect(request).rejects.toThrow(URIError);
+  });
+});
+
+describe('ApiClient error wrapping', () => {
+  let client: StreamChat;
+  let requestSpy: ReturnType<typeof vi.spyOn>;
+
+  // What a second copy of axios throws - e.g. through an adapter installed from another package's
+  // copy: flagged like any axios error, but not an instance of this copy's `AxiosError`.
+  const foreignAxiosError = (status: number, data: unknown) => {
+    const error = Object.assign(new Error(`Request failed with status code ${status}`), {
+      isAxiosError: true,
+      name: 'AxiosError',
+      response: { data, headers: {}, status },
+      status,
+    });
+    expect(error).not.toBeInstanceOf(AxiosError);
+    return error;
+  };
+
+  const alreadyExists = {
+    code: 4,
+    message: 'SendMessage failed with error: "a message with ID abc already exists"',
+    StatusCode: 400,
+  };
+
+  beforeEach(() => {
+    client = getClientWithUser();
+    requestSpy = vi.spyOn(client.axiosInstance, 'request');
+  });
+
+  it('wraps an API error from this axios copy in a StreamAPIError', async () => {
+    requestSpy.mockRejectedValueOnce(
+      Object.assign(new AxiosError('Request failed with status code 400'), {
+        response: { data: alreadyExists, headers: {}, status: 400 },
+        status: 400,
+      }),
+    );
+
+    const error = await client.api
+      .sendRequest('POST', '/api/v2/chat/channels')
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(StreamAPIError);
+    expect(error).toMatchObject({ code: 4, message: alreadyExists.message, status: 400 });
+  });
+
+  it('wraps an API error from another axios copy in a StreamAPIError', async () => {
+    requestSpy.mockRejectedValueOnce(foreignAxiosError(400, alreadyExists));
+
+    const error = await client.api
+      .sendRequest('POST', '/api/v2/chat/channels')
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(StreamAPIError);
+    expect(error).toMatchObject({ code: 4, message: alreadyExists.message, status: 400 });
+    // What the message-operations failure policy keys "already exists" on.
+    expect(isAlreadyExistsError(error, parseError(error))).toBe(true);
+  });
+
+  it('does not retry a rate-limited request and rejects with the API error', async () => {
+    const rateLimited = { code: 9, message: 'Too many requests', StatusCode: 429 };
+    requestSpy.mockRejectedValue(foreignAxiosError(429, rateLimited));
+
+    const error = await client.api
+      .sendRequest('GET', '/api/v2/chat/channels')
+      .catch((e: unknown) => e);
+
+    expect(requestSpy).toHaveBeenCalledTimes(1);
+    expect(error).toBeInstanceOf(StreamAPIError);
+    expect(error).toMatchObject({ code: 9, message: rateLimited.message, status: 429 });
+  });
+
+  it('does not retry TOKEN_EXPIRED for a static token', async () => {
+    const tokenExpired = { code: 40, message: 'Token has expired', StatusCode: 401 };
+    client.tokenManager.type = 'static';
+    const loadTokenSpy = vi.spyOn(client.tokenManager, 'loadToken');
+    requestSpy.mockRejectedValue(foreignAxiosError(401, tokenExpired));
+
+    const error = await client.api
+      .sendRequest('GET', '/api/v2/chat/channels')
+      .catch((e: unknown) => e);
+
+    expect(requestSpy).toHaveBeenCalledTimes(1);
+    expect(loadTokenSpy).not.toHaveBeenCalled();
+    expect(error).toBeInstanceOf(StreamAPIError);
+    expect(error).toMatchObject({ code: 40, message: tokenExpired.message, status: 401 });
+  });
+
+  describe('when TOKEN_EXPIRED retries run out', () => {
+    const tokenExpired = { code: 40, message: 'Token has expired', StatusCode: 401 };
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      client.tokenManager.tokenProvider = async () => 'fresh-token';
+      client.tokenManager.type = 'provider';
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('rejects with the API error of the last attempt', async () => {
+      requestSpy.mockRejectedValue(foreignAxiosError(401, tokenExpired));
+
+      const settled = client.api
+        .sendRequest('GET', '/api/v2/chat/channels')
+        .catch((e: unknown) => e);
+      await vi.runAllTimersAsync();
+      const error = await settled;
+
+      // the first request plus 10 retries
+      expect(requestSpy).toHaveBeenCalledTimes(11);
+      expect(error).toBeInstanceOf(StreamAPIError);
+      expect(error).toMatchObject({
+        code: 40,
+        message: tokenExpired.message,
+        status: 401,
+      });
+      expect((error as StreamAPIError).response?.status).toBe(401);
+    });
+
+    it('rejects with the error of the last attempt when the failure changes', async () => {
+      requestSpy.mockRejectedValue(foreignAxiosError(401, tokenExpired));
+      requestSpy.mockRejectedValueOnce(
+        foreignAxiosError(401, { ...tokenExpired, message: 'first attempt' }),
+      );
+
+      const settled = client.api
+        .sendRequest('GET', '/api/v2/chat/channels')
+        .catch((e: unknown) => e);
+      await vi.runAllTimersAsync();
+
+      expect(await settled).toMatchObject({ code: 40, message: tokenExpired.message });
+    });
+
+    it('resolves when a retry succeeds', async () => {
+      requestSpy
+        .mockRejectedValueOnce(foreignAxiosError(401, tokenExpired))
+        .mockResolvedValueOnce({ data: { ok: true }, status: 200, headers: {} });
+
+      const settled = client.api.sendRequest('GET', '/api/v2/chat/channels');
+      await vi.runAllTimersAsync();
+
+      expect(await settled).toMatchObject({ ok: true });
+      expect(requestSpy).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it('rethrows an axios error with no Stream error body unwrapped', async () => {
+    const error = foreignAxiosError(502, '<html>Bad Gateway</html>');
+    requestSpy.mockRejectedValueOnce(error);
+
+    await expect(client.api.sendRequest('GET', '/api/v2/chat/channels')).rejects.toBe(
+      error,
+    );
+  });
+});
+
+describe('ApiClient path params', () => {
+  let client: StreamChat;
+  let requestSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    client = getClientWithUser();
+    requestSpy = vi
+      .spyOn(client.axiosInstance, 'request')
+      .mockResolvedValue({ data: {}, status: 200, headers: {} });
+  });
+
+  it('fills each placeholder from pathParams', async () => {
+    await client.api.sendRequest('GET', '/api/v2/chat/messages/{id}', { id: 'a b' });
+
+    const { url } = requestSpy.mock.calls[0][0] as AxiosRequestConfig;
+    expect(url).toBe(`${client.baseURL}/api/v2/chat/messages/a%20b`);
+  });
+
+  it('rejects a pathParams key the path has no placeholder for', async () => {
+    // The shape a call site written for the old single-argument signature produces: the body field
+    // rides along in pathParams, where nothing would ever send it.
+    await expect(
+      client.api.sendRequest('POST', '/api/v2/chat/messages/{id}/reaction', {
+        id: 'message-id',
+        reaction: 'love',
+      } as Record<string, string>),
+    ).rejects.toThrow(
+      '"reaction" is not a path parameter of /api/v2/chat/messages/{id}/reaction',
+    );
+    expect(requestSpy).not.toHaveBeenCalled();
+  });
+
+  it('rejects a stale merged call through a generated method', async () => {
+    await expect(
+      client.sendReaction(
+        // @ts-expect-error - the pre-split shape, as a JavaScript caller would still pass it
+        { id: 'message-id', reaction: { type: 'love' } },
+      ),
+    ).rejects.toThrow('"reaction" is not a path parameter');
+    expect(requestSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('ApiClient header precedence', () => {
+  let client: StreamChat;
+  let requestSpy: ReturnType<typeof vi.spyOn>;
+
+  const sentHeaders = () =>
+    (requestSpy.mock.calls[0][0] as AxiosRequestConfig).headers as Record<
+      string,
+      unknown
+    >;
+
+  beforeEach(() => {
+    client = getClientWithUser();
+    client.config.setConfig('client', {
+      axiosRequestConfig: {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'integrator-token',
+          'x-stream-client': 'integrator-agent',
+          'x-custom': 'kept',
+        },
+      },
+    });
+    requestSpy = vi
+      .spyOn(client.axiosInstance, 'request')
+      .mockResolvedValue({ data: {}, status: 200, headers: {} });
+  });
+
+  it('lets a per-request Content-Type outrank the integrator global one', async () => {
+    await client.api.sendRequest(
+      'POST',
+      '/api/v2/uploads/file',
+      undefined,
+      undefined,
+      { file: new File(['x'], 'a.jpg', { type: 'image/jpeg' }) },
+      'multipart/form-data',
+    );
+
+    expect(sentHeaders()['Content-Type']).to.equal('multipart/form-data');
+  });
+
+  it('keeps SDK-owned headers out of the integrator global reach', async () => {
+    await client.api.sendRequest('GET', '/api/v2/chat/channels');
+
+    expect(sentHeaders().Authorization).to.not.equal('integrator-token');
+    expect(sentHeaders()['x-stream-client']).to.not.equal('integrator-agent');
+  });
+
+  it('still applies integrator headers the SDK does not set itself', async () => {
+    await client.api.sendRequest('GET', '/api/v2/chat/channels');
+
+    expect(sentHeaders()['x-custom']).to.equal('kept');
+  });
+
+  // `doAxiosRequest` is the escape hatch for a caller that wants to correlate a request with its
+  // own id rather than the random one `populateRequestConfigWithDefaults` would mint.
+  it('honours a caller-supplied x-client-request-id', async () => {
+    await client.api.doAxiosRequest('get', `${client.baseURL}/hi`, null, {
+      headers: { 'x-client-request-id': 'my-id' },
+    });
+
+    expect(sentHeaders()['x-client-request-id']).to.equal('my-id');
+  });
+});
+
+describe('ApiClient multipart encoding', () => {
+  let client: StreamChat;
+  let requestSpy: ReturnType<typeof vi.spyOn>;
+
+  const firstConfig = () =>
+    requestSpy.mock.calls[0][0] as AxiosRequestConfig & {
+      headers?: Record<string, unknown>;
+    };
+  const sentForm = () => firstConfig().data as FormData;
+
+  beforeEach(() => {
+    client = getClientWithUser();
+    requestSpy = vi
+      .spyOn(client.axiosInstance, 'request')
+      .mockResolvedValue({ data: {}, status: 200, headers: {} });
+  });
+
+  const sendMultipart = (body: Record<string, unknown>) =>
+    client.api.sendRequest(
+      'POST',
+      '/api/v2/uploads/file',
+      undefined,
+      undefined,
+      body,
+      'multipart/form-data',
+    );
+
+  it('encodes a multipart body as FormData', async () => {
+    await sendMultipart({ file: new File(['x'], 'a.txt', { type: 'text/plain' }) });
+
+    expect(sentForm()).to.be.instanceOf(FormData);
+  });
+
+  it('leaves a non-multipart body untouched and keeps its content type', async () => {
+    const body = { text: 'hi' };
+
+    await client.api.sendRequest(
+      'POST',
+      '/api/v2/chat/channels',
+      undefined,
+      undefined,
+      body,
+      'application/json',
+    );
+
+    expect(firstConfig().data).to.equal(body);
+    expect(firstConfig().headers?.['Content-Type']).to.equal('application/json');
+  });
+
+  it('appends a File under its own name', async () => {
+    const file = new File(['x'], 'a.txt', { type: 'text/plain' });
+
+    await sendMultipart({ file });
+
+    const appended = sentForm().get('file') as File;
+    expect(appended).to.be.instanceOf(File);
+    expect(appended.name).to.equal('a.txt');
+  });
+
+  // React Native has no Blob with a real body behind a picker URI - its FormData reads `uri`,
+  // `name` and `type` off the appended object, so those keys must survive verbatim. Node's
+  // spec-compliant FormData stringifies a non-Blob value, so the descriptor has to be read
+  // off the `append` call rather than back out of the form.
+  it('appends a React Native file descriptor as-is', async () => {
+    const append = vi.spyOn(FormData.prototype, 'append');
+
+    await sendMultipart({
+      file: { uri: 'file:///tmp/photo.heic', name: 'photo.heic', type: 'image/heic' },
+    });
+
+    expect(append).toHaveBeenCalledWith('file', {
+      uri: 'file:///tmp/photo.heic',
+      name: 'photo.heic',
+      type: 'image/heic',
+    });
+  });
+
+  it('derives a descriptor file name from the URI when none is given', async () => {
+    const append = vi.spyOn(FormData.prototype, 'append');
+
+    await sendMultipart({ file: { uri: 'file:///tmp/nested/photo.heic' } });
+
+    expect(append).toHaveBeenCalledWith(
+      'file',
+      expect.objectContaining({ name: 'photo.heic' }),
+    );
+  });
+
+  // The API wants these JSON-encoded. Axios' own `toFormData` would emit `user[id]` and
+  // `upload_sizes[0][height]` instead.
+  it('JSON-encodes object and array fields', async () => {
+    await sendMultipart({
+      file: new File(['x'], 'a.jpg', { type: 'image/jpeg' }),
+      user: { id: 'jane' },
+      upload_sizes: [{ height: 100, width: 100 }],
+    });
+
+    expect(sentForm().get('user')).to.equal('{"id":"jane"}');
+    expect(sentForm().get('upload_sizes')).to.equal('[{"height":100,"width":100}]');
+  });
+
+  it('omits null and undefined fields entirely', async () => {
+    await sendMultipart({
+      file: new File(['x'], 'a.jpg', { type: 'image/jpeg' }),
+      user: undefined,
+      upload_sizes: null,
+    });
+
+    expect(sentForm().has('user')).to.be.false;
+    expect(sentForm().has('upload_sizes')).to.be.false;
+  });
+
+  // Declared without a boundary on purpose - every axios adapter rewrites the header for a
+  // FormData body (node substitutes the boundary it generated, browser/fetch/RN clear it so the
+  // platform does).
+  it('declares the multipart Content-Type and leaves the boundary to the adapter', async () => {
+    await sendMultipart({ file: new File(['x'], 'a.jpg', { type: 'image/jpeg' }) });
+
+    expect(firstConfig().headers?.['Content-Type']).to.equal('multipart/form-data');
+  });
+
+  // This request's multipart Content-Type must outrank an integrator's global one. If that
+  // precedence is ever reversed, axios' default transformRequest turns the form into
+  // `JSON.stringify(formDataToJSON(form))` - the file disappears and the request still returns
+  // 2xx, so assert on the resolved header rather than on the eventual body.
+  it('keeps the multipart Content-Type over a client-level application/json', async () => {
+    client.config.setConfig('client', {
+      axiosRequestConfig: { headers: { 'Content-Type': 'application/json' } },
+    });
+
+    await sendMultipart({ file: new File(['x'], 'a.jpg', { type: 'image/jpeg' }) });
+
+    expect(firstConfig().data).to.be.instanceOf(FormData);
+    expect(firstConfig().headers?.['Content-Type']).to.equal('multipart/form-data');
+  });
+
+  // The axios instance defaults to a 3s timeout, which would kill any sizeable upload.
+  it('disables the timeout and size caps for multipart requests', async () => {
+    await sendMultipart({ file: new File(['x'], 'a.jpg', { type: 'image/jpeg' }) });
+
+    expect(firstConfig().timeout).to.equal(0);
+    expect(firstConfig().maxContentLength).to.equal(Infinity);
+    expect(firstConfig().maxBodyLength).to.equal(Infinity);
+  });
+
+  it('does not apply the upload defaults to a non-multipart request', async () => {
+    await client.api.sendRequest('GET', '/api/v2/chat/channels');
+
+    expect(firstConfig().timeout).to.be.undefined;
+    expect(firstConfig().maxContentLength).to.be.undefined;
+    expect(firstConfig().maxBodyLength).to.be.undefined;
+  });
+
+  it('keeps a caller signal alongside the upload defaults', async () => {
+    const controller = new AbortController();
+
+    await client.api.sendRequest(
+      'POST',
+      '/api/v2/uploads/file',
+      undefined,
+      undefined,
+      { file: new File(['x'], 'a.jpg', { type: 'image/jpeg' }) },
+      'multipart/form-data',
+      { signal: controller.signal },
+    );
+
+    expect(firstConfig().signal).to.equal(controller.signal);
+    expect(firstConfig().timeout).to.equal(0);
+  });
+
+  it('lets a caller timeout override the upload default', async () => {
+    await client.api.sendRequest(
+      'POST',
+      '/api/v2/uploads/file',
+      undefined,
+      undefined,
+      { file: new File(['x'], 'a.jpg', { type: 'image/jpeg' }) },
+      'multipart/form-data',
+      { timeout: 1000 },
+    );
+
+    expect(firstConfig().timeout).to.equal(1000);
+    expect(firstConfig().maxContentLength).to.equal(Infinity);
+    expect(firstConfig().maxBodyLength).to.equal(Infinity);
+  });
+});
+
+describe('ApiClient long-poll URL', () => {
+  let client: StreamChat;
+  let requestSpy: ReturnType<typeof vi.spyOn>;
+
+  const urlOfCall = (index: number) =>
+    (requestSpy.mock.calls[index][0] as AxiosRequestConfig).url;
+
+  beforeEach(() => {
+    client = getClientWithUser();
+    requestSpy = vi
+      .spyOn(client.axiosInstance, 'request')
+      .mockResolvedValue({ data: {}, status: 200, headers: {} });
+  });
+
+  it('sends the long-poll to its own port on a local API', async () => {
+    client.setBaseURL('http://localhost:3030');
+
+    await client.longPoll({ close: true, connection_id: 'id' });
+    await client.api.sendRequest('GET', '/api/v2/chat/channels');
+
+    expect(urlOfCall(0)).to.equal('http://localhost:8900/api/v2/longpoll');
+    expect((requestSpy.mock.calls[0][0] as AxiosRequestConfig).params).toMatchObject({
+      close: true,
+      connection_id: 'id',
+    });
+    expect(urlOfCall(1)).to.equal('http://localhost:3030/api/v2/chat/channels');
+  });
+
+  it('leaves a production base URL alone', async () => {
+    client.setBaseURL('https://chat.stream-io-api.com');
+
+    await client.longPoll({ connection_id: 'id' });
+
+    expect(urlOfCall(0)).to.equal('https://chat.stream-io-api.com/api/v2/longpoll');
+  });
+});
+
+describe('upload methods', () => {
+  let client: StreamChat;
+  let requestSpy: ReturnType<typeof vi.spyOn>;
+
+  const firstConfig = () =>
+    requestSpy.mock.calls[0][0] as AxiosRequestConfig & { data?: FormData };
+
+  beforeEach(() => {
+    client = getClientWithUser();
+    requestSpy = vi
+      .spyOn(client.axiosInstance, 'request')
+      .mockResolvedValue({ data: {}, status: 200, headers: {} });
+  });
+
+  const file = () => new File(['x'], 'a.jpg', { type: 'image/jpeg' });
+
+  it('posts client uploads to the generated routes', async () => {
+    await client.uploadFile({ file: file() });
+    expect(firstConfig().url).to.equal(`${client.baseURL}/api/v2/uploads/file`);
+
+    requestSpy.mockClear();
+    await client.uploadImage({ file: file() });
+    expect(firstConfig().url).to.equal(`${client.baseURL}/api/v2/uploads/image`);
+  });
+
+  it('posts channel uploads to the generated routes', async () => {
+    const channel = client.channelManager.ensure({ type: 'messaging', id: 'chan-id' });
+
+    await channel.uploadChannelFile({ file: file() });
+    expect(firstConfig().url).to.equal(
+      `${client.baseURL}/api/v2/chat/channels/messaging/chan-id/file`,
+    );
+
+    requestSpy.mockClear();
+    await channel.uploadChannelImage({ file: file() });
+    expect(firstConfig().url).to.equal(
+      `${client.baseURL}/api/v2/chat/channels/messaging/chan-id/image`,
+    );
+  });
+
+  it('exposes uploadFile / uploadImage aliases on the channel', async () => {
+    const channel = client.channelManager.ensure({ type: 'messaging', id: 'chan-id' });
+    const uploadChannelFile = vi.spyOn(channel, 'uploadChannelFile');
+    const payload = { file: file() };
+
+    await channel.uploadFile(payload);
+
+    expect(uploadChannelFile).toHaveBeenCalledWith(payload);
+  });
+
+  it('throws when the channel has no id yet', async () => {
+    const channel = client.channelManager.ensure({
+      type: 'messaging',
+      data: { members: ['a', 'b'] },
+    });
+
+    await expect(channel.uploadChannelFile({ file: file() })).rejects.toThrow(
+      /Channel isn't yet created/,
+    );
+  });
+
+  it('normalizes a bare URI string into a descriptor', async () => {
+    const append = vi.spyOn(FormData.prototype, 'append');
+
+    await client.uploadFile({ file: 'file:///tmp/nested/photo.heic' });
+
+    expect(append).toHaveBeenCalledWith(
+      'file',
+      expect.objectContaining({
+        uri: 'file:///tmp/nested/photo.heic',
+        name: 'photo.heic',
+      }),
+    );
+  });
+
+  it('passes upload_sizes through raw so it is JSON-encoded once', async () => {
+    await client.uploadImage({
+      file: file(),
+      upload_sizes: [{ height: 100, width: 100 }],
+    });
+
+    expect((firstConfig().data as FormData).get('upload_sizes')).to.equal(
+      '[{"height":100,"width":100}]',
+    );
+  });
+});
+
+describe('ApiClient connection id gate', () => {
+  let client: StreamChat;
+  let requestSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    client = getClientWithUser();
+    requestSpy = vi
+      .spyOn(client.axiosInstance, 'request')
+      .mockResolvedValue({ data: {}, status: 200, headers: {} });
+  });
+
+  const sentParams = () =>
+    (requestSpy.mock.calls[0][0] as AxiosRequestConfig).params as Record<string, unknown>;
+
+  /**
+   * Drains the microtask queue AND yields a macrotask turn. A single `await Promise.resolve()` is
+   * not enough to prove a request was held: `_doRequest` awaits `tokenReady()` inside
+   * `runWithRetry` before it ever reaches axios, so an ungated request would still not have landed
+   * after one tick and the assertion would pass for the wrong reason.
+   */
+  const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  describe('requiresConnectionId', () => {
+    it('does not gate on a declared connection_id query param alone', () => {
+      // stopWatchingChannel and the long-poll set theirs themselves
+      expect(requiresConnectionId({ connection_id: undefined }, undefined)).to.be.false;
+      expect(requiresConnectionId({ connection_id: 'id' }, undefined)).to.be.false;
+    });
+
+    it('gates on a watch or presence flag in the request body', () => {
+      expect(requiresConnectionId(undefined, { watch: true })).to.be.true;
+      expect(requiresConnectionId(undefined, { presence: true })).to.be.true;
+    });
+
+    it('gates on a watch flag in a flat query param', () => {
+      expect(requiresConnectionId({ watch: true }, undefined)).to.be.true;
+    });
+
+    it('gates on presence nested in a payload query param', () => {
+      // queryUsers is the one operation that needs an id without declaring the param
+      expect(requiresConnectionId({ payload: { presence: true } }, undefined)).to.be.true;
+    });
+
+    it('does not gate a request that asks for neither', () => {
+      expect(requiresConnectionId(undefined, undefined)).to.be.false;
+      expect(requiresConnectionId({ limit: 10 }, { message: {} })).to.be.false;
+      expect(requiresConnectionId({ payload: { query: 'x' } }, undefined)).to.be.false;
+    });
+
+    it('does not gate on an explicitly disabled flag', () => {
+      expect(requiresConnectionId(undefined, { watch: false, presence: false })).to.be
+        .false;
+    });
+
+    // The regression gating on a declared `connection_id` once caused, before the gate stopped
+    // reading it: the generator emits the key for every operation that *can* watch, so gating
+    // on its presence gated `watch: false` too.
+    it('does not gate a declared connection_id when the request opted out of watching', () => {
+      expect(requiresConnectionId({ connection_id: undefined }, { watch: false })).to.be
+        .false;
+      expect(requiresConnectionId({ connection_id: undefined, watch: false }, undefined))
+        .to.be.false;
+    });
+
+    // A left-unset flag is the request saying "no watch" - the server defaults both to false.
+    it('does not gate a declared connection_id when the flag is declared but unset', () => {
+      expect(
+        requiresConnectionId(
+          { connection_id: undefined },
+          { watch: undefined, presence: undefined, state: true },
+        ),
+      ).to.be.false;
+    });
+
+    it('tolerates a body that is not a plain object', () => {
+      expect(requiresConnectionId(undefined, new FormData())).to.be.false;
+      expect(requiresConnectionId(undefined, 'raw')).to.be.false;
+      expect(requiresConnectionId(undefined, null)).to.be.false;
+    });
+  });
+
+  it('holds a watching request until the handshake produces an id', async () => {
+    client.connectionIdManager.reset();
+    client.connectionIdManager.arm();
+
+    const inFlight = client.queryChannels({ watch: true });
+    await flush();
+
+    expect(requestSpy).not.toHaveBeenCalled();
+
+    client.connectionIdManager.resolveConnectionId('late-id');
+    await inFlight;
+
+    expect(requestSpy).toHaveBeenCalledTimes(1);
+    expect(sentParams().connection_id).to.equal('late-id');
+  });
+
+  it('gates queryThreads, getThread and sync, which had no gate before', async () => {
+    const gated = [
+      () => client.queryThreads({ watch: true }),
+      () => client.getThread({ message_id: 'mid' }, { watch: true }),
+      () =>
+        client.sync({
+          channel_cids: ['messaging:a'],
+          last_sync_at: new Date(),
+          watch: true,
+        }),
+    ];
+
+    for (const call of gated) {
+      client.connectionIdManager.reset();
+      client.connectionIdManager.arm();
+      requestSpy.mockClear();
+
+      const inFlight = call();
+      await flush();
+      expect(requestSpy, call.toString()).not.toHaveBeenCalled();
+
+      client.connectionIdManager.resolveConnectionId('late-id');
+      await inFlight;
+      expect(requestSpy, call.toString()).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it('sends stopWatching with the current connection id', async () => {
+    client.connectionIdManager.resolveConnectionId('current-id');
+
+    await client.channelManager.ensure({ type: 'messaging', id: 'id' }).stopWatching();
+
+    expect(sentParams().connection_id).to.equal('current-id');
+  });
+
+  it('holds stopWatching while a connection is being established, then sends its id', async () => {
+    client.connectionIdManager.reset();
+    client.connectionIdManager.arm();
+
+    const inFlight = client.channelManager
+      .ensure({ type: 'messaging', id: 'id' })
+      .stopWatching();
+    await flush();
+    expect(requestSpy).not.toHaveBeenCalled();
+
+    client.connectionIdManager.resolveConnectionId('late-id');
+    await inFlight;
+    expect(requestSpy).toHaveBeenCalledTimes(1);
+    expect(sentParams().connection_id).to.equal('late-id');
+  });
+
+  it('rejects stopWatching when there is no id and nothing in flight', async () => {
+    client.connectionIdManager.reset();
+
+    await expect(
+      client.channelManager.ensure({ type: 'messaging', id: 'id' }).stopWatching(),
+    ).rejects.toThrow('No connection id is available');
+    expect(requestSpy).not.toHaveBeenCalled();
+  });
+
+  it('abandons the stopWatching wait when the caller aborts', async () => {
+    client.connectionIdManager.reset();
+    client.connectionIdManager.arm();
+    const controller = new AbortController();
+
+    const inFlight = client.channelManager
+      .ensure({ type: 'messaging', id: 'id' })
+      .stopWatching({}, { signal: controller.signal });
+    controller.abort();
+
+    await expect(inFlight).rejects.toThrow();
+    expect(requestSpy).not.toHaveBeenCalled();
+  });
+
+  it('lets a request that needs no id through while the handshake is still in flight', async () => {
+    client.connectionIdManager.reset();
+    client.connectionIdManager.arm();
+
+    // createGuest runs before a connection exists and must never wait on one
+    await client.createGuest({ user: { id: 'guest' } });
+
+    expect(requestSpy).toHaveBeenCalledTimes(1);
+  });
+
+  // These go through real generated endpoints on purpose: every one of them declares a
+  // `connection_id` query param, so a gate keyed on that param alone held them all back.
+  it('lets a non-watching query through with no connection at all', async () => {
+    client.connectionIdManager.reset();
+
+    await client.queryChannels({ watch: false, presence: false });
+    await client.channelManager
+      .ensure({ type: 'messaging', id: 'id' })
+      .getOrCreate({ watch: false, presence: false, state: true });
+    await client.sync({ channel_cids: ['messaging:a'], last_sync_at: new Date() });
+
+    expect(requestSpy).toHaveBeenCalledTimes(3);
+  });
+
+  // Not `haveOwnProperty`: the generator emits the key holding `undefined` for every operation
+  // that *can* watch, and axios drops an undefined param. What matters is that no id reaches it.
+  it('does not put a connection id on a request that registers nothing', async () => {
+    await client.queryChannels({ watch: false });
+    await client.getApp();
+
+    expect(sentParams().connection_id).to.be.undefined;
+    expect((requestSpy.mock.calls[1][0] as AxiosRequestConfig).params.connection_id).to.be
+      .undefined;
+  });
+
+  it('puts the connection id on a request that does register something', async () => {
+    await client.queryChannels({ watch: true });
+
+    expect(sentParams().connection_id).to.equal('mock-connection-id');
+  });
+
+  it('rejects a watching request when there is no id and nothing in flight', async () => {
+    client.connectionIdManager.reset();
+
+    await expect(client.queryChannels({ watch: true })).rejects.toThrow(
+      'No connection id is available',
+    );
+    expect(requestSpy).not.toHaveBeenCalled();
+  });
+
+  it('propagates a failed handshake to the requests waiting on it', async () => {
+    client.connectionIdManager.reset();
+    client.connectionIdManager.arm();
+
+    const inFlight = client.queryChannels({ watch: true });
+    client.connectionIdManager.rejectConnectionId(new Error('ws handshake failed'));
+
+    await expect(inFlight).rejects.toThrow('ws handshake failed');
+    expect(requestSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('ApiClient token loading', () => {
+  let client: StreamChat;
+  let requestSpy: ReturnType<typeof vi.spyOn>;
+
+  const sentAuthorization = () =>
+    (requestSpy.mock.calls[0][0] as AxiosRequestConfig).headers?.Authorization;
+  const sendRequest = () => client.api.sendRequest('GET', '/api/v2/chat/channels');
+
+  beforeEach(() => {
+    client = new StreamChat('key');
+    requestSpy = vi
+      .spyOn(client.axiosInstance, 'request')
+      .mockResolvedValue({ data: {}, status: 200, headers: {} });
+  });
+
+  it('waits for a token provider that is still loading', async () => {
+    let provideToken: (token: string) => void = () => undefined;
+    client._setToken(
+      { id: 'amin' },
+      () => new Promise<string>((resolve) => (provideToken = resolve)),
+    );
+
+    const request = sendRequest();
+    await Promise.resolve();
+    expect(requestSpy).not.toHaveBeenCalled();
+
+    provideToken('provided-token');
+    await request;
+
+    expect(sentAuthorization()).toBe('provided-token');
+  });
+
+  it("rejects with the provider's error when the provider fails", async () => {
+    client
+      ._setToken({ id: 'amin' }, () => Promise.reject(new Error('provider down')))
+      .catch(() => undefined);
+
+    await expect(sendRequest()).rejects.toThrow(/Call to tokenProvider failed/);
+    expect(requestSpy).not.toHaveBeenCalled();
+  });
+
+  it('still rejects when no token was ever set', async () => {
+    await expect(sendRequest()).rejects.toThrow(/User token is not set/);
+    expect(requestSpy).not.toHaveBeenCalled();
+  });
+});

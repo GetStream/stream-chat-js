@@ -1,23 +1,36 @@
 import { ReminderTimer } from './ReminderTimer';
-import { StateStore } from '../store';
+import { StateStore } from '@stream-io/state-store';
+import { nowNs, nsToMs } from '../utils/time';
 import type { ReminderTimerConfig } from './ReminderTimer';
-import type { MessageResponse, ReminderResponseBase, UserResponse } from '../types';
+import type {
+  MessageResponse,
+  ReminderResponseData,
+  TimestampNS,
+  UserResponse,
+} from '../types';
 
-export const timeLeftMs = (remindAt: number) => remindAt - new Date().getTime();
+/**
+ * Computes the time left until a reminder is due.
+ *
+ * @param remindAt - Unix nanoseconds, as the API sends it.
+ * @returns Milliseconds until `remindAt`, negative once it has passed.
+ */
+export const timeLeftMs = (remindAt: TimestampNS) => nsToMs(remindAt - nowNs());
 
-export type ReminderResponseBaseOrResponse = ReminderResponseBase & {
-  user?: UserResponse;
-  message?: MessageResponse;
-};
+export type ReminderResponseBaseOrResponse = ReminderResponseData;
 
 export type ReminderState = {
   channel_cid: string;
-  created_at: Date;
+  /** Unix nanoseconds, as the API sends it. */
+  created_at: TimestampNS;
   message: MessageResponse | null;
   message_id: string;
-  remind_at: Date | null;
+  /** Unix nanoseconds, as the API sends it. */
+  remind_at: TimestampNS | null;
+  /** Milliseconds. See {@link timeLeftMs}. */
   timeLeftMs: number | null;
-  updated_at: Date;
+  /** Unix nanoseconds, as the API sends it. */
+  updated_at: TimestampNS;
   user: UserResponse | null;
   user_id: string;
 };
@@ -38,11 +51,12 @@ export class Reminder {
 
   static toStateValue = (data: ReminderResponseBaseOrResponse): ReminderState => ({
     ...data,
-    created_at: new Date(data.created_at),
+    created_at: data.created_at,
     message: data.message || null,
-    remind_at: data.remind_at ? new Date(data.remind_at) : null,
-    timeLeftMs: data.remind_at ? timeLeftMs(new Date(data.remind_at).getTime()) : null,
-    updated_at: new Date(data.updated_at),
+    remind_at: data.remind_at ?? null,
+    // Nullish, not truthy: `0` is a valid timestamp.
+    timeLeftMs: data.remind_at != null ? timeLeftMs(data.remind_at) : null,
+    updated_at: data.updated_at,
     user: data.user || null,
   });
 
@@ -61,22 +75,22 @@ export class Reminder {
   setState = (data: ReminderResponseBaseOrResponse) => {
     this.state.next((current) => {
       const newState = { ...current, ...Reminder.toStateValue(data) };
-      if (newState.remind_at) {
-        newState.timeLeftMs = timeLeftMs(newState.remind_at.getTime());
+      if (newState.remind_at != null) {
+        newState.timeLeftMs = timeLeftMs(newState.remind_at);
       }
       return newState;
     });
 
-    if (data.remind_at) {
+    if (data.remind_at != null) {
       this.initTimer();
-    } else if (!data.remind_at) {
+    } else {
       this.clearTimer();
     }
   };
 
   refreshTimeLeft = () => {
-    if (!this.remindAt) return;
-    this.state.partialNext({ timeLeftMs: timeLeftMs(this.remindAt.getTime()) });
+    if (this.remindAt == null) return;
+    this.state.partialNext({ timeLeftMs: timeLeftMs(this.remindAt) });
   };
 
   initTimer = () => {

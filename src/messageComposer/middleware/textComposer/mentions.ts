@@ -28,13 +28,12 @@ import type {
 import type { StreamChat } from '../../../client';
 import type {
   MemberFilters,
-  MemberSort,
   SearchUserGroupsOptions,
+  SortParamRequest,
   UserFilters,
   UserGroupResponse,
   UserOptions,
   UserResponse,
-  UserSort,
 } from '../../../types';
 import type { Channel } from '../../../channel';
 import { MAX_CHANNEL_MEMBER_COUNT_IN_CHANNEL_QUERY } from '../../../constants';
@@ -96,12 +95,15 @@ export const calculateLevenshtein = (query: string, name: string) => {
 };
 
 export type MentionsSearchSourceOptions = SearchSourceOptions & {
-  /** Static base filters for the app-wide user query (mentionAllAppUsers). */
+  /** Base filters for the app-wide user query (`mentionAllAppUsers`). */
   userFilters?: UserFilters;
-  userSort?: UserSort;
-  /** Static base filters for the channel member query. */
+  userSort?: SortParamRequest[];
+  /**
+   * Replaces the default `name` autocomplete filter of the channel member query, so the typed text
+   * is not applied.
+   */
   memberFilters?: MemberFilters;
-  memberSort?: MemberSort;
+  memberSort?: SortParamRequest[];
   searchOptions?: Omit<UserOptions, 'limit' | 'offset'>;
   mentionAllAppUsers?: boolean;
   suggestionFactoryMappers?: MentionSuggestionFactoryMapperOverrides;
@@ -284,10 +286,7 @@ const DEFAULT_SUGGESTION_FACTORY_MAPPERS: {
     return {
       description: userGroup.description,
       id: userGroup.id,
-      /*
-      Currently, all members of the group are always returned. Groups are limited to 100 members.
-      The memberCount == len(members) will always be true unless we add pagination here in the future
-       */
+      // All members are returned (groups hold at most 100), so `members.length` is the full count.
       memberCount: userGroup.members?.length,
       mentionType: 'user_group',
       name: userGroup.name,
@@ -307,8 +306,8 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
   protected userGroupCursor?: string;
   userFilters: UserFilters | undefined;
   memberFilters: MemberFilters | undefined;
-  userSort: UserSort | undefined;
-  memberSort: MemberSort | undefined; // todo: document there are filters and sort options for users and members
+  userSort: SortParamRequest[] | undefined;
+  memberSort: SortParamRequest[] | undefined; // todo: document there are filters and sort options for users and members
   searchOptions: Omit<UserOptions, 'limit' | 'offset'> | undefined;
   config: Pick<
     MentionsSearchSourceOptions,
@@ -329,7 +328,7 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
       userSort,
       ...restOptions
     } = options || {};
-    // suggestions are shown for a bare trigger, so the empty query must be allowed
+    // A bare trigger shows suggestions, so the empty query must be allowed.
     super({ ...restOptions, allowEmptySearchString: true });
     this.client = channel.getClient();
     this.channel = channel;
@@ -446,7 +445,7 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
     const { items } = this.state.getLatestValue();
     return {
       ...newState,
-      items, // preserve items to avoid flickering
+      items, // kept to avoid flickering
     };
   }
 
@@ -510,7 +509,7 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
 
     return this.getMembersAndWatchers()
       .filter((user) => {
-        if (user.id === this.client.userID) return false;
+        if (user.id === this.client.userId) return false;
         if (!searchQuery) return true;
 
         const updatedId = this.transliterate(removeDiacritics(user.id)).toLowerCase();
@@ -535,8 +534,8 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
       .sort((a, b) => {
         if (!this.memberSort) return (a.name || '').localeCompare(b.name || '');
 
-        // Apply each sort criteria in order
-        for (const [field, direction] of Object.entries(this.memberSort)) {
+        // Criteria apply in order.
+        for (const { field, direction } of this.memberSort) {
           const aValue = a[field as keyof UserResponse];
           const bValue = b[field as keyof UserResponse];
 
@@ -557,21 +556,21 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
       ],
       ...this.userFilters,
     } as UserFilters,
-    sort: this.userSort ?? ([{ name: 1 }, { id: 1 }] as UserSort), // todo: document the change - the sort is overridden, not merged
+    sort:
+      this.userSort ??
+      ([
+        { field: 'name', direction: 1 },
+        { field: 'id', direction: 1 },
+      ] satisfies SortParamRequest[]), // todo: document the change - the sort is overridden, not merged
     options: { ...this.searchOptions, limit: this.pageSize, offset },
   });
 
   prepareQueryMembersParams = (searchQuery: string, offset = 0) => {
-    // QueryMembers failed with error: \"sort must contain at maximum 1 item\"
-    const maxSortParamsCount = 1;
-    let sort: MemberSort = [{ user_id: 1 }];
-    if (!this.memberSort) {
-      sort = [{ user_id: 1 }];
-    } else if (Array.isArray(this.memberSort)) {
-      sort = this.memberSort[0];
-    } else if (Object.keys(this.memberSort).length === maxSortParamsCount) {
-      sort = this.memberSort;
-    } // todo: document the change - the sort is overridden, not merged
+    // QueryMembers accepts at most one sort item.
+    // todo: document the change - the sort is overridden, not merged
+    const sort: SortParamRequest[] = this.memberSort?.length
+      ? this.memberSort.slice(0, 1)
+      : [{ field: 'user_id', direction: 1 }];
     return {
       // todo: document the change - the filter is overridden, not merged
       filters:
@@ -587,7 +586,16 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
     queryOptions: SearchQueryOptions = {},
   ) => {
     const { filters, sort, options } = this.prepareQueryUsersParams(searchQuery, offset);
-    const { users } = await this.client.queryUsers(filters, sort, options, queryOptions);
+    const { users } = await this.client.queryUsers(
+      {
+        payload: {
+          filter_conditions: filters,
+          sort,
+          ...options,
+        },
+      },
+      queryOptions,
+    );
     return users;
   };
 
@@ -601,9 +609,13 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
       offset,
     );
     const response = await this.channel.queryMembers(
-      filters,
-      sort,
-      options,
+      {
+        payload: {
+          filter_conditions: filters,
+          sort,
+          ...options,
+        },
+      },
       queryOptions,
     );
 
@@ -719,8 +731,7 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
           : Promise.resolve([] as RoleMentionSuggestion[]),
       ]);
 
-    // On abort the requests above reject and the fallback branches below would write
-    // empty results into the pagination cursors, corrupting them for the newer query.
+    // On abort the requests reject, and the fallbacks below would overwrite the newer query's cursors.
     if (queryOptions.signal?.aborted) return { items: [] };
 
     const userResults =
@@ -773,13 +784,15 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
       return data.filter(
         (suggestion) =>
           suggestion.mentionType === 'user' &&
-          mutedUsers.some((mute) => mute.target.id === suggestion.id),
+          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+          mutedUsers.some((mute) => mute.target!.id === suggestion.id),
       );
     }
     return data.filter(
       (suggestion) =>
         suggestion.mentionType !== 'user' ||
-        mutedUsers.every((mute) => mute.target.id !== suggestion.id),
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        mutedUsers.every((mute) => mute.target!.id !== suggestion.id),
     );
   }
 
@@ -796,30 +809,19 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
 
 const DEFAULT_OPTIONS: TextComposerMiddlewareOptions = { minChars: 1, trigger: '@' };
 
-/**
- * TextComposer middleware for mentions
- * Usage:
- *
- *  const textComposer = new TextComposer(options);
- *
- *  textComposer.use(createMentionsMiddleware(channel, {
- *   trigger: '$',
- *   minChars: 2
- *  }));
- *
- * @param channel
- * @param {{
- *     minChars: number;
- *     trigger: string;
- *   }} options
- * @returns
- */
-
 export type MentionsMiddleware = Middleware<
   TextComposerMiddlewareExecutorState<MentionSuggestion>,
   'onChange' | 'onSuggestionItemSelect'
 >;
 
+/**
+ * Suggests and inserts mentions.
+ *
+ * @param channel - The channel to search mentions in.
+ * @param options - Middleware options. Defaults to `trigger: '@'` and `minChars: 1`.
+ * @param options.searchSource - A search source to use instead of a new one. Its state is reset.
+ * @returns The mentions middleware.
+ */
 export const createMentionsMiddleware = (
   channel: Channel,
   options?: Partial<TextComposerMiddlewareOptions> & {
@@ -835,12 +837,8 @@ export const createMentionsMiddleware = (
     searchSource = new MentionsSearchSource(channel, { trigger: finalOptions.trigger });
   }
   searchSource.activate();
-  // Tracks the cursor position of the most recently inserted mention so the
-  // VERY NEXT change (typically a controlled value echo on some platforms)
-  // can suppress the dropdown even when the text shape heuristic in `onChange`
-  // would otherwise let it reopen (which is wrong). Consumed on the first
-  // `onChange` after it's set, so any user driven event that triggers it would
-  // clear it.
+  // Cursor end of the last inserted mention. The next `onChange` (e.g. a controlled value echo) uses
+  // it to keep the dropdown closed, then clears it.
   let lastInsertedMentionEndOffset: number | undefined;
   return {
     id: 'stream-io/text-composer/mentions-middleware',
@@ -851,12 +849,8 @@ export const createMentionsMiddleware = (
           lastInsertedMentionEndOffset !== undefined &&
           state.selection.end === lastInsertedMentionEndOffset;
         lastInsertedMentionEndOffset = undefined;
-        // Only prune stale mentions during normal text editing. Entering command mode
-        // clears text/mentions through the `command.activate` effect, which first
-        // snapshots the previous TextComposer state so it can be restored on
-        // `clearCommand()`. Custom middleware is allowed to remove that effect,
-        // though, and in that opt-out case we must not silently drop mentions
-        // here just because the user typed a raw command like `/ban`.
+        // Prune stale mentions only outside command mode: a raw `/ban` typed without the
+        // `command.activate` effect (custom middleware may remove it) must not drop them.
         const currentMentions =
           state.command || state.text.trimStart().startsWith('/')
             ? state.mentionedUsers
@@ -887,23 +881,9 @@ export const createMentionsMiddleware = (
           searchSource.resetStateAndActivate();
         }
 
-        // The trigger detection regex above also accepts `@<token><trailing-space>`
-        // as "active" so users can keep refining a partial mention they typed by
-        // hand. That falsely reopens the dropdown when the cursor sits at the
-        // trailing space boundary of a mention the user has already committed
-        // (post suggestion select or manual cursor placement back into that slot).
-        //
-        // Discriminate that case by checking, for each entity in
-        // `state.mentions`, whether the text immediately before the cursor
-        // ends with the entity's actual inserted textual form (`@<name|id> `)
-        // AND that form appears exactly once in the prefix. This:
-        //   - avoids false positives when an entity's `id` happens to match a
-        //     different `@<token>` the user just typed (e.g. user "John Doe"
-        //     whose id is "john" and the user types a fresh `@ivan ` later);
-        //   - avoids false positives when the user is refining a brand new
-        //     mention whose query equals an already committed mention name
-        //     (text has two `@<name> ` occurrences; only one is committed, the
-        //     cursor is most likely on the new one being typed).
+        // The trigger regex also accepts `@<token><trailing-space>`, which would reopen the dropdown
+        // after a committed mention. Detect that case: the text before the cursor ends with an entity's
+        // inserted form (`@<name|id> `) that occurs exactly once (twice means a new one is being typed).
         const triggerMatchesCommittedMention =
           !!triggerWithToken &&
           /\s$/.test(textBeforeCursor) &&
@@ -964,10 +944,8 @@ export const createMentionsMiddleware = (
           text: state.text,
           trigger: finalOptions.trigger,
         });
-        // Hand off the just inserted cursor position to the next `onChange`
-        // so it can suppress the dropdown even when the text shape heuristic
-        // doesn't catch a reselection of the same entity (multiple
-        // occurrences of `@<name> ` in the text for exammple).
+        // Lets the next `onChange` keep the dropdown closed when the text heuristic cannot tell (e.g.
+        // repeated `@<name> ` occurrences).
         lastInsertedMentionEndOffset = insertResult.selection.end;
         return complete({
           ...state,

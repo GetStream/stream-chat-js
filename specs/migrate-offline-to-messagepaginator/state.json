@@ -1,0 +1,82 @@
+{
+  "feature": "migrate-offline-to-messagepaginator",
+  "status": "planned",
+  "parent": "remove-legacy-channelstate-messages",
+  "worktree": {
+    "path": "../stream-chat-js-worktrees/remove-legacy-channelstate-messages",
+    "branch": "feat/remove-legacy-channelstate-messages",
+    "base": "feat/message-paginator-master-merge",
+    "note": "Shares the parent worktree/branch; not a concurrent worktree (shared files channel.ts/client.ts/MessagePaginator.ts)."
+  },
+  "openDecisions": ["D-OFF-1", "D-OFF-2", "D-OFF-3"],
+  "gate": "O1, O3, O5 must complete before parent plan Task 11 (delete ChannelState storage).",
+  "tasks": [
+    {
+      "id": "O1",
+      "name": "MessagePaginator offline enablement + page persist",
+      "status": "pending",
+      "owner": null,
+      "dependencies": ["parent:1"]
+    },
+    {
+      "id": "O2",
+      "name": "channel.ts isLatestMessagesSet from paginator",
+      "status": "pending",
+      "owner": null,
+      "dependencies": ["parent:2"]
+    },
+    {
+      "id": "O3",
+      "name": "Replay send-message via paginator ingest",
+      "status": "pending",
+      "owner": null,
+      "dependencies": ["parent:1"],
+      "note": "Must precede parent Task 9/11."
+    },
+    {
+      "id": "O4",
+      "name": "Cold-start hydration seed from response",
+      "status": "pending",
+      "owner": null,
+      "dependencies": ["parent:10"]
+    },
+    {
+      "id": "O5",
+      "name": "Blocked/error DB cleanup off paginator",
+      "status": "pending",
+      "owner": null,
+      "dependencies": ["parent:2"],
+      "note": "Must precede parent Task 11."
+    },
+    {
+      "id": "O6",
+      "name": "Read-count persistence verification",
+      "status": "pending",
+      "owner": null,
+      "dependencies": ["parent:2"]
+    },
+    {
+      "id": "O7",
+      "name": "Cursor-aware offline message read (enhancement)",
+      "status": "blocked",
+      "owner": null,
+      "dependencies": ["O1"],
+      "blockedBy": "D-OFF-1"
+    },
+    {
+      "id": "O8",
+      "name": "Offline tests",
+      "status": "pending",
+      "owner": null,
+      "dependencies": ["O1", "O2", "O3", "O4", "O5", "O6"]
+    },
+    {
+      "id": "O9",
+      "name": "Interface-change coordination & docs",
+      "status": "pending",
+      "owner": null,
+      "dependencies": ["O7"],
+      "blockedBy": "D-OFF-1"
+    }
+  ]
+}

@@ -1,142 +1,247 @@
-import type { AxiosRequestConfig } from 'axios';
-import { ChannelState } from './channel_state';
+import { ChannelState, ChannelWatchStatus } from './channel_state';
+import { isEqual } from './utils/mergeWith/mergeWithCore';
 import { CooldownTimer } from './CooldownTimer';
+import { queueOrRun } from './offline-support/queueableOperations';
 import { MessageComposer } from './messageComposer';
 import { MessageReceiptsTracker } from './messageDelivery';
+import type { ReadStoreReconcileMeta } from './messageDelivery';
+import { MessagePaginator, PinnedMessagePaginator } from './pagination/paginators';
+import { createMessageOperations, reflectReactionEvent } from './messageOperations';
+import type { MessageOperations } from './messageOperations';
+import type { OperationRequestFn } from './messageOperations/types';
 import {
   channelHasReadEvents,
+  formatMessage,
   generateChannelTempCid,
-  hasMessagePaginationCursor,
+  getMemberUserId,
   invokeEventListener,
+  isThreadOnlyReply,
   logChatPromiseExecution,
-  messageSetPagination,
-  normalizeQuerySort,
   sanitizeOutgoingAttachments,
 } from './utils';
+import { asTimestampNS, nowNs } from './utils/time';
+import { abortError, waitUnlessAborted } from './utils/abort';
+import { normalizeUploadFile } from './upload-utils';
 import type { StreamChat } from './client';
-import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from './constants';
+import { chatLoggerSystem } from './logger';
+import { applyInstanceConfiguration } from './configuration/utils/applyInstanceConfiguration';
+import { ConfigController } from './configuration/ConfigController';
+import { copyConfigPatch } from './configuration/utils/copyConfigPatch';
+import { deepFreezeConfig } from './configuration/utils/deepFreezeConfig';
+import { mergeServerRestrictions } from './configuration/utils/serverAuthority';
+import type { ServerRestrictions } from './configuration/utils/serverAuthority';
+import type { CustomEventData } from './custom_types';
+import type { ChannelDeclarativeConfig } from './configuration/types';
+import {
+  mergeDeclarativeMessageOperationsConfig,
+  mergeDeclarativePaginatorConfig,
+  toDeclarativePaginatorConfig,
+} from './configuration/utils/declarativeSlices';
 import type {
+  AddMembersRequest,
   AIState,
-  APIResponse,
-  AscDesc,
   BanUserOptions,
-  ChannelAPIResponse,
-  ChannelData,
-  ChannelFilters,
-  ChannelMemberAPIResponse,
+  ChannelGetOrCreateRequest,
+  ChannelInput,
   ChannelMemberResponse,
-  ChannelPushPreference,
-  ChannelQueryOptions,
   ChannelResponse,
-  ChannelUpdateOptions,
-  CreateDraftResponse,
-  DeleteChannelAPIResponse,
-  DraftMessagePayload,
+  ChannelStateResponse,
+  ChannelStateResponseFields,
+  Command,
   Event,
-  EventAPIResponse,
   EventHandler,
-  EventTypes,
-  GetDraftResponse,
-  GetMultipleMessagesAPIResponse,
-  GetReactionsAPIResponse,
-  GetRepliesAPIResponse,
-  LiveLocationPayload,
+  EventPayload,
+  EventType,
+  FileUploadInput,
+  FilterTagsRequest,
+  InviteMembersRequest,
   LocalMessage,
-  MarkReadOptions,
-  MarkUnreadOptions,
-  MemberFilters,
-  MemberSort,
-  Message,
-  MessageFilters,
-  MessageOptions,
-  MessagePaginationOptions,
+  MarkReadRequest,
+  MarkReadResponse,
   MessageResponse,
-  MessageSetType,
-  MuteChannelAPIResponse,
-  NewMemberPayload,
-  PartialUpdateChannel,
-  PartialUpdateChannelAPIResponse,
-  PartialUpdateMember,
-  PartialUpdateMemberAPIResponse,
-  PinnedMessagePaginationOptions,
-  PinnedMessagesSort,
-  PollVoteData,
-  QueryChannelAPIResponse,
-  QueryMembersOptions,
-  Reaction,
-  ReactionAPIResponse,
-  RequestOptions,
-  SearchAPIResponse,
-  SearchMessageSortBase,
-  SearchOptions,
-  SearchPayload,
-  SendMessageAPIResponse,
-  SendMessageOptions,
-  SendReactionOptions,
-  StaticLocationPayload,
-  TruncateChannelAPIResponse,
-  TruncateOptions,
+  QueryMembersPayload,
+  RemoveMembersRequest,
+  SharedLocation,
+  StreamRequestOptions,
+  StreamResponse,
+  TimestampNS,
   UnBanUserOptions,
-  UpdateChannelAPIResponse,
-  UpdateChannelOptions,
-  UpdateLocationPayload,
+  UpdateChannelPartialRequest,
+  UpdateLiveLocationRequest,
   UserResponse,
 } from './types';
-import type { Role } from './permissions';
-import type { CustomChannelData } from './custom_types';
+import { AIStates } from './types';
+import type { StateStore } from '@stream-io/state-store';
+import type { Unsubscribe } from '@stream-io/state-store';
+import type {
+  ChannelPushPreferencesResponse as Gen_ChannelPushPreferencesResponse,
+  MuteChannelRequest as Gen_MuteChannelRequest,
+  UnmuteChannelRequest as Gen_UnmuteChannelRequest,
+  UploadChannelFileRequest,
+  UploadChannelRequest,
+  WSEvent,
+} from './gen/models';
+import type { ChatApi } from './gen/chat/ChatApi';
+import { ChannelApi } from './gen/chat/ChannelApi';
+
+const logger = chatLoggerSystem.getLogger('channel');
+
+const WATCH_WAIT_ABORTED = 'The wait for the channel watch was aborted.';
+
+/** A watch query {@link Channel.watch} sent; cancelled once none of its callers waits. */
+type WatchQueryInFlight = {
+  options: ChannelGetOrCreateRequest;
+  promise: Promise<void>;
+  abortController: AbortController;
+  waitingCount: number;
+};
+
+/** Re-exported here because `src/messageOperations` is not in the root barrel. */
+export type {
+  DefaultOperationRequest,
+  MessageOperationSpec,
+  OperationKind,
+  OperationParams,
+  OperationRequestFn,
+  OperationResponse,
+} from './messageOperations/types';
+
+export type CustomMarkReadRequestFn = (params: {
+  channel: Channel;
+  options?: MarkReadRequest;
+}) => Promise<Partial<StreamResponse<MarkReadResponse>> | null>;
 
 /**
- * Channel - The Channel class manages it's own state.
+ * A channel's resolved configuration, returned by {@link Channel.config}. The gates are the server's
+ * flags (see {@link Channel.serverConfig}) ANDed with what the integrator registered.
  */
-export class Channel {
+export type ChannelConfig = {
+  requestHandlers?: {
+    deleteMessageRequest?: OperationRequestFn<'delete'>;
+    markReadRequest?: CustomMarkReadRequestFn;
+    sendMessageRequest?: OperationRequestFn<'send'>;
+    retrySendMessageRequest?: OperationRequestFn<'retry'>;
+    updateMessageRequest?: OperationRequestFn<'update'>;
+  };
+  /**
+   * Typing indicators. Defaults to enabled. ANDed with the channel type's `typing_events`. Read by
+   * {@link Channel.keystroke} and {@link Channel.stopTyping}.
+   * `messageComposer.text.publishTypingEvents` further switches them off per composer.
+   */
+  typingEvents: { enabled: boolean };
+  /**
+   * Read receipts. `enabled` is ANDed with the channel type's `read_events`. Together with the own
+   * `read-events` capability it decides {@link Channel.readEventsEnabled}, which gates counting
+   * unread messages, {@link Channel.markRead} and {@link Channel.markUnread}. Defaults to `true`.
+   *
+   * `localUnreadCountEnabled` applies only while read events are off
+   * ({@link Channel.readEventsEnabled} is false): the channel keeps counting unread messages and
+   * {@link Channel.markReadLocally} resets the count, sending nothing to the server. The server does
+   * not restrict it. Defaults to `false`.
+   */
+  readEvents: { enabled: boolean; localUnreadCountEnabled: boolean };
+  /** Threaded replies. Defaults to enabled. ANDed with the channel type's `replies`. */
+  replies: { enabled: boolean };
+  /**
+   * Message reminders. Defaults to enabled. ANDed with the channel type's `user_message_reminders`.
+   */
+  userMessageReminders: { enabled: boolean };
+  /** Delivery receipts. Defaults to enabled. ANDed with the channel type's `delivery_events`. */
+  deliveryEvents: { enabled: boolean };
+  /**
+   * The slash commands the channel type offers. Server-owned: the integrator cannot set it. Whether a
+   * command can be used right now is `messageComposer.isCommandDisabled(command)`.
+   */
+  availableCommands: Command[];
+};
+
+/**
+ * The fields of the declarative `channel` slice that the channel resolves for itself. The rest
+ * (`messagePaginator`, `pinnedMessagesPaginator`, `messageOperations`) go to those objects, see
+ * {@link Channel.initializeConfig}.
+ */
+const ownDeclarativeConfig = (
+  slice?: ChannelDeclarativeConfig,
+): Partial<ChannelConfig> | undefined => {
+  if (!slice) return undefined;
+
+  const {
+    deliveryEvents,
+    readEvents,
+    replies,
+    requestHandlers,
+    typingEvents,
+    userMessageReminders,
+  } = slice;
+
+  return {
+    deliveryEvents,
+    readEvents,
+    replies,
+    requestHandlers,
+    typingEvents,
+    userMessageReminders,
+  } as Partial<ChannelConfig>;
+};
+
+export const DEFAULT_CHANNEL_CONFIG: ChannelConfig = deepFreezeConfig({
+  availableCommands: [],
+  deliveryEvents: { enabled: true },
+  readEvents: { enabled: true, localUnreadCountEnabled: false },
+  replies: { enabled: true },
+  typingEvents: { enabled: true },
+  userMessageReminders: { enabled: true },
+});
+
+export class Channel extends ChannelApi {
   _client: StreamChat;
-  type: string;
-  id: string | undefined;
-  data: Partial<ChannelData & ChannelResponse> | undefined;
-  _data: Partial<ChannelData & ChannelResponse>;
+  _data: ChannelInput;
   cid: string;
-  /**  */
-  listeners: { [key: string]: (string | EventHandler)[] };
+  listeners: Map<EventType, Set<EventHandler>>;
   state: ChannelState;
-  /**
-   * This boolean is a vague indication of weather the channel exists on chat backend.
-   *
-   * If the value is true, then that means the channel has been initialized by either calling
-   * channel.create() or channel.query() or channel.watch().
-   *
-   * If the value is false, then channel may or may not exist on the backend. The only way to ensure
-   * is by calling channel.create() or channel.query() or channel.watch().
-   */
-  initialized: boolean;
-  /**
-   * Indicates weather channel has been initialized by manually populating the state with some messages, members etc.
-   * Static state indicates that channel exists on backend, but is not being watched yet.
-   */
-  offlineMode: boolean;
   lastKeyStroke?: Date;
   lastTypingEvent: Date | null;
   isTyping: boolean;
-  disconnected: boolean;
-  push_preferences?: ChannelPushPreference;
+  /** Re-entrancy guard for {@link Channel.reload}. */
+  private _reloading = false;
+  /** Refcount behind the `active` flag: several consumers can hold one instance. */
+  private _activeRefCount = 0;
+  /** Stops releaseUnusedChannels() from removing a channel while a query for it is still running. */
+  private _channelQueriesInFlight = 0;
+  /** The watch queries {@link Channel.watch} callers wait for, joined by equal options. */
+  private _watchQueriesInFlight: WatchQueryInFlight[] = [];
+  /**
+   * The options of the last {@link Channel.watch} query that succeeded during the current watch: a
+   * `watch()` with these options has nothing to send. Cleared when the watch ends.
+   */
+  private _lastWatchOptions?: ChannelGetOrCreateRequest;
+  push_preferences?: Gen_ChannelPushPreferencesResponse;
+  private readonly configController: ConfigController<ChannelConfig>;
   public readonly messageComposer: MessageComposer;
   public readonly messageReceiptsTracker: MessageReceiptsTracker;
+  public readonly messageOperations: MessageOperations;
+  public readonly messagePaginator: MessagePaginator;
+  public readonly pinnedMessagesPaginator: PinnedMessagePaginator;
   public readonly cooldownTimer: CooldownTimer;
+  private unsubscribeConfiguration?: Unsubscribe;
+  private unsubscribeServerConfig?: Unsubscribe;
+  /** The declarative slice last derived from, so a late server config can re-derive from it. */
+  private declarativeConfig?: Partial<ChannelConfig>;
 
   /**
-   * constructor - Create a channel
+   * Creates an uninitialized channel. Without an `id` its `cid` is a temporary one built from
+   * `data.members`, until the server answers.
    *
-   * @param {StreamChat} client the chat client
-   * @param {string} type  the type of channel
-   * @param {string} [id]  the id of the chat
-   * @param {ChannelData} data any additional custom params
-   *
-   * @return {Channel} Returns a new uninitialized channel
+   * @param client - The chat client.
+   * @param type - The channel type.
+   * @param id - The channel ID, or `undefined` for a channel created from members.
+   * @param data - Data for the channel (members, custom fields).
    */
   constructor(
     client: StreamChat,
     type: string,
     id: string | undefined,
-    data: ChannelData,
+    data: ChannelInput,
   ) {
     const validTypeRe = /^[\w_-]+$/;
     const validIDRe = /^[\w!_-]+$/;
@@ -148,271 +253,311 @@ export class Channel {
       throw new Error(`Invalid chat id ${id}, letters, numbers and "!-_" are allowed`);
     }
 
+    super(client, type, id);
+
     this._client = client;
-    this.type = type;
-    this.id = id;
-    // used by the frontend, gets updated:
-    this.data = data;
-    // this._data is used for the requests...
     this._data = { ...data };
-    this.cid = `${type}:${id}`;
-    this.listeners = {};
-    // perhaps the state variable should be private
+    // Without an ID the cid is a temporary one: the key the channel is stored under
+    // (`ensure({ members })`).
+    this.cid =
+      (!id && generateChannelTempCid(type, (data.members ?? []).map(getMemberUserId))) ||
+      `${type}:${id}`;
+    this.listeners = new Map();
     this.state = new ChannelState(this);
-    this.initialized = false;
-    this.offlineMode = false;
+    // after the state exists: the `data` setter writes to it
+    this.data = data as Partial<ChannelResponse>;
     this.lastTypingEvent = null;
     this.isTyping = false;
-    this.disconnected = false;
+
+    // Read before the sub-objects are built: some of their fields are read once at construction
+    // (`unreadReferencePolicy`, the initial cursor/offset).
+    const declarativeConfig = client.config.getConfig('channel') ?? undefined;
+    // The shared `messagePaginator` key applies to every MessagePaginator (channel and threads); the
+    // channel's own slice overrides it.
+    const messagePaginatorConfig = mergeDeclarativePaginatorConfig(
+      client.config.getConfig('messagePaginator') ?? undefined,
+      declarativeConfig?.messagePaginator,
+    );
 
     this.messageComposer = new MessageComposer({
       client: this._client,
       compositionContext: this,
     });
 
-    this.messageReceiptsTracker = new MessageReceiptsTracker({
-      locateMessage: (timestampMs) => {
-        const msg = this.state.findMessageByTimestamp(timestampMs);
-        return msg && { timestampMs, msgId: msg.id };
+    // Created before MessageReceiptsTracker and CooldownTimer, which read it.
+    this.messagePaginator = new MessagePaginator({
+      channel: this,
+      // A constructor argument, not config (`toDeclarativePaginatorConfig` drops it).
+      unreadReferencePolicy: messagePaginatorConfig?.unreadReferencePolicy,
+      paginatorOptions: {
+        declarativeConfig: toDeclarativePaginatorConfig(messagePaginatorConfig),
       },
     });
+    this.pinnedMessagesPaginator = new PinnedMessagePaginator({
+      channel: this,
+      paginatorOptions: { declarativeConfig: declarativeConfig?.pinnedMessagesPaginator },
+    });
+
+    this.messageReceiptsTracker = new MessageReceiptsTracker({ channel: this });
+    this.messageReceiptsTracker.registerSubscriptions();
 
     this.cooldownTimer = new CooldownTimer({ channel: this });
+    this.cooldownTimer.registerSubscriptions();
+
+    this.messageOperations = createMessageOperations(this);
+
+    // A channel created after connect may already be muted.
+    this._syncMuteStatus();
+
+    this.configController = new ConfigController<ChannelConfig>({
+      defaults: DEFAULT_CHANNEL_CONFIG,
+      initialSlice: ownDeclarativeConfig(declarativeConfig),
+      // Nested groups: naming `typingEvents.enabled` must not drop `readEvents`.
+      mergeSlice: 'deep',
+      // Frozen so a nested write throws. Copied first: a subtree of the resolved config can be the same
+      // object as one in the slice stored in `client.config`, and freezing it would freeze that slice.
+      applyAuthority: (requested) =>
+        deepFreezeConfig(
+          copyConfigPatch({
+            ...(mergeServerRestrictions(
+              requested,
+              this.serverRestrictions,
+            ) as ChannelConfig),
+            // Assigned, not merged: the deep merge would concatenate the lists.
+            availableCommands: this.serverConfig?.commands ?? [],
+          }),
+        ) as ChannelConfig,
+    });
+
+    // The server config usually arrives after construction: re-derive when it lands. `this.cid` is read
+    // at selection time because `query()` swaps a temporary cid for the real one before
+    // `_addChannelConfig`.
+    this.unsubscribeServerConfig = client.channelServerConfigsStore.subscribeWithSelector(
+      ({ configs }) => ({ channelConfig: configs[this.cid] }),
+      () => this.configController.rederive(this.declarativeConfig),
+    );
+
+    // The same derivation `config.reset()` runs. The sub-objects were already configured by their
+    // constructors; this re-applies the mutable half.
+    this.initializeConfig(declarativeConfig);
+
+    // Last in the constructor: setup functions may reach every sub-object. Their errors are contained.
+    this.unsubscribeConfiguration = applyInstanceConfiguration({
+      args: { channel: this },
+      config: client.config,
+      key: 'channel',
+      applyConfig: (config) => this.initializeConfig(config),
+      // Reads the slice fresh: reset clears the declarative store before calling this.
+      reinitializeConfig: () =>
+        this.initializeConfig(client.config.getConfig('channel') ?? undefined),
+      // The message paginator and message operations also derive from these shared keys, so a change
+      // re-runs the full cycle (declarative, then setup function) to keep the setup function's
+      // overrides.
+      alsoWatch: ['messagePaginator', 'messageOperations'],
+    });
+  }
+
+  /** Flags the channel type decides server-side (ANDed with the requested ones). */
+  private get serverRestrictions(): ServerRestrictions<ChannelConfig> {
+    const channelConfig = this.serverConfig;
+
+    return {
+      deliveryEvents: { enabled: channelConfig?.delivery_events },
+      readEvents: { enabled: channelConfig?.read_events },
+      replies: { enabled: channelConfig?.replies },
+      typingEvents: { enabled: channelConfig?.typing_events },
+      userMessageReminders: { enabled: channelConfig?.user_message_reminders },
+    };
   }
 
   /**
-   * getClient - Get the chat client for this channel. If client.disconnect() was called, this function will error
+   * Re-derives the configuration of the channel, its paginators and its message operations from the
+   * declarative slice. Runs at construction, on every change to the `channel`, `messagePaginator` or
+   * `messageOperations` configuration, and on `client.config.reset()`.
    *
-   * @return {StreamChat}
+   * @param declarativeConfig - The channel's declarative slice (optional).
+   */
+  initializeConfig(declarativeConfig?: ChannelDeclarativeConfig): void {
+    this.declarativeConfig = declarativeConfig as Partial<ChannelConfig> | undefined;
+
+    // Replaces, so a handler dropped from the declarative tree disappears. Direct writes to
+    // `configState.requestHandlers` must be re-applied afterwards.
+    // The controller skips the publish when the resolved config is deep-equal to the last one.
+    this.configController.initialize(ownDeclarativeConfig(declarativeConfig));
+
+    // Shared key first, the channel's own slice overrides it.
+    this.messagePaginator.initializeConfig(
+      toDeclarativePaginatorConfig(
+        mergeDeclarativePaginatorConfig(
+          this.getClient().config.getConfig('messagePaginator') ?? undefined,
+          declarativeConfig?.messagePaginator,
+        ),
+      ),
+    );
+    // No shared key: the pinned paginator has a single parent.
+    this.pinnedMessagesPaginator.initializeConfig(
+      declarativeConfig?.pinnedMessagesPaginator,
+    );
+
+    // Shared key with a per-parent override, as for `messagePaginator`.
+    this.messageOperations.initializeConfig(
+      mergeDeclarativeMessageOperationsConfig(
+        this.getClient().config.getConfig('messageOperations') ?? undefined,
+        declarativeConfig?.messageOperations,
+      ),
+    );
+  }
+
+  /**
+   * Returns the chat client for this channel.
+   *
+   * @returns The chat client.
+   * @throws If the channel is pending disposal ({@link Channel.pendingDisposal}).
    */
   getClient(): StreamChat {
-    if (this.disconnected === true) {
-      throw Error(`You can't use a channel after client.disconnect() was called`);
-    }
+    if (this.pendingDisposal) throw this.disposedError();
     return this._client;
   }
 
-  /**
-   * getConfig - Get the config for this channel id (cid)
-   *
-   * @return {Record<string, unknown>}
-   */
-  getConfig() {
-    const client = this.getClient();
-    return client.configs[this.cid];
+  private disposedError() {
+    return new Error(
+      `Channel ${this.cid} is pending disposal and cannot be used. Get a fresh instance with client.channel('${this.type}', '${this.id}').`,
+    );
+  }
+
+  get configState(): StateStore<ChannelConfig> {
+    return this.configController.state;
+  }
+
+  get config(): Readonly<ChannelConfig> {
+    return this.configController.value;
   }
 
   /**
-   * sendMessage - Send a message to this channel
-   *
-   * @param {Message} message The Message object
-   * @param {boolean} [options.skip_enrich_url] Do not try to enrich the URLs within message
-   * @param {boolean} [options.skip_push] Skip sending push notifications
-   * @param {boolean} [options.is_pending_message] DEPRECATED, please use `pending` instead.
-   * @param {boolean} [options.pending] Make this message pending
-   * @param {Record<string,string>} [options.pending_message_metadata] Metadata for the pending message
-   * @param {boolean} [options.force_moderation] Apply force moderation for server-side requests
-   *
-   * @return {Promise<SendMessageAPIResponse>} The Server Response
+   * The channel's configuration as the server reports it (`uploads`, `typing_events`, `commands`, ...),
+   * including this channel's `config_overrides`. `undefined` until the channel is queried or watched.
+   * Gate features on {@link config} instead: it also folds in what the integrator disabled.
    */
-  async _sendMessage(rawMessage: Message, options?: SendMessageOptions) {
-    const client = this.getClient();
-    const message = sanitizeOutgoingAttachments({
-      client,
-      message: rawMessage,
-    });
-
-    return await client.post<SendMessageAPIResponse>(this._channelURL() + '/message', {
-      message,
-      ...options,
-    });
-  }
-
-  async sendMessage(message: Message, options?: SendMessageOptions) {
-    try {
-      const offlineDb = this.getClient().offlineDb;
-      if (offlineDb) {
-        const messageId = message.id;
-        if (messageId) {
-          return await offlineDb.queueTask<SendMessageAPIResponse>({
-            task: {
-              channelId: this.id as string,
-              channelType: this.type,
-              messageId,
-              payload: [message, options],
-              type: 'send-message',
-            },
-          });
-        }
-      }
-    } catch (error) {
-      this._client.logger('error', `offlineDb:send-message`, {
-        tags: ['channel', 'offlineDb'],
-        error,
-      });
-    }
-    return await this._sendMessage(message, options);
+  get serverConfig() {
+    return this.getClient().channelServerConfigs[this.cid];
   }
 
   /**
-   * Upload a file to this channel’s file endpoint (multipart). Forwards to the client’s `sendFile` implementation.
+   * Sends a message to this channel. Strips `localMetadata` from attachments and drops those whose
+   * upload never completed.
    *
-   * @param uri File source: URL string, `File`, `Buffer`, or readable stream (Node).
-   * @param name File name sent in the multipart body.
-   * @param contentType MIME type; defaults are applied when omitted.
-   * @param user Optional user payload appended to the form as JSON.
-   * @param axiosRequestConfig Optional Axios per-request config, merged after upload defaults (e.g. `onUploadProgress`, `signal` from `AbortController`).
-   * @return Promise resolving to `{ file: string, ... }` with the CDN URL.
+   * @param ...args - `[request, requestOptions]`. `request` holds the message body and optional
+   *   flags such as `skip_enrich_url`, `skip_push`, and `keep_channel_hidden`; `requestOptions`
+   *   carries per-request options such as an abort `signal` and is never serialized into the request.
+   * @returns The server response.
    */
-  sendFile(
-    uri: string | NodeJS.ReadableStream | Buffer | File,
-    name?: string,
-    contentType?: string,
-    user?: UserResponse,
-    axiosRequestConfig?: AxiosRequestConfig,
+  override async sendMessage(...args: Parameters<ChannelApi['sendMessage']>) {
+    const [request, requestOptions] = args;
+
+    return await super.sendMessage(
+      { ...request, message: sanitizeOutgoingAttachments(request.message) },
+      requestOptions,
+    );
+  }
+
+  async sendReaction(...args: Parameters<ChatApi['sendReaction']>) {
+    return await this.getClient().sendReaction(...args);
+  }
+
+  async deleteReaction(...args: Parameters<ChatApi['deleteReaction']>) {
+    return await this.getClient().deleteReaction(...args);
+  }
+
+  /**
+   * Uploads a file to this channel's file endpoint (multipart).
+   *
+   * @param request - Upload payload. `request.file` is the file to upload.
+   * @param requestOptions - Per-request options, e.g. `onUploadProgress` or an abort `signal`
+   *   (optional).
+   * @returns The upload response, with the CDN URL in `file`.
+   */
+  override async uploadChannelFile(
+    request?: Omit<UploadChannelFileRequest, 'file'> & { file?: FileUploadInput },
+    requestOptions?: StreamRequestOptions,
   ) {
-    return this.getClient().sendFile(
-      `${this._channelURL()}/file`,
-      uri,
-      name,
-      contentType,
-      user,
-      axiosRequestConfig,
+    return await super.uploadChannelFile(
+      { ...request, file: normalizeUploadFile(request?.file) as unknown as string },
+      requestOptions,
     );
   }
 
   /**
-   * Upload an image to this channel’s image endpoint (multipart). Uses the same transport as `sendFile`.
+   * Uploads an image to this channel's image endpoint (multipart).
    *
-   * @param uri Image source: URL string, `File`, or readable stream (Node). For `Buffer` uploads, use `sendFile` toward the channel file endpoint instead.
-   * @param name File name sent in the multipart body.
-   * @param contentType MIME type.
-   * @param user Optional user payload appended to the form as JSON.
-   * @param axiosRequestConfig Optional Axios per-request config, merged after upload defaults (e.g. `onUploadProgress`, `signal`).
-   * @return Promise resolving to `{ file: string, ... }` with the CDN URL.
+   * @param request - Upload payload. `request.file` is the image to upload.
+   * @param requestOptions - Per-request options, e.g. `onUploadProgress` or an abort `signal`
+   *   (optional).
+   * @returns The upload response, with the CDN URL in `file`.
    */
-  sendImage(
-    uri: string | NodeJS.ReadableStream | File,
-    name?: string,
-    contentType?: string,
-    user?: UserResponse,
-    axiosRequestConfig?: AxiosRequestConfig,
+  override async uploadChannelImage(
+    request?: Omit<UploadChannelRequest, 'file'> & { file?: FileUploadInput },
+    requestOptions?: StreamRequestOptions,
   ) {
-    return this.getClient().sendFile(
-      `${this._channelURL()}/image`,
-      uri,
-      name,
-      contentType,
-      user,
-      axiosRequestConfig,
+    return await super.uploadChannelImage(
+      { ...request, file: normalizeUploadFile(request?.file) as unknown as string },
+      requestOptions,
     );
   }
 
-  deleteFile(url: string) {
-    return this.getClient().delete<APIResponse>(`${this._channelURL()}/file`, { url });
-  }
+  /** Alias for {@link uploadChannelFile}. */
+  uploadFile = (...args: Parameters<Channel['uploadChannelFile']>) =>
+    this.uploadChannelFile(...args);
 
-  deleteImage(url: string) {
-    return this.getClient().delete<APIResponse>(`${this._channelURL()}/image`, { url });
-  }
+  /** Alias for {@link uploadChannelImage}. */
+  uploadImage = (...args: Parameters<Channel['uploadChannelImage']>) =>
+    this.uploadChannelImage(...args);
 
   /**
-   * sendEvent - Send an event on this channel
+   * Deletes a file uploaded to this channel, the same request shape as `client.deleteFile`.
    *
-   * @param {Event} event for example {type: 'message.read'}
-   *
-   * @return {Promise<EventAPIResponse>} The Server Response
+   * @param request - The file to delete. `request.url` is its URL.
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
+   * @returns The server response.
    */
-  async sendEvent(event: Event) {
-    this._checkInitialized();
-    return await this.getClient().post<EventAPIResponse>(this._channelURL() + '/event', {
-      event,
-    });
+  deleteFile(request: { url: string }, requestOptions?: StreamRequestOptions) {
+    return this.deleteChannelFile(request, requestOptions);
   }
 
   /**
-   * search - Query messages
+   * Deletes an image uploaded to this channel, the same request shape as `client.deleteImage`.
    *
-   * @param {MessageFilters | string}  query search query or object MongoDB style filters
-   * @param {{client_id?: string; connection_id?: string; query?: string; message_filter_conditions?: MessageFilters}} options Option object, {user_id: 'tommaso'}
-   *
-   * @return {Promise<SearchAPIResponse>} search messages response
+   * @param request - The image to delete. `request.url` is its URL.
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
+   * @returns The server response.
    */
-  async search(
-    query: MessageFilters | string,
-    options: SearchOptions & {
-      client_id?: string;
-      connection_id?: string;
-      message_filter_conditions?: MessageFilters;
-      message_options?: MessageOptions;
-      query?: string;
-    } = {},
-  ) {
-    if (options.offset && options.next) {
-      throw Error(`Cannot specify offset with next`);
-    }
-    // Return a list of channels
-    const payload: SearchPayload = {
-      filter_conditions: { cid: this.cid } as ChannelFilters,
-      ...options,
-      sort: options.sort
-        ? normalizeQuerySort<SearchMessageSortBase>(options.sort)
-        : undefined,
-    };
-    if (typeof query === 'string') {
-      payload.query = query;
-    } else if (typeof query === 'object') {
-      payload.message_filter_conditions = query;
-    } else {
-      throw Error(`Invalid type ${typeof query} for query parameter`);
-    }
-    // Make sure we wait for the connect promise if there is a pending one
-    await this.getClient().wsPromise;
-
-    return await this.getClient().get<SearchAPIResponse>(
-      this.getClient().baseURL + '/search',
-      {
-        payload,
-      },
-    );
+  deleteImage(request: { url: string }, requestOptions?: StreamRequestOptions) {
+    return this.deleteChannelImage(request, requestOptions);
   }
 
   /**
-   * queryMembers - Query Members
+   * Queries members.
    *
-   * @param {MemberFilters}  filterConditions object MongoDB style filters
-   * @param {MemberSort} [sort] Sort options, for instance [{created_at: -1}].
-   * When using multiple fields, make sure you use array of objects to guarantee field order, for instance [{name: -1}, {created_at: 1}]
-   * @param {{ limit?: number; offset?: number }} [options] Option object, {limit: 10, offset:10}
-   * @param {RequestOptions} [requestOptions] Carries an abort signal. Not sent in the request.
-   *
-   * @return {Promise<ChannelMemberAPIResponse>} Query Members response
+   * @param request - The query members request payload (optional). The inner `payload` accepts
+   *   MongoDB-style filters, sort directions (e.g. `[{ field: 'created_at', direction: -1 }]`),
+   *   and pagination options (`limit`, `offset`).
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
+   * @returns The query members response.
    */
   async queryMembers(
-    filterConditions: MemberFilters,
-    sort: MemberSort = [],
-    options: QueryMembersOptions = {},
-    requestOptions: RequestOptions = {},
+    request?: { payload?: Partial<QueryMembersPayload> },
+    requestOptions?: StreamRequestOptions,
   ) {
-    let id: string | undefined;
-    const type = this.type;
-    let members: string[] | ChannelMemberResponse[] | undefined;
-    if (this.id) {
-      id = this.id;
-    } else if (this.data?.members && Array.isArray(this.data.members)) {
-      members = this.data.members;
-    }
-    // Return a list of members
-    return await this.getClient().get<ChannelMemberAPIResponse>(
-      this.getClient().baseURL + '/members',
+    this._checkHasId();
+
+    return await this.getClient().queryMembers(
       {
         payload: {
-          type,
-          id,
-          members,
-          sort: normalizeQuerySort(sort),
-          filter_conditions: filterConditions,
-          ...options,
+          // TODO: filter_conditions should probably be optional in the OAPI spec
+          ...({ type: this.type, id: this.id } as QueryMembersPayload),
+          ...request?.payload,
         },
       },
       requestOptions,
@@ -420,319 +565,83 @@ export class Channel {
   }
 
   /**
-   * updateMemberPartial - Partial update a member
+   * Updates the channel and stores the returned channel in `this.data`.
    *
-   * @param {PartialUpdateMember}  updates
-   * @param {{ user_id?: string }} [options] Option object, {user_id: 'jane'} to optionally specify the user id
-
-   * @return {Promise<ChannelMemberResponse>} Updated member
+   * @param ...args - `[request, requestOptions]`. `request` is the channel update payload, e.g.
+   *   `{ data: { custom: { name: 'foo' } }, message }`; `requestOptions` carries per-request options
+   *   such as an abort `signal` and is never serialized into the request.
+   * @returns The server response.
    */
-  async updateMemberPartial(updates: PartialUpdateMember, options?: { userId?: string }) {
-    const url = new URL(`${this._channelURL()}/member`);
-
-    if (options?.userId) {
-      url.searchParams.append('user_id', options.userId);
-    }
-
-    return await this.getClient().patch<PartialUpdateMemberAPIResponse>(
-      url.toString(),
-      updates,
-    );
-  }
-
-  /**
-   * @deprecated Use `updateMemberPartial` instead
-   * partialUpdateMember - Partial update a member
-   *
-   * @param {string} user_id member user id
-   * @param {PartialUpdateMember}  updates
-   *
-   * @return {Promise<ChannelMemberResponse>} Updated member
-   */
-  async partialUpdateMember(user_id: string, updates: PartialUpdateMember) {
-    if (!user_id) {
-      throw Error('Please specify the user id');
-    }
-
-    return await this.getClient().patch<PartialUpdateMemberAPIResponse>(
-      this._channelURL() + `/member/${encodeURIComponent(user_id)}`,
-      updates,
-    );
-  }
-
-  /**
-   * sendReaction - Sends a reaction to a message. If offline support is enabled, it will make sure
-   * that sending the reaction is queued up if it fails due to bad internet conditions and executed
-   * later.
-   *
-   * @param {string} messageID the message id
-   * @param {Reaction} reaction the reaction object for instance {type: 'love'}
-   * @param {{ enforce_unique?: boolean, skip_push?: boolean }} [options] Option object, {enforce_unique: true, skip_push: true} to override any existing reaction or skip sending push notifications
-   *
-   * @return {Promise<ReactionAPIResponse>} The Server Response
-   */
-  async sendReaction(
-    messageID: string,
-    reaction: Reaction,
-    options?: SendReactionOptions,
-  ) {
-    if (!messageID) {
-      throw Error(`Message id is missing`);
-    }
-    if (!reaction || Object.keys(reaction).length === 0) {
-      throw Error(`Reaction object is missing`);
-    }
-
-    try {
-      const offlineDb = this.getClient().offlineDb;
-      if (offlineDb) {
-        return await offlineDb.queueTask<ReactionAPIResponse>({
-          task: {
-            channelId: this.id as string,
-            channelType: this.type,
-            messageId: messageID,
-            payload: [messageID, reaction, options],
-            type: 'send-reaction',
-          },
-        });
-      }
-    } catch (error) {
-      this._client.logger('error', `offlineDb:send-reaction`, {
-        tags: ['channel', 'offlineDb'],
-        error,
-      });
-    }
-
-    return this._sendReaction(messageID, reaction, options);
-  }
-
-  /**
-   * sendReaction - Send a reaction about a message
-   *
-   * @param {string} messageID the message id
-   * @param {Reaction} reaction the reaction object for instance {type: 'love'}
-   * @param {{ enforce_unique?: boolean, skip_push?: boolean }} [options] Option object, {enforce_unique: true, skip_push: true} to override any existing reaction or skip sending push notifications
-   *
-   * @return {Promise<ReactionAPIResponse>} The Server Response
-   */
-  async _sendReaction(
-    messageID: string,
-    reaction: Reaction,
-    options?: SendReactionOptions,
-  ) {
-    if (!messageID) {
-      throw Error(`Message id is missing`);
-    }
-    if (!reaction || Object.keys(reaction).length === 0) {
-      throw Error(`Reaction object is missing`);
-    }
-
-    return await this.getClient().post<ReactionAPIResponse>(
-      this.getClient().baseURL + `/messages/${encodeURIComponent(messageID)}/reaction`,
-      {
-        reaction,
-        ...options,
-      },
-    );
-  }
-
-  async deleteReaction(messageID: string, reactionType: string, user_id?: string) {
-    this._checkInitialized();
-    if (!reactionType || !messageID) {
-      throw Error(
-        'Deleting a reaction requires specifying both the message and reaction type',
-      );
-    }
-
-    try {
-      const offlineDb = this.getClient().offlineDb;
-      if (offlineDb) {
-        const message = this.state.messages.find(({ id }) => id === messageID);
-        const reaction = {
-          created_at: '',
-          updated_at: '',
-          message_id: messageID,
-          type: reactionType,
-          user_id: (this.getClient().userID as string) ?? user_id,
-        };
-
-        if (message) {
-          await offlineDb.deleteReaction({
-            message,
-            reaction,
-          });
-        }
-
-        return await offlineDb.queueTask<ReactionAPIResponse>({
-          task: {
-            channelId: this.id as string,
-            channelType: this.type,
-            messageId: messageID,
-            payload: [messageID, reactionType],
-            type: 'delete-reaction',
-          },
-        });
-      }
-    } catch (error) {
-      this._client.logger('error', `offlineDb:delete-reaction`, {
-        tags: ['channel', 'offlineDb'],
-        error,
-      });
-    }
-
-    return await this._deleteReaction(messageID, reactionType, user_id);
-  }
-
-  /**
-   * deleteReaction - Delete a reaction by user and type
-   *
-   * @param {string} messageID the id of the message from which te remove the reaction
-   * @param {string} reactionType the type of reaction that should be removed
-   * @param {string} [user_id] the id of the user (used only for server side request) default null
-   *
-   * @return {Promise<ReactionAPIResponse>} The Server Response
-   */
-  async _deleteReaction(messageID: string, reactionType: string, user_id?: string) {
-    this._checkInitialized();
-    if (!reactionType || !messageID) {
-      throw Error(
-        'Deleting a reaction requires specifying both the message and reaction type',
-      );
-    }
-
-    const url =
-      this.getClient().baseURL +
-      `/messages/${encodeURIComponent(messageID)}/reaction/${encodeURIComponent(
-        reactionType,
-      )}`;
-    //provided when server side request
-    if (user_id) {
-      return await this.getClient().delete<ReactionAPIResponse>(url, { user_id });
-    }
-
-    return await this.getClient().delete<ReactionAPIResponse>(url, {});
-  }
-
-  /**
-   * update - Edit the channel's custom properties
-   *
-   * @param {ChannelData} channelData The object to update the custom properties of this channel with
-   * @param {Message} [updateMessage] Optional message object for channel members notification
-   * @param {ChannelUpdateOptions} [options] Option object, configuration to control the behavior while updating
-   * @return {Promise<UpdateChannelAPIResponse>} The server response
-   */
-  async update(
-    channelData: Partial<ChannelData & ChannelResponse> = {},
-    updateMessage?: Message,
-    options?: ChannelUpdateOptions,
-  ) {
-    // Strip out reserved names that will result in API errors.
-    // TODO: this needs to be typed better
-    const reserved: Exclude<
-      keyof (ChannelResponse & ChannelData),
-      keyof CustomChannelData
-    >[] = [
-      'config',
-      'cid',
-      'created_by',
-      'id',
-      'member_count',
-      'type',
-      'created_at',
-      'updated_at',
-      'last_message_at',
-      'own_capabilities',
-    ];
-
-    reserved.forEach((key) => {
-      delete channelData[key];
-    });
-
-    return await this._update({
-      message: updateMessage,
-      data: channelData,
-      ...options,
-    });
-  }
-
-  /**
-   * updatePartial - partial update channel properties
-   *
-   * @param {PartialUpdateChannel} partial update request
-   *
-   * @return {Promise<PartialUpdateChannelAPIResponse>}
-   */
-  async updatePartial(update: PartialUpdateChannel) {
-    const data = await this.getClient().patch<PartialUpdateChannelAPIResponse>(
-      this._channelURL(),
-      update,
-    );
-
-    const areCapabilitiesChanged =
-      [...(data.channel.own_capabilities || [])].sort().join() !==
-      [
-        ...(Array.isArray(this.data?.own_capabilities)
-          ? (this.data?.own_capabilities as string[])
-          : []),
-      ]
-        .sort()
-        .join();
-    this.data = data.channel;
-    // If the capabiltities are changed, we trigger the `capabilities.changed` event.
-    if (areCapabilitiesChanged) {
-      this.getClient().dispatchEvent({
-        type: 'capabilities.changed',
-        cid: this.cid,
-        own_capabilities: data.channel.own_capabilities,
-      });
-    }
-    return data;
-  }
-
-  /**
-   * enableSlowMode - enable slow mode
-   *
-   * @param {number} coolDownInterval the cooldown interval in seconds
-   * @return {Promise<UpdateChannelAPIResponse>} The server response
-   */
-  async enableSlowMode(coolDownInterval: number) {
-    const data = await this.getClient().post<UpdateChannelAPIResponse>(
-      this._channelURL(),
-      {
-        cooldown: coolDownInterval,
-      },
-    );
+  override async update(...args: Parameters<ChannelApi['update']>) {
+    const data = await super.update(...args);
     this.data = data.channel;
     return data;
   }
 
   /**
-   * disableSlowMode - disable slow mode
+   * Partially updates the channel's properties and stores the returned channel in `this.data`.
    *
-   * @return {Promise<UpdateChannelAPIResponse>} The server response
+   * @param update - The partial update request.
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
+   * @returns The server response.
    */
-  async disableSlowMode() {
-    const data = await this.getClient().post<UpdateChannelAPIResponse>(
-      this._channelURL(),
-      {
-        cooldown: 0,
-      },
-    );
+  async updatePartial(
+    update: UpdateChannelPartialRequest,
+    requestOptions?: StreamRequestOptions,
+  ) {
+    const data = await this.updateChannelPartial(update, requestOptions);
     this.data = data.channel;
     return data;
   }
 
-  public async sendSharedLocation(
-    location: StaticLocationPayload | LiveLocationPayload,
-    userId?: string,
+  /**
+   * Enables slow mode.
+   *
+   * @param coolDownInterval - The cooldown interval in seconds.
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
+   * @returns The server response.
+   */
+  async enableSlowMode(coolDownInterval: number, requestOptions?: StreamRequestOptions) {
+    return await this.update({ cooldown: coolDownInterval }, requestOptions);
+  }
+
+  /**
+   * Disables slow mode.
+   *
+   * @param   _request - Unused. Holds the request position so `requestOptions` stays the
+   *   second argument, as on the generated methods; pass `undefined`.
+   * @param   requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
+   * @returns The server response.
+   */
+  async disableSlowMode(
+    _request?: Record<string, never>,
+    requestOptions?: StreamRequestOptions,
   ) {
-    const result = await this.sendMessage({
-      id: location.message_id,
-      shared_location: location,
-      user: userId ? { id: userId } : undefined,
+    return await this.update({ cooldown: 0 }, requestOptions);
+  }
+
+  public async sendSharedLocation(location: SharedLocation & { message_id?: string }) {
+    this._checkHasId();
+
+    const messageId = location.message_id;
+    const result = await queueOrRun({
+      channel: this,
+      client: this.getClient(),
+      // Nothing to key a queue entry on without a message ID, so it runs but is not queued.
+      queue: !!messageId,
+      task: {
+        channelId: this.id,
+        channelType: this.type,
+        messageId,
+        payload: [{ message: { id: messageId, shared_location: location } }],
+        type: 'send-message',
+      },
     });
 
-    if ((location as LiveLocationPayload).end_at) {
+    if (location.end_at) {
       this.getClient().dispatchEvent({
         message: result.message,
         type: 'live_location_sharing.started',
@@ -742,11 +651,16 @@ export class Channel {
     return result;
   }
 
-  public async stopLiveLocationSharing(payload: UpdateLocationPayload) {
-    const location = await this.getClient().updateLocation({
-      ...payload,
-      end_at: new Date().toISOString(),
-    });
+  public async stopLiveLocationSharing(
+    payload: UpdateLiveLocationRequest,
+    requestOptions?: StreamRequestOptions,
+  ) {
+    // Picked, not spread: callers pass a whole shared location whose extra fields must not be sent.
+    const { latitude, longitude, message_id } = payload;
+    const location = await this.getClient().updateLiveLocation(
+      { end_at: new Date(), latitude, longitude, message_id },
+      requestOptions,
+    );
     this.getClient().dispatchEvent({
       live_location: location,
       type: 'live_location_sharing.stopped',
@@ -754,359 +668,307 @@ export class Channel {
   }
 
   /**
-   * delete - Delete the channel. Messages are permanently removed.
+   * Accepts an invitation to the channel.
    *
-   * @param {boolean} [options.hard_delete] Defines if the channel is hard deleted or not
-   *
-   * @return {Promise<DeleteChannelAPIResponse>} The server response
+   * @param options - Other channel update options to send with it. Defaults to `{}`.
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
+   * @returns The server response.
    */
-  async delete(options: { hard_delete?: boolean } = {}) {
-    return await this.getClient().delete<DeleteChannelAPIResponse>(this._channelURL(), {
-      ...options,
-    });
+  async acceptInvite(
+    options: NonNullable<Parameters<ChannelApi['update']>[0]> = {},
+    requestOptions?: StreamRequestOptions,
+  ) {
+    return await this.update({ accept_invite: true, ...options }, requestOptions);
   }
 
   /**
-   * truncate - Removes all messages from the channel
-   * @param {TruncateOptions} [options] Defines truncation options
-   * @return {Promise<TruncateChannelAPIResponse>} The server response
+   * Rejects an invitation to the channel.
+   *
+   * @param options - Other channel update options to send with it. Defaults to `{}`.
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
+   * @returns The server response.
    */
-  async truncate(options: TruncateOptions = {}) {
-    return await this.getClient().post<TruncateChannelAPIResponse>(
-      this._channelURL() + '/truncate',
-      options,
-    );
+  async rejectInvite(
+    options: NonNullable<Parameters<ChannelApi['update']>[0]> = {},
+    requestOptions?: StreamRequestOptions,
+  ) {
+    return await this.update({ reject_invite: true, ...options }, requestOptions);
   }
 
   /**
-   * acceptInvite - accept invitation to the channel
+   * Adds members to the channel.
    *
-   * @param {UpdateChannelOptions} [options] The object to update the custom properties of this channel with
-   *
-   * @return {Promise<UpdateChannelAPIResponse>} The server response
-   */
-  async acceptInvite(options: UpdateChannelOptions = {}) {
-    return await this._update({ accept_invite: true, ...options });
-  }
-
-  /**
-   * rejectInvite - reject invitation to the channel
-   *
-   * @param {UpdateChannelOptions} [options] The object to update the custom properties of this channel with
-   *
-   * @return {Promise<UpdateChannelAPIResponse>} The server response
-   */
-  async rejectInvite(options: UpdateChannelOptions = {}) {
-    return await this._update({ reject_invite: true, ...options });
-  }
-
-  /**
-   * addMembers - add members to the channel
-   *
-   * @param {string[] | Array<NewMemberPayload>} members An array of members to add to the channel
-   * @param {Message} [message] Optional message object for channel members notification
-   * @param {ChannelUpdateOptions} [options] Option object, configuration to control the behavior while updating
-   * @return {Promise<UpdateChannelAPIResponse>} The server response
+   * @param request - The members to add, and any other channel update option.
+   * @param request.members - User IDs, or member requests (`{ user_id, channel_role?, custom? }`).
+   * @param request.message - Message object for channel members notification (optional).
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
+   * @returns The server response.
    */
   async addMembers(
-    members: string[] | Array<NewMemberPayload>,
-    message?: Message,
-    options: ChannelUpdateOptions = {},
+    { members, ...options }: AddMembersRequest,
+    requestOptions?: StreamRequestOptions,
   ) {
-    return await this._update({ add_members: members, message, ...options });
+    return await this.update(
+      {
+        add_members: members.map((member) =>
+          typeof member === 'string' ? { user_id: member } : member,
+        ),
+        ...options,
+      },
+      requestOptions,
+    );
   }
 
   /**
-   * addFilterTags - add filter tags to the channel
+   * Adds filter tags to the channel.
    *
-   * @param {string[]} tags An array of tags to add to the channel
-   * @param {Message} [message] Optional message object for channel members notification
-   * @param {ChannelUpdateOptions} [options] Option object, configuration to control the behavior while updating
-   * @return {Promise<UpdateChannelAPIResponse>} The server response
+   * @param request - The tags to add, and any other channel update option.
+   * @param request.tags - The tags to add.
+   * @param request.message - Message object for channel members notification (optional).
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
+   * @returns The server response.
    */
   async addFilterTags(
-    tags: string[],
-    message?: Message,
-    options: ChannelUpdateOptions = {},
+    { tags, ...options }: FilterTagsRequest,
+    requestOptions?: StreamRequestOptions,
   ) {
-    return await this._update({ add_filter_tags: tags, message, ...options });
+    return await this.update({ add_filter_tags: tags, ...options }, requestOptions);
   }
 
   /**
-   * removeFilterTags - remove filter tags from the channel
+   * Removes filter tags from the channel.
    *
-   * @param {string[]} tags An array of tags to remove from the channel
-   * @param {Message} [message] Optional message object for channel members notification
-   * @param {ChannelUpdateOptions} [options] Option object, configuration to control the behavior while updating
-   * @return {Promise<UpdateChannelAPIResponse>} The server response
+   * @param request - The tags to remove, and any other channel update option.
+   * @param request.tags - The tags to remove.
+   * @param request.message - Message object for channel members notification (optional).
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
+   * @returns The server response.
    */
   async removeFilterTags(
-    tags: string[],
-    message?: Message,
-    options: ChannelUpdateOptions = {},
+    { tags, ...options }: FilterTagsRequest,
+    requestOptions?: StreamRequestOptions,
   ) {
-    return await this._update({ remove_filter_tags: tags, message, ...options });
+    return await this.update({ remove_filter_tags: tags, ...options }, requestOptions);
   }
 
   /**
-   * addModerators - add moderators to the channel
+   * Invite members to the channel.
    *
-   * @param {string[]} members An array of member identifiers
-   * @param {Message} [message] Optional message object for channel members notification
-   * @param {ChannelUpdateOptions} [options] Option object, configuration to control the behavior while updating
-   * @return {Promise<UpdateChannelAPIResponse>} The server response
-   */
-  async addModerators(
-    members: string[],
-    message?: Message,
-    options: ChannelUpdateOptions = {},
-  ) {
-    return await this._update({ add_moderators: members, message, ...options });
-  }
-
-  /**
-   * assignRoles - sets member roles in a channel
-   *
-   * @param {{channel_role: Role, user_id: string}[]} roles List of role assignments
-   * @param {Message} [message] Optional message object for channel members notification
-   * @param {ChannelUpdateOptions} [options] Option object, configuration to control the behavior while updating
-   * @return {Promise<UpdateChannelAPIResponse>} The server response
-   */
-  async assignRoles(
-    roles: { channel_role: Role; user_id: string }[],
-    message?: Message,
-    options: ChannelUpdateOptions = {},
-  ) {
-    return await this._update({ assign_roles: roles, message, ...options });
-  }
-
-  /**
-   * inviteMembers - invite members to the channel
-   *
-   * @param {string[] | Array<NewMemberPayload>} members An array of members to invite to the channel
-   * @param {Message} [message] Optional message object for channel members notification
-   * @param {ChannelUpdateOptions} [options] Option object, configuration to control the behavior while updating
-   * @return {Promise<UpdateChannelAPIResponse>} The server response
+   * @param request - The members to invite, and any other channel update option.
+   * @param request.members - User IDs, or member requests (`{ user_id, custom }`).
+   * @param request.message - Message object for channel members notification (optional).
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
+   * @returns The server response.
    */
   async inviteMembers(
-    members: string[] | Required<Omit<NewMemberPayload, 'channel_role'>>[],
-    message?: Message,
-    options: ChannelUpdateOptions = {},
+    { members, ...options }: InviteMembersRequest,
+    requestOptions?: StreamRequestOptions,
   ) {
-    return await this._update({ invites: members, message, ...options });
+    return await this.update(
+      {
+        invites: members.map((member) =>
+          typeof member === 'string' ? { user_id: member } : member,
+        ),
+        ...options,
+      },
+      requestOptions,
+    );
   }
 
   /**
-   * removeMembers - remove members from channel
+   * Removes members from the channel.
    *
-   * @param {string[]} members An array of member identifiers
-   * @param {Message} [message] Optional message object for channel members notification
-   * @param {ChannelUpdateOptions} [options] Option object, configuration to control the behavior while updating
-   * @return {Promise<UpdateChannelAPIResponse>} The server response
+   * @param request - The members to remove, and any other channel update option.
+   * @param request.members - The user IDs to remove.
+   * @param request.message - Message object for channel members notification (optional).
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
+   * @returns The server response.
    */
   async removeMembers(
-    members: string[],
-    message?: Message,
-    options: ChannelUpdateOptions = {},
+    { members, ...options }: RemoveMembersRequest,
+    requestOptions?: StreamRequestOptions,
   ) {
-    return await this._update({ remove_members: members, message, ...options });
+    return await this.update({ remove_members: members, ...options }, requestOptions);
   }
 
   /**
-   * demoteModerators - remove moderator role from channel members
+   * Mutes the channel.
    *
-   * @param {string[]} members An array of member identifiers
-   * @param {Message} [message] Optional message object for channel members notification
-   * @param {ChannelUpdateOptions} [options] Option object, configuration to control the behavior while updating
-   * @return {Promise<UpdateChannelAPIResponse>} The server response
+   * @example
+   * // with expiration (two weeks)
+   * await channel.mute({ expiration: 14 * 24 * 60 * 60 * 1000 });
+   *
+   * @param options - Mute options (optional).
+   * @param options.expiration - Mute duration in milliseconds (optional).
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
+   * @returns The server response.
    */
-  async demoteModerators(
-    members: string[],
-    message?: Message,
-    options: ChannelUpdateOptions = {},
+  async mute(options?: Gen_MuteChannelRequest, requestOptions?: StreamRequestOptions) {
+    this._checkHasId();
+
+    return await this.getClient().muteChannel(
+      {
+        channel_cids: [this.cid],
+        ...options,
+      },
+      requestOptions,
+    );
+  }
+
+  /**
+   * Unmutes the channel.
+   *
+   * @example
+   * await channel.unmute();
+   *
+   * @param options - Unmute options (optional).
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
+   * @returns The server response.
+   */
+  async unmute(
+    options?: Gen_UnmuteChannelRequest,
+    requestOptions?: StreamRequestOptions,
   ) {
-    return await this._update({ demote_moderators: members, message, ...options });
-  }
+    this._checkHasId();
 
-  /**
-   * _update - executes channel update request
-   * @param payload Object Update Channel payload
-   * @return {Promise<UpdateChannelAPIResponse>} The server response
-   * TODO: introduce new type instead of Object in the next major update
-   */
-  async _update(payload: object) {
-    const data = await this.getClient().post<UpdateChannelAPIResponse>(
-      this._channelURL(),
-      payload,
-    );
-    this.data = data.channel;
-    return data;
-  }
-
-  /**
-   * mute - mutes the current channel
-   * @param {{ user_id?: string, expiration?: string }} opts expiration in minutes or user_id
-   * @return {Promise<MuteChannelAPIResponse>} The server response
-   *
-   * example with expiration:
-   * await channel.mute({expiration: moment.duration(2, 'weeks')});
-   *
-   * example server side:
-   * await channel.mute({user_id: userId});
-   *
-   */
-  async mute(opts: { expiration?: number; user_id?: string } = {}) {
-    return await this.getClient().post<MuteChannelAPIResponse>(
-      this.getClient().baseURL + '/moderation/mute/channel',
+    return await this.getClient().unmuteChannel(
       {
-        channel_cid: this.cid,
-        ...opts,
+        channel_cids: [this.cid],
+        ...options,
       },
+      requestOptions,
     );
   }
 
   /**
-   * unmute - mutes the current channel
-   * @param {{ user_id?: string}} opts user_id
-   * @return {Promise<APIResponse>} The server response
+   * Archives the channel for the current user.
    *
-   * example server side:
-   * await channel.unmute({user_id: userId});
+   * @example
+   * await channel.archive();
+   *
+   * @param _request - Unused. Holds the request position so `requestOptions` stays the
+   *   second argument, as on the generated methods; pass `undefined`.
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
+   * @returns The server response.
    */
-  async unmute(opts: { user_id?: string } = {}) {
-    return await this.getClient().post<APIResponse>(
-      this.getClient().baseURL + '/moderation/unmute/channel',
-      {
-        channel_cid: this.cid,
-        ...opts,
-      },
-    );
+  async archive(_request?: Record<string, never>, requestOptions?: StreamRequestOptions) {
+    return await this.updateMemberPartial({ set: { archived: true } }, requestOptions);
   }
 
   /**
-   * archive - archives the current channel
-   * @param {{ user_id?: string }} opts user_id if called server side
-   * @return {Promise<ChannelMemberResponse>} The server response
+   * Unarchives the channel for the current user.
    *
-   * example:
-   * await channel.archives();
-   *
-   * example server side:
-   * await channel.archive({user_id: userId});
-   *
-   */
-  async archive(opts: { user_id?: string } = {}) {
-    const cli = this.getClient();
-    const uid = opts.user_id || cli.userID;
-    if (!uid) {
-      throw Error('A user_id is required for archiving a channel');
-    }
-    const resp = await this.partialUpdateMember(uid, { set: { archived: true } });
-    return resp.channel_member;
-  }
-
-  /**
-   * unarchive - unarchives the current channel
-   * @param {{ user_id?: string }} opts user_id if called server side
-   * @return {Promise<ChannelMemberResponse>} The server response
-   *
-   * example:
+   * @example
    * await channel.unarchive();
    *
-   * example server side:
-   * await channel.unarchive({user_id: userId});
-   *
+   * @param _request - Unused. Holds the request position so `requestOptions` stays the
+   *   second argument, as on the generated methods; pass `undefined`.
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
+   * @returns The server response.
    */
-  async unarchive(opts: { user_id?: string } = {}) {
-    const cli = this.getClient();
-    const uid = opts.user_id || cli.userID;
-    if (!uid) {
-      throw Error('A user_id is required for unarchiving a channel');
-    }
-    const resp = await this.partialUpdateMember(uid, { set: { archived: false } });
-    return resp.channel_member;
+  async unarchive(
+    _request?: Record<string, never>,
+    requestOptions?: StreamRequestOptions,
+  ) {
+    return await this.updateMemberPartial({ set: { archived: false } }, requestOptions);
   }
 
   /**
-   * pin - pins the current channel
-   * @param {{ user_id?: string }} opts user_id if called server side
-   * @return {Promise<ChannelMemberResponse>} The server response
+   * Pins the channel for the current user.
    *
-   * example:
+   * @example
    * await channel.pin();
    *
-   * example server side:
-   * await channel.pin({user_id: userId});
-   *
+   * @param _request - Unused. Holds the request position so `requestOptions` stays the
+   *   second argument, as on the generated methods; pass `undefined`.
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
+   * @returns The server response.
    */
-  async pin(opts: { user_id?: string } = {}) {
-    const cli = this.getClient();
-    const uid = opts.user_id || cli.userID;
-    if (!uid) {
-      throw new Error('A user_id is required for pinning a channel');
-    }
-    const resp = await this.partialUpdateMember(uid, { set: { pinned: true } });
-    return resp.channel_member;
+  async pin(_request?: Record<string, never>, requestOptions?: StreamRequestOptions) {
+    return await this.updateMemberPartial({ set: { pinned: true } }, requestOptions);
   }
 
   /**
-   * unpin - unpins the current channel
-   * @param {{ user_id?: string }} opts user_id if called server side
-   * @return {Promise<ChannelMemberResponse>} The server response
+   * Unpins the channel for the current user.
    *
-   * example:
+   * @example
    * await channel.unpin();
    *
-   * example server side:
-   * await channel.unpin({user_id: userId});
-   *
+   * @param _request - Unused. Holds the request position so `requestOptions` stays the
+   *   second argument, as on the generated methods; pass `undefined`.
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
+   * @returns The server response.
    */
-  async unpin(opts: { user_id?: string } = {}) {
-    const cli = this.getClient();
-    const uid = opts.user_id || cli.userID;
-    if (!uid) {
-      throw new Error('A user_id is required for unpinning a channel');
-    }
-    const resp = await this.partialUpdateMember(uid, { set: { pinned: false } });
-    return resp.channel_member;
+  async unpin(_request?: Record<string, never>, requestOptions?: StreamRequestOptions) {
+    return await this.updateMemberPartial({ set: { pinned: false } }, requestOptions);
   }
 
   /**
-   * muteStatus - returns the mute status for the current channel
-   * @return {{ muted: boolean; createdAt: Date | null; expiresAt: Date | null }} { muted: true | false, createdAt: Date | null, expiresAt: Date | null}
+   * Returns the mute status of the channel.
+   *
+   * @returns `{ muted, createdAt, expiresAt }`, the timestamps in unix nanoseconds as the API sends
+   *   them.
    */
-  muteStatus(): {
-    createdAt: Date | null;
-    expiresAt: Date | null;
-    muted: boolean;
-  } {
-    this._checkInitialized();
+  muteStatus() {
+    this._checkHasId();
     return this.getClient()._muteStatus(this.cid);
   }
 
-  sendAction(messageID: string, formData: Record<string, string>) {
-    this._checkInitialized();
-    if (!messageID) {
-      throw Error(`Message id is missing`);
-    }
-    return this.getClient().post<SendMessageAPIResponse>(
-      this.getClient().baseURL + `/messages/${encodeURIComponent(messageID)}/action`,
-      {
-        message_id: messageID,
-        form_data: formData,
-        id: this.id,
-        type: this.type,
-      },
+  /**
+   * Recomputes `state.muteStatus` from `client.mutedChannels`, publishing only on change (the client
+   * calls this on every `mutedChannels` update). Unlike `muteStatus()`, it needs no channel ID.
+   */
+  _syncMuteStatus() {
+    if (this.pendingDisposal) return;
+
+    const next = this.getClient()._muteStatus(this.cid);
+    const previous = this.state.getLatestValue().muteStatus;
+    const unchanged =
+      previous.muted === next.muted &&
+      (previous.createdAt ?? null) === (next.createdAt ?? null) &&
+      (previous.expiresAt ?? null) === (next.expiresAt ?? null);
+
+    if (unchanged) return;
+
+    this.state.partialNext({ muteStatus: next });
+  }
+
+  async sendAction(
+    messageId: string,
+    formData: Record<string, string>,
+    requestOptions?: StreamRequestOptions,
+  ) {
+    this._checkHasId();
+    return await this.getClient().runMessageAction(
+      { id: messageId },
+      { form_data: formData },
+      requestOptions,
     );
   }
 
   /**
-   * keystroke - First of the typing.start and typing.stop events based on the users keystrokes.
-   * Call this on every keystroke
+   * Call on every keystroke: sends `typing.start` at most every 2 seconds.
+   *
    * @see {@link https://getstream.io/chat/docs/typing_indicators/?language=js|Docs}
-   * @param {string} [parent_id] set this field to `message.id` to indicate that typing event is happening in a thread
+   *
+   * @param parentId - The parent message ID, for a typing event in a thread (optional).
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
    */
-  async keystroke(parent_id?: string, options?: { user_id: string }) {
+  async keystroke(parentId?: string, requestOptions?: StreamRequestOptions) {
     if (!this._isTypingIndicatorsEnabled()) {
       return;
     }
@@ -1114,186 +976,380 @@ export class Channel {
     const diff = this.lastTypingEvent && now.getTime() - this.lastTypingEvent.getTime();
     this.lastKeyStroke = now;
     this.isTyping = true;
-    // send a typing.start every 2 seconds
     if (diff === null || diff > 2000) {
       this.lastTypingEvent = new Date();
-      await this.sendEvent({
-        type: 'typing.start',
-        parent_id,
-        ...(options || {}),
-      } as Event);
+      await this.sendEvent(
+        {
+          event: {
+            type: 'typing.start',
+            parent_id: parentId,
+          },
+        },
+        requestOptions,
+      );
     }
   }
 
   /**
-   * Sends an event to update the AI state for a specific message.
-   * Typically used by the server connected to the AI service to notify clients of state changes.
+   * Notifies watchers of a message's AI state. Meant for the server connected to the AI service.
    *
    * @param messageId - The ID of the message associated with the AI state.
-   * @param state - The new state of the AI process (e.g., thinking, generating).
-   * @param options - Optional parameters, such as `ai_message`, to include additional details in the event.
+   * @param state - The new state of the AI process, e.g. thinking, generating.
+   * @param options - Additional details for the event. Defaults to `{}`.
+   * @param options.ai_message - Additional message detail to include in the event (optional).
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
    */
   async updateAIState(
     messageId: string,
     state: AIState,
     options: { ai_message?: string } = {},
+    requestOptions?: StreamRequestOptions,
   ) {
-    await this.sendEvent({
-      ...options,
-      type: 'ai_indicator.update',
-      message_id: messageId,
-      ai_state: state,
-    } as Event);
+    await this.sendEvent(
+      {
+        event: {
+          type: 'ai_indicator.update',
+          // The API reads these fields from `custom`. They aren't app custom data, hence the assertion.
+          custom: {
+            ...options,
+            message_id: messageId,
+            ai_state: state,
+          } as CustomEventData,
+        },
+      },
+      requestOptions,
+    );
   }
 
   /**
    * Sends an event to notify watchers to clear the typing/thinking UI when the AI response starts streaming.
    * Typically used by the server connected to the AI service to inform clients that the AI response has started.
+   *
+   * @param _request - Unused. Holds the request position so `requestOptions` stays the
+   *   second argument, as on the generated methods; pass `undefined`.
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
    */
-  async clearAIIndicator() {
-    await this.sendEvent({
-      type: 'ai_indicator.clear',
-    } as Event);
+  async clearAIIndicator(
+    _request?: Record<string, never>,
+    requestOptions?: StreamRequestOptions,
+  ) {
+    await this.sendEvent(
+      {
+        event: {
+          type: 'ai_indicator.clear',
+        },
+      },
+      requestOptions,
+    );
   }
 
   /**
    * Sends an event to stop AI response generation, leaving the message in its current state.
    * Triggered by the user to halt the AI response process.
+   *
+   * @param _request - Unused. Holds the request position so `requestOptions` stays the
+   *   second argument, as on the generated methods; pass `undefined`.
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
    */
-  async stopAIResponse() {
-    await this.sendEvent({
-      type: 'ai_indicator.stop',
-    } as Event);
+  async stopAIResponse(
+    _request?: Record<string, never>,
+    requestOptions?: StreamRequestOptions,
+  ) {
+    await this.sendEvent(
+      {
+        event: {
+          type: 'ai_indicator.stop',
+        },
+      },
+      requestOptions,
+    );
   }
 
   /**
-   * stopTyping - Sets last typing to null and sends the typing.stop event
-   * @see {@link https://getstream.io/chat/docs/typing_indicators/?language=js|Docs}
-   * @param {string} [parent_id] set this field to `message.id` to indicate that typing event is happening in a thread
+   * Resets the typing state and sends `typing.stop`.
+   *
+   * @param parentId - The parent message ID, for a typing event in a thread (optional).
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
    */
-  async stopTyping(parent_id?: string, options?: { user_id: string }) {
+  async stopTyping(parentId?: string, requestOptions?: StreamRequestOptions) {
     if (!this._isTypingIndicatorsEnabled()) {
       return;
     }
     this.lastTypingEvent = null;
     this.isTyping = false;
-    await this.sendEvent({
-      type: 'typing.stop',
-      parent_id,
-      ...(options || {}),
-    } as Event);
+    await this.sendEvent(
+      {
+        event: {
+          type: 'typing.stop',
+          parent_id: parentId,
+        },
+      },
+      requestOptions,
+    );
   }
 
   _isTypingIndicatorsEnabled(): boolean {
-    if (!this.getConfig()?.typing_events || !this.getClient().wsConnection?.isHealthy) {
+    // No ID yet: nobody to tell.
+    if (this.isProvisional) return false;
+    // The resolved value (server `typing_events` ANDed with the client's setting), not the raw flag.
+    const { typingEvents } = this.configController.value;
+    if (!typingEvents.enabled || !this.getClient().wsConnection?.isHealthy) {
       return false;
     }
     return this.getClient().user?.privacy_settings?.typing_indicators?.enabled ?? true;
   }
 
   /**
-   * lastMessage - return the last message, takes into account that last few messages might not be perfectly sorted
-   *
-   * @return {ReturnType<ChannelState['formatMessage']> | undefined} Description
+   * Whether read events are on. `config.readEvents.enabled` (the channel type's `read_events` and
+   * the client configuration) and the own `read-events` capability allow them. Unread messages are
+   * counted and marked read only while it is true, unless `readEvents.localUnreadCountEnabled` keeps
+   * a local count.
    */
-  lastMessage(): LocalMessage | undefined {
-    // get last 5 messages, sort, return the latest
-    // get a slice of the last 5
-    let min = this.state.latestMessages.length - 5;
-    if (min < 0) {
-      min = 0;
-    }
-    const max = this.state.latestMessages.length + 1;
-    const messageSlice = this.state.latestMessages.slice(min, max);
-
-    // sort by pk desc
-    messageSlice.sort((a, b) => b.created_at.getTime() - a.created_at.getTime());
-
-    return messageSlice[0];
+  get readEventsEnabled(): boolean {
+    return this.config.readEvents.enabled && channelHasReadEvents(this);
   }
 
   /**
-   * markRead - Send the mark read event for this user, only works if the `read_events` setting is enabled. Syncs the message delivery report candidates local state.
+   * Marks read through `MessageDeliveryReporter`: uses the `markReadRequest` handler if set, marks
+   * read locally when read events are off and `localUnreadCountEnabled` is set, and drops the
+   * delivery candidate when a request went out. `markRead()` does none of this.
    *
-   * @param {MarkReadOptions} data
-   * @return {Promise<EventAPIResponse | null>} Description
+   * @param data - Mark read options. Defaults to `{}`.
+   * @returns The server response, or `null` when no request went out.
    */
-  async markRead(data: MarkReadOptions = {}) {
+  async markReadViaReporter(data: MarkReadRequest = {}) {
     return await this.getClient().messageDeliveryReporter.markRead(this, data);
   }
 
   /**
-   * markReadRequest - Send the mark read event for this user, only works if the `read_events` setting is
-   * enabled and the user holds the `read-events` capability on this channel
+   * Marks the channel read.
    *
-   * @param {MarkReadOptions} data
-   * @return {Promise<EventAPIResponse | null>} Description
+   * @param ...args - `[data, requestOptions]`. `data` holds the mark-read options;
+   *   `requestOptions` carries per-request options such as an abort `signal` and is never
+   *   serialized into the request.
+   * @returns The server response.
+   * @throws If the channel is not initialized or read events are disabled.
    */
-  async markAsReadRequest(data: MarkReadOptions = {}) {
+  override async markRead(...args: Parameters<ChannelApi['markRead']>) {
     this._checkInitialized();
 
-    // Server-side auth acts on behalf of a user with no own capabilities, so only the client-side
-    // flow is gated. Channels the user has no `read-events` capability on do not track read state
-    // on the backend at all - see `markReadLocally` for the client-local unread count.
-    if (
-      !this.getClient()._isUsingServerAuth() &&
-      (!this.getConfig()?.read_events || !channelHasReadEvents(this))
-    ) {
-      return null;
+    if (!this.readEventsEnabled) {
+      throw new Error(
+        "Read events are disabled by the channel type's `read_events` setting, by `channel.readEvents.enabled` in your configuration, or because the user lacks the `read-events` capability",
+      );
     }
 
-    return await this.getClient().post<EventAPIResponse>(this._channelURL() + '/read', {
-      ...data,
+    return await super.markRead(...args);
+  }
+
+  /** See {@link ChannelLifecycleState.initialized}. */
+  get initialized() {
+    return this.state.getLatestValue().initialized;
+  }
+
+  set initialized(initialized: boolean) {
+    this.state.partialNext({ initialized });
+  }
+
+  /**
+   * Whether the channel has no ID yet: it was built from members and the server assigns the ID when its
+   * query is answered. Until then only that query can be sent and the cid is a temporary one.
+   *
+   * Not reactive: subscribe to {@link Channel.initialized}, which turns `true` with the response that
+   * sets `id`.
+   */
+  get isProvisional() {
+    return !this.id;
+  }
+
+  /**
+   * See {@link ChannelLifecycleState.supersededBy}. A superseded instance receives no events and
+   * reports `watchStatus: NotWatching`: use its successor (`watch()` resolves with it). The SDK
+   * does not disconnect it before logout, so call {@link Channel.disconnect} once nothing uses it.
+   */
+  get supersededBy() {
+    return this.state.getLatestValue().supersededBy;
+  }
+
+  /** See {@link ChannelLifecycleState.offlineMode}. */
+  get offlineMode() {
+    return this.state.getLatestValue().offlineMode;
+  }
+
+  set offlineMode(offlineMode: boolean) {
+    this.state.partialNext({ offlineMode });
+  }
+
+  /**
+   * Reads `state.data`. Assigning publishes `data`, `memberCount` and `ownCapabilities` in one update.
+   * If the object omits `member_count` or `own_capabilities`, the last known values are carried onto
+   * a copy (the assigned object is not changed). Editing `channel.data.x` in place does not reach
+   * the state. `ownCapabilities` keeps its array while the capabilities stay the same (in any
+   * order), so a subscriber to it is notified only when they change.
+   */
+  get data(): Partial<ChannelResponse> | undefined {
+    return this.state.getLatestValue().data;
+  }
+
+  set data(next: Partial<ChannelResponse> | undefined) {
+    const {
+      data: previous,
+      memberCount: previousMemberCount,
+      ownCapabilities: previousOwnCapabilities,
+    } = this.state.getLatestValue();
+    const carriedMemberCount =
+      typeof next?.member_count !== 'number' && typeof previous?.member_count === 'number'
+        ? previous.member_count
+        : undefined;
+    // `own_capabilities` stays undefined until known, so "not loaded" isn't read as "none"
+    const carriedCapabilities =
+      !Array.isArray(next?.own_capabilities) && Array.isArray(previous?.own_capabilities)
+        ? [...previous.own_capabilities]
+        : undefined;
+
+    const data =
+      next && (carriedMemberCount !== undefined || carriedCapabilities)
+        ? {
+            ...next,
+            ...(carriedMemberCount !== undefined && { member_count: carriedMemberCount }),
+            ...(carriedCapabilities && { own_capabilities: carriedCapabilities }),
+          }
+        : next;
+
+    const memberCount = data?.member_count ?? carriedMemberCount;
+    const ownCapabilities = data?.own_capabilities ?? carriedCapabilities ?? [];
+    const toKey = (capabilities: readonly string[]) => [...capabilities].sort().join();
+    const haveSameOwnCapabilities =
+      toKey(previousOwnCapabilities) === toKey(ownCapabilities);
+    this.state.partialNext({
+      data,
+      memberCount: memberCount ?? previousMemberCount,
+      ownCapabilities: haveSameOwnCapabilities
+        ? previousOwnCapabilities
+        : [...ownCapabilities],
     });
   }
 
   /**
-   * markUnread - Mark the channel as unread from messageID, only works if the `read_events` setting is
-   * enabled and the user holds the `read-events` capability on this channel
-   *
-   * @param {MarkUnreadOptions} data
-   * @return {APIResponse} An API response
+   * See {@link ChannelLifecycleState.pendingDisposal}. Set only by {@link Channel.disconnect} and never
+   * reverted: `getClient()` throws, `client.channel()` returns a fresh instance for the
+   * cid, and lists and recovery skip it.
    */
-  async markUnread(data: MarkUnreadOptions) {
-    this._checkInitialized();
+  get pendingDisposal() {
+    return this.state.getLatestValue().pendingDisposal;
+  }
 
-    // Gated the same way as `markAsReadRequest` - see the comment there.
-    if (
-      !this.getClient()._isUsingServerAuth() &&
-      (!this.getConfig()?.read_events || !channelHasReadEvents(this))
-    ) {
-      return Promise.resolve(null);
-    }
+  /** See {@link ChannelWatchStatus}. */
+  get watchStatus() {
+    return this.state.getLatestValue().watchStatus;
+  }
 
-    return await this.getClient().post<APIResponse>(this._channelURL() + '/unread', {
-      ...data,
-    });
+  set watchStatus(watchStatus: ChannelWatchStatus) {
+    // what the ended watch was asked for does not carry over to the next one
+    if (watchStatus !== ChannelWatchStatus.Watching) this._lastWatchOptions = undefined;
+    this.state.partialNext({ watchStatus });
   }
 
   /**
-   * markReadLocally - Resets this user's unread count locally, without any backend call. Intended for
-   * channels that have read events disabled (e.g. livestreams) when the client is created with the
-   * `isLocalUnreadCountEnabled` option. Dispatches a dedicated, client-only `message.read_locally` event
-   * that runs through the same `_handleChannelEvent` read logic as a real `message.read` (minus the
-   * delivery-report network sync), so the read-state update lives in one place. When offline support
-   * is enabled, the offline DB persists the reset for read-events-disabled channels, so the local
-   * count stays consistent across app restarts.
+   * Whether a query for this channel (`watch()`, `query()`, `create()` or one of the message
+   * paginator's own queries, see {@link runTrackedQuery}) awaits its response. The channel store
+   * keeps the channel meanwhile.
    *
-   * @return {Event | undefined} The dispatched `message.read_locally` event, or `undefined` if there is no connected user.
+   * @internal
+   */
+  get isQueryingChannel() {
+    return this._channelQueriesInFlight > 0;
+  }
+
+  /** See {@link Channel.activate}. */
+  get active() {
+    return this.state.getLatestValue().active;
+  }
+
+  /**
+   * Declares that a consumer is consuming this channel's own state and returns its release function.
+   * Refcounted: the channel stays active until the last consumer releases, and releasing twice is a
+   * no-op.
+   *
+   * While active, channel-list hydration places no page in the message list (`channel.reload()`
+   * owns it), the message list keeps its active interval (otherwise a fresh newest page from a
+   * query the list did not run is shown), and the channel stays in the channel store. A disposed
+   * channel is not activated: a warning is logged and the returned release does nothing.
+   */
+  activate = (): (() => void) => {
+    if (this.pendingDisposal) {
+      logger.withExtraTags('activate', this.cid).warn(this.disposedError().message);
+      return () => undefined;
+    }
+    this._activeRefCount += 1;
+    if (this._activeRefCount === 1) {
+      this.state.partialNext({ active: true });
+    }
+
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      this._activeRefCount -= 1;
+      if (this._activeRefCount === 0) {
+        this.state.partialNext({ active: false });
+      }
+    };
+  };
+
+  /**
+   * Marks the channel unread from a message.
+   *
+   * @param ...args - `[data, requestOptions]`. `data` holds the mark-unread options;
+   *   `requestOptions` carries per-request options such as an abort `signal` and is never
+   *   serialized into the request.
+   * @returns The server response.
+   * @throws If the channel is not initialized or read events are disabled.
+   */
+  override async markUnread(...args: Parameters<ChannelApi['markUnread']>) {
+    this._checkInitialized();
+
+    if (!this.readEventsEnabled) {
+      throw new Error(
+        "Read events are disabled by the channel type's `read_events` setting, by `channel.readEvents.enabled` in your configuration, or because the user lacks the `read-events` capability",
+      );
+    }
+
+    return await super.markUnread(...args);
+  }
+
+  /**
+   * Resets the unread count without a backend call, for channels with read events off
+   * ({@link Channel.readEventsEnabled}, e.g. livestreams) that set `readEvents.localUnreadCountEnabled`. Dispatches the client-only
+   * `message.read_locally` event, handled like `message.read` minus the delivery-report sync. With
+   * offline support the reset is persisted.
+   *
+   * The event's `last_read_message_id` is the newest server-confirmed message, whatever its type,
+   * of the interval holding the channel's newest messages
+   * (`messagePaginator.anchoredHeadServerConfirmedItem`). While that interval is not loaded (e.g.
+   * only a jumped-to interval is), the event carries none and the read covers everything up to its
+   * `created_at`.
+   *
+   * @returns The dispatched `message.read_locally` event, or `undefined` if there is no connected
+   *   user.
    */
   markReadLocally() {
     const client = this.getClient();
-    if (!client.userID) return;
+    if (!client.userId) return;
 
-    const event: Event = {
+    const event: EventPayload<'message.read_locally'> = {
       channel_id: this.id,
       channel_type: this.type,
       cid: this.cid,
-      created_at: new Date().toISOString(),
-      last_read_message_id: this.lastMessage()?.id,
+      created_at: nowNs(),
+      last_read_message_id: this.messagePaginator.anchoredHeadServerConfirmedItem?.id,
       team: this.data?.team,
       type: 'message.read_locally',
-      user: client.user,
+      user: client.user as UserResponse,
     };
     client.dispatchEvent(event);
 
@@ -1301,7 +1357,10 @@ export class Channel {
   }
 
   /**
-   * clean - Cleans the channel state and fires stop typing if needed
+   * Sends `typing.stop` after a second without a keystroke, drops stale typing users, and resets a
+   * stuck AI indicator while the connection is unhealthy. Run by the client's cleaning interval.
+   *
+   * @internal
    */
   clean() {
     if (this.lastKeyStroke) {
@@ -1313,205 +1372,253 @@ export class Channel {
     }
 
     this.state.clean();
+
+    // Clears an AI indicator stuck because the ending clear/stop was missed while offline. Gated on
+    // health, not staleness: a healthy connection must not cut off a long-running response.
+    const client = this.getClient();
+    if (!client.wsConnection?.isHealthy) {
+      this.state.resetAIState();
+    }
   }
 
   /**
-   * watch - Loads the initial channel state and watches for changes
+   * Watches the channel and loads its state and messages. Sends nothing when that is done already
+   * (`Watching`, `initialized` and `messagePaginator.hasResults`) and the call asks for nothing
+   * new: it passes no options, or the same options as the last `watch()` that succeeded during the
+   * current watch. Other options, e.g. `presence: true`, send a query. A `watch()` already in
+   * flight with the same options is joined, not repeated.
+   * Refresh a watched channel with {@link Channel.reload}. Rejects with the query's error.
    *
-   * @param {ChannelQueryOptions} options additional options for the query endpoint
-   *
-   * @return {Promise<QueryChannelAPIResponse>} The server response
+   * @param options - Options for the watch query (optional).
+   * @param requestOptions - Per-request options (optional). Aborting `signal` ends this caller's
+   *   wait (at once if aborted already); the query is cancelled once every waiting caller has
+   *   aborted. The other options apply only when this call sends the query.
+   * @returns The instance to use: this one, or the one that superseded it ({@link supersededBy}).
    */
-  async watch(options?: ChannelQueryOptions) {
+  async watch(
+    options?: ChannelGetOrCreateRequest,
+    requestOptions?: StreamRequestOptions,
+  ): Promise<Channel> {
+    // The caller's signal ends only its own wait; the query it may share has its own.
+    const { signal, ...queryRequestOptions } = requestOptions ?? {};
+    if (signal?.aborted) throw abortError(signal, WATCH_WAIT_ABORTED);
+    if (this.supersededBy) return this.supersededBy.watch(options, requestOptions);
+
+    // a copy: later changes to the caller's object must not change what is remembered or joined
+    const requested = structuredClone(options ?? {});
+    // Each part holds without the others: a thread query watches a channel without loading it,
+    // `query()` / `create()` load no messages, a custom `doRequest` can load messages but no state.
+    const isWatchedAndLoaded =
+      this.watchStatus === ChannelWatchStatus.Watching &&
+      this.initialized &&
+      this.messagePaginator.hasResults;
+    const repeatsLastWatch =
+      !Object.keys(requested).length || isEqual(this._lastWatchOptions, requested);
+    if (isWatchedAndLoaded && repeatsLastWatch) return this;
+
+    const existingJoinableQuery = this._watchQueriesInFlight.find((inFlight) =>
+      isEqual(inFlight.options, requested),
+    );
+    const watchQuery =
+      existingJoinableQuery ?? this.sendWatchQuery(requested, queryRequestOptions);
+    watchQuery.waitingCount += 1;
+    await waitUnlessAborted({
+      abortMessage: WATCH_WAIT_ABORTED,
+      onAbort: () => this.leaveWatchQuery(watchQuery),
+      promise: watchQuery.promise,
+      signal,
+    });
+    // The query may have handed the channel to an instance stored under the server's cid, which
+    // has taken in the response already.
+    return this.state.getLatestValue().supersededBy ?? this;
+  }
+
+  /**
+   * Sends the query {@link Channel.watch} callers wait for. It is cancelled through an abort
+   * controller of its own, once no caller waits any more ({@link leaveWatchQuery}).
+   */
+  private sendWatchQuery(
+    options: ChannelGetOrCreateRequest,
+    requestOptions: Omit<StreamRequestOptions, 'signal'>,
+  ): WatchQueryInFlight {
+    const abortController = new AbortController();
+    const promise = this.runWatchQuery(options, {
+      ...requestOptions,
+      signal: abortController.signal,
+    });
+    const watchQuery = { abortController, options, promise, waitingCount: 0 };
+    this._watchQueriesInFlight.push(watchQuery);
+    const forget = () => this.forgetWatchQuery(watchQuery);
+    // callers get the rejection through `promise`; this only clears the entry
+    promise.then(() => {
+      forget();
+      // what the query watched: this instance, or the one that took the channel over
+      const watched = this.state.getLatestValue().supersededBy ?? this;
+      if (watched.watchStatus === ChannelWatchStatus.Watching) {
+        watched._lastWatchOptions = options;
+      }
+    }, forget);
+    return watchQuery;
+  }
+
+  /** A caller stops waiting; the last one cancels and forgets the query, so the next is new. */
+  private leaveWatchQuery(watchQuery: WatchQueryInFlight) {
+    watchQuery.waitingCount -= 1;
+    if (watchQuery.waitingCount) return;
+    this.forgetWatchQuery(watchQuery);
+    watchQuery.abortController.abort();
+  }
+
+  /** Stops offering `watchQuery` to {@link Channel.watch} callers. */
+  private forgetWatchQuery(watchQuery: WatchQueryInFlight) {
+    this._watchQueriesInFlight = this._watchQueriesInFlight.filter(
+      (inFlight) => inFlight !== watchQuery,
+    );
+  }
+
+  /**
+   * Sends a watch query, watched or not, and places the page it fetched (a page at a cursor or
+   * around a message is only stored; `messagePaginator.jumpToMessage()` shows it).
+   * `requestOptions.signal` also ends the wait for a live socket.
+   */
+  private async runWatchQuery(
+    options?: ChannelGetOrCreateRequest,
+    requestOptions?: StreamRequestOptions,
+  ): Promise<void> {
     const defaultOptions = {
       state: true,
       watch: true,
       presence: false,
     };
 
-    // Make sure we wait for the connect promise if there is a pending one
-    await this.getClient().wsPromise;
-
-    if (!this.getClient()._hasConnectionID()) {
-      defaultOptions.watch = false;
-    }
-
     const combined = { ...defaultOptions, ...options };
-    const state = await this.query(combined, 'latest');
-    this.initialized = true;
+
+    // `ApiClient` holds a request that watches or subscribes to presence until the handshake yields a
+    // connection ID, so `watch: true` binds to a current one and `watchStatus = Watching` is truthful.
+    const state = await this.runChannelQuery(combined, requestOptions, {
+      placeMessages: true,
+    });
     this.data = state.channel;
 
-    this._client.logger(
-      'info',
-      `channel:watch() - started watching channel ${this.cid}`,
-      {
-        tags: ['channel'],
-        channel: this,
-      },
-    );
-    return state;
+    logger.withExtraTags('watch', this.cid).info('Started watching the channel.');
   }
 
   /**
-   * stopWatching - Stops watching the channel
+   * Re-watches the channel and refreshes its whole loaded message interval (the channel analogue of
+   * {@link Thread.reload}). Used on reconnect. Hard deletes reach other clients through no event, so
+   * the watch query reconciles the loaded newest messages with the re-queried page
+   * (`messagePaginator.reconcileNewestMessages`, against the loaded IDs captured before its await).
    *
-   * @return {Promise<APIResponse>} The server response
+   * Failed (unsent) messages are kept: those loaded or in the offline DB (cold boot, eviction)
+   * before the request that are no longer loaded after it are ingested again. The offline DB is
+   * read on a best-effort basis.
    */
-  async stopWatching() {
-    const response = await this.getClient().post<APIResponse>(
-      this._channelURL() + '/stop-watching',
-      {},
-    );
+  async reload() {
+    if (this._reloading || (!this.initialized && !this.offlineMode)) return;
+    this._reloading = true;
+    try {
+      const paginator = this.messagePaginator;
+      // The reload refreshes the interval that reaches the newest message, sized to what it holds.
+      const requestedLimit =
+        Math.max(paginator.anchoredHeadItems.length, paginator.pageSize ?? 0) ||
+        undefined;
+      const offlineDb = this.getClient().offlineDb;
+      // best effort: a failing read must not fail the reload
+      const failedInDb = offlineDb
+        ? await offlineDb.getFailedMessages({ cid: this.cid }).catch(() => [])
+        : [];
+      // after the read: a message that fails meanwhile is loaded by then
+      const failedBefore = paginator.getFailedMessagesToRestore(failedInDb);
 
-    this._client.logger(
-      'info',
-      `channel:watch() - stopped watching channel ${this.cid}`,
-      {
-        tags: ['channel'],
-        channel: this,
-      },
-    );
+      await this.runWatchQuery({ messages: { limit: requestedLimit } });
+      this.offlineMode = false;
+
+      paginator.restoreFailedMessages(failedBefore);
+    } finally {
+      this._reloading = false;
+    }
+  }
+
+  /**
+   * Stops watching the channel.
+   *
+   * @param ...args - `[request, requestOptions]`. `request` is the stop-watching payload;
+   *   `requestOptions` carries per-request options such as an abort `signal` and is never
+   *   serialized into the request.
+   * @returns The server response.
+   */
+  override async stopWatching(...args: Parameters<ChannelApi['stopWatching']>) {
+    const response = await super.stopWatching(...args);
+
+    // Unlike a connection loss, this is not restored on reconnect.
+    this.watchStatus = ChannelWatchStatus.NotWatching;
+
+    logger.withExtraTags('stopWatching', this.cid).info('Stopped watching the channel.');
 
     return response;
   }
 
   /**
-   * getReplies - List the message replies for a parent message.
+   * Retrieves messages of this channel by ID.
    *
-   * The recommended way of working with threads is to use the Thread class.
-   *
-   * @param {string} parent_id The message parent id, ie the top of the thread
-   * @param {MessagePaginationOptions & { user?: UserResponse; user_id?: string }} options Pagination params, ie {limit:10, id_lte: 10}
-   *
-   * @return {Promise<GetRepliesAPIResponse>} A response with a list of messages
+   * @param messageIds - The IDs of the messages to retrieve.
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
+   * @returns The server response.
    */
-  async getReplies(
-    parent_id: string,
-    options: MessagePaginationOptions & { user?: UserResponse; user_id?: string },
-    sort?: { created_at: AscDesc }[],
-  ) {
-    const normalizedSort = sort ? normalizeQuerySort(sort) : undefined;
-    const data = await this.getClient().get<GetRepliesAPIResponse>(
-      this.getClient().baseURL + `/messages/${encodeURIComponent(parent_id)}/replies`,
-      {
-        sort: normalizedSort,
-        ...options,
-      },
-    );
-
-    // add any messages to our thread state
-    if (data.messages) {
-      this.state.addMessagesSorted(data.messages);
-    }
-
-    return data;
+  getMessagesById(messageIds: string[], requestOptions?: StreamRequestOptions) {
+    return this.getManyMessages({ ids: messageIds }, requestOptions);
   }
 
   /**
-   * getPinnedMessages - List list pinned messages of the channel
+   * Returns when the current user last marked the channel read.
    *
-   * @param {PinnedMessagePaginationOptions & { user?: UserResponse; user_id?: string }} options Pagination params, ie {limit:10, id_lte: 10}
-   * @param {PinnedMessagesSort} sort defines sorting direction of pinned messages
-   *
-   * @return {Promise<GetRepliesAPIResponse>} A response with a list of messages
-   */
-  async getPinnedMessages(
-    options: PinnedMessagePaginationOptions & { user?: UserResponse; user_id?: string },
-    sort: PinnedMessagesSort = [],
-  ) {
-    return await this.getClient().get<GetRepliesAPIResponse>(
-      this._channelURL() + '/pinned_messages',
-      {
-        payload: {
-          ...options,
-          sort: normalizeQuerySort(sort),
-        },
-      },
-    );
-  }
-
-  /**
-   * getReactions - List the reactions, supports pagination
-   *
-   * @param {string} message_id The message id
-   * @param {{ limit?: number; offset?: number }} options The pagination options
-   *
-   * @return {Promise<GetReactionsAPIResponse>} Server response
-   */
-  getReactions(message_id: string, options: { limit?: number; offset?: number }) {
-    return this.getClient().get<GetReactionsAPIResponse>(
-      this.getClient().baseURL + `/messages/${encodeURIComponent(message_id)}/reactions`,
-      {
-        ...options,
-      },
-    );
-  }
-
-  /**
-   * getMessagesById - Retrieves a list of messages by ID
-   *
-   * @param {string[]} messageIds The ids of the messages to retrieve from this channel
-   *
-   * @return {Promise<GetMultipleMessagesAPIResponse>} Server response
-   */
-  getMessagesById(messageIds: string[]) {
-    return this.getClient().get<GetMultipleMessagesAPIResponse>(
-      this._channelURL() + '/messages',
-      {
-        ids: messageIds.join(','),
-      },
-    );
-  }
-
-  /**
-   * lastRead - returns the last time the user marked the channel as read if the user never marked the channel as read, this will return null
-   * @return {Date | null | undefined}
+   * @returns The last-read timestamp in unix nanoseconds, `null` if never read, or `undefined` if
+   *   the user is unset.
    */
   lastRead() {
-    const { userID } = this.getClient();
-    if (userID) {
-      return this.state.read[userID] ? this.state.read[userID].last_read : null;
+    const { userId } = this.getClient();
+    if (userId) {
+      return this.state.read[userId] ? this.state.read[userId].last_read : null;
     }
   }
 
   _countMessageAsUnread(message: LocalMessage | MessageResponse) {
     if (message.shadowed) return false;
     if (message.silent) return false;
-    if (message.parent_id && !message.show_in_channel) return false;
-    if (message.user?.id === this.getClient().userID) return false;
+    if (isThreadOnlyReply(message)) return false;
+    if (message.user?.id === this.getClient().userId) return false;
     if (message.user?.id && this.getClient().userMuteStatus(message.user.id))
       return false;
 
-    // Return false if channel doesn't allow read events, unless the client opted into a local
-    // unread count (e.g. livestreams where read events are disabled). See `isLocalUnreadCountEnabled`.
-    if (
-      !this.getClient().options.isLocalUnreadCountEnabled &&
-      !channelHasReadEvents(this)
-    ) {
+    // Not counted when read events are disabled, unless `readEvents.localUnreadCountEnabled` is set.
+    if (!this.config.readEvents.localUnreadCountEnabled && !this.readEventsEnabled) {
       return false;
     }
 
     // FIXME: see #1265, adjust and count new messages even when the channel is muted
-    // Read mute state directly from the client to avoid _checkInitialized() — this method
-    // is invoked from _handleChannelEvent (e.g. message.new) before .watch() resolves.
-    if (this.getClient()._muteStatus(this.cid).muted) return false;
+    if (this.muteStatus().muted) return false;
 
     return true;
   }
 
   /**
-   * countUnread - Count of unread messages
+   * Counts the unread messages.
    *
-   * @param {Date | null} [lastRead] lastRead the time that the user read a message, defaults to current user's read state
+   * Counting from `lastRead` counts within the channel's newest messages that are loaded (see
+   * {@link newestKnownMessages}).
    *
-   * @return {number} Unread count
+   * @param lastRead - The time the user read a message, in unix nanoseconds (optional). Defaults to
+   *   the current user's read state.
+   * @returns The unread count.
    */
-  countUnread(lastRead?: Date | null) {
-    if (!lastRead) return this.state.unreadCount;
-    // todo: prevent finding the latest message set on each iteration
+  countUnread(lastRead?: TimestampNS | null) {
+    // Nullish, not falsy: `0` is a valid timestamp.
+    if (lastRead == null) return this.state.unreadCount;
     let count = 0;
-    for (let i = 0; i < this.state.latestMessages.length; i += 1) {
-      const message = this.state.latestMessages[i];
+    const latestMessages = this.newestKnownMessages();
+    for (let i = 0; i < latestMessages.length; i += 1) {
+      const message = latestMessages[i];
       if (message.created_at > lastRead && this._countMessageAsUnread(message)) {
         count++;
       }
@@ -1520,21 +1627,58 @@ export class Channel {
   }
 
   /**
-   * countUnreadMentions - Count the number of unread messages mentioning the current user
+   * The channel's newest messages that are loaded: the interval that reaches the newest message (the
+   * paginator's anchored head), or, while that interval is not loaded, the messages received live
+   * since. An interval reached by a jump is never part of it, as the messages between it and the
+   * newest are unknown.
+   */
+  private newestKnownMessages() {
+    const paginator = this.messagePaginator;
+    return paginator.anchoredHeadItem !== undefined
+      ? paginator.anchoredHeadItems
+      : paginator.logicalHeadItems;
+  }
+
+  /**
+   * Lowers the own unread count by the unread ones among `deletedMessages`, as they were before the
+   * delete. The server lowers it for every unread message deleted, except in a soft bulk delete
+   * (`user.messages.deleted`), and does not send the new count. Unread messages that are not loaded
+   * cannot be counted; the next query brings the server's count.
    *
-   * @return {number} Unread mentions count
+   * @internal
+   */
+  _lowerUnreadCountForDeletedMessages(deletedMessages: LocalMessage[]) {
+    const lastRead = this.lastRead();
+    if (lastRead == null || this.state.unreadCount === 0) return;
+    const deletedUnread = deletedMessages.filter(
+      (message) =>
+        message.type !== 'deleted' &&
+        message.created_at > lastRead &&
+        this._countMessageAsUnread(message),
+    ).length;
+    if (deletedUnread > 0) {
+      this._setOwnUnreadCount(Math.max(0, this.state.unreadCount - deletedUnread));
+    }
+  }
+
+  /**
+   * Counts the unread messages that mention the current user, within the channel's newest messages
+   * that are loaded (see {@link newestKnownMessages}).
+   *
+   * @returns The unread mentions count.
    */
   countUnreadMentions() {
     const lastRead = this.lastRead();
-    const userID = this.getClient().userID;
+    const userId = this.getClient().userId;
 
     let count = 0;
-    for (let i = 0; i < this.state.latestMessages.length; i += 1) {
-      const message = this.state.latestMessages[i];
+    const latestMessages = this.newestKnownMessages();
+    for (let i = 0; i < latestMessages.length; i += 1) {
+      const message = latestMessages[i];
       if (
         this._countMessageAsUnread(message) &&
-        (!lastRead || message.created_at > lastRead) &&
-        message.mentioned_users?.some((user) => user.id === userID)
+        (lastRead == null || message.created_at > lastRead) &&
+        message.mentioned_users?.some((user) => user.id === userId)
       ) {
         count++;
       }
@@ -1543,176 +1687,311 @@ export class Channel {
   }
 
   /**
-   * create - Creates a new channel
+   * Creates the channel without watching it.
    *
-   * @return {Promise<QueryChannelAPIResponse>} The Server Response
-   *
+   * @param options - Channel query options (optional).
+   * @returns The server response.
    */
-  create = async (options?: ChannelQueryOptions) => {
+  create = async (options?: ChannelGetOrCreateRequest) => {
     const defaultOptions = {
       ...options,
       watch: false,
       state: false,
       presence: false,
     };
-    return await this.query(defaultOptions, 'latest');
+    // It asks for no channel state (`state: false`), so it brings no page of messages to place.
+    return await this.runChannelQuery(defaultOptions, undefined, {
+      placeMessages: false,
+    });
   };
 
   /**
-   * query - Query the API, get messages, members or other channel fields
+   * Moves this channel, created without an ID, from its temporary cid to the one the server gave it.
+   * If another instance already holds that cid, it stays stored and takes over from this one
+   * ({@link ChannelManager.supersedeChannel}).
+   */
+  private storeUnderServerCid(
+    response: ChannelStateResponseFields,
+    { watch }: { watch?: boolean },
+  ) {
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const serverCid = response.channel!.cid;
+    const { channelManager } = this.getClient();
+    const storedUnder = this.cid;
+    this.cid = serverCid;
+    const isStoredUnderOldCid =
+      storedUnder !== serverCid && channelManager.get(storedUnder) === this;
+    // A disconnected channel is replaced by this instance, not superseded by it.
+    if (channelManager.get(serverCid)?.pendingDisposal) {
+      channelManager.removeChannel(serverCid);
+    }
+    const stored = channelManager.get(serverCid);
+
+    if (!stored) {
+      if (
+        !isStoredUnderOldCid ||
+        !channelManager.changeChannelId(storedUnder, serverCid)
+      ) {
+        channelManager.getOrCreateChannel(serverCid, () => this);
+      }
+      return;
+    }
+
+    if (stored === this) return;
+    logger
+      .withExtraTags('query', serverCid)
+      .warn(
+        'Another instance of this channel is stored and takes over from this one (see channel.supersededBy).',
+      );
+    channelManager.supersedeChannel(this, stored, response, {
+      storedUnder: isStoredUnderOldCid ? storedUnder : undefined,
+      watch,
+    });
+  }
+
+  /**
+   * Queries the API for messages, members and other channel fields.
    *
-   * @param {ChannelQueryOptions} options The query options
-   * @param {MessageSetType} messageSetToAddToIfDoesNotExist It's possible to load disjunct sets of a channel's messages into state, use `current` to load the initial channel state or if you want to extend the currently displayed messages, use `latest` if you want to load/extend the latest messages, `new` is used for loading a specific message and it's surroundings
+   * The returned messages are not added to {@link Channel.messagePaginator}: the paginator loads its
+   * own pages, and {@link Channel.watch} / {@link Channel.create} place the page they query.
    *
-   * @return {Promise<QueryChannelAPIResponse>} Returns a query response
+   * @param options - The query options (optional, defaults to `{}`).
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
+   * @returns The query response.
    */
   async query(
-    options: ChannelQueryOptions = {},
-    messageSetToAddToIfDoesNotExist: MessageSetType = 'current',
+    options: ChannelGetOrCreateRequest = {},
+    requestOptions?: StreamRequestOptions,
   ) {
-    // Make sure we wait for the connect promise if there is a pending one
-    await this.getClient().wsPromise;
+    return await this.runChannelQuery(options, requestOptions, { placeMessages: false });
+  }
 
-    const createdById =
-      options.created_by?.id ??
-      options.created_by_id ??
-      this._data?.created_by?.id ??
-      this._data?.created_by_id;
-
-    if (this.getClient()._isUsingServerAuth() && typeof createdById !== 'string') {
-      this.getClient().logger(
-        'warn',
-        'Either `created_by` (with `id` property) or `created_by_id` are missing from both `Channel._data` and `options` parameter',
+  /**
+   * The query behind `query()`, `watch()` and `create()`, in three steps: sends the request
+   * ({@link requestChannelState}), has the message paginator place the returned page when
+   * `placeMessages` is set (a watch query), then applies the rest of the response
+   * ({@link applyChannelStateFromResponse}), all as a tracked query ({@link runTrackedQuery}).
+   *
+   * The page is placed before the rest is applied, because the rest reads the loaded messages: read
+   * and delivery positions that come without a message id are looked up among them, and the latest
+   * message is reported as delivered. A first page then takes the unread snapshot, from the read
+   * state the rest brought. The message paginator's own queries keep the same order: they place
+   * their page, then apply the rest with {@link applyChannelStateFromResponse}.
+   */
+  private async runChannelQuery(
+    options: ChannelGetOrCreateRequest,
+    requestOptions: StreamRequestOptions | undefined,
+    { placeMessages }: { placeMessages: boolean },
+  ) {
+    return await this.runTrackedQuery(async () => {
+      const externalQuery = placeMessages
+        ? this.messagePaginator.prepareExternalQuery(options.messages)
+        : undefined;
+      const state = await this.requestChannelState(
+        externalQuery
+          ? { ...options, messages: externalQuery.messagePaginationParams }
+          : options,
+        requestOptions,
+        { placesNewestPage: externalQuery?.isNewestPage ?? false },
       );
-    }
-
-    let queryURL = `${this.getClient().baseURL}/channels/${encodeURIComponent(
-      this.type,
-    )}`;
-    if (this.id) {
-      queryURL += `/${encodeURIComponent(this.id)}`;
-    }
-
-    const state = await this.getClient().post<QueryChannelAPIResponse>(
-      queryURL + '/query',
-      {
-        data: this._data,
-        state: true,
-        ...options,
-      },
-    );
-
-    // update the channel id if it was missing
-    if (!this.id) {
-      this.id = state.channel.id;
-      this.cid = state.channel.cid;
-      // set the channel as active...
-
-      const tempChannelCid = generateChannelTempCid(
-        this.type,
-        state.members.map((member) => member.user_id || member.user?.id || ''),
-      );
-
-      if (tempChannelCid && tempChannelCid in this.getClient().activeChannels) {
-        // This gets set in `client.channel()` function, when channel is created
-        // using members, not id.
-        delete this.getClient().activeChannels[tempChannelCid];
+      let placedFirstPage = false;
+      try {
+        if (externalQuery && Array.isArray(state.messages)) {
+          placedFirstPage = externalQuery.placePage(state.messages.map(formatMessage));
+        }
+      } finally {
+        // The rest of a response that arrived is applied even when placing its page failed: a
+        // watch the server registered is recorded, and the read state is taken in.
+        // Only the newest page is the latest message set, for the offline database to store.
+        this.applyChannelStateFromResponse(state, {
+          isLatestMessageSet: externalQuery?.isNewestPage ?? false,
+          watch: options.watch,
+        });
       }
+      if (placedFirstPage) this.messagePaginator.seedUnreadSnapshot();
+      return state;
+    });
+  }
 
-      if (
-        !(this.cid in this.getClient().activeChannels) &&
-        this.getClient()._cacheEnabled()
-      ) {
-        this.getClient().activeChannels[this.cid] = this;
-      }
+  /**
+   * Runs `run`, a query of this channel, as a tracked query: refused for a disposed instance, and
+   * the channel counts as being queried until `run` settles ({@link isQueryingChannel}), so the
+   * channel store keeps it meanwhile. Used by {@link runChannelQuery} and by the message
+   * paginator's own queries.
+   *
+   * `run` starts synchronously: a paginator query publishes its loading flag before anything is
+   * awaited, which keeps a second query in the same tick from starting.
+   *
+   * @internal
+   */
+  async runTrackedQuery<T>(run: () => Promise<T>): Promise<T> {
+    // A disposed instance is done for good: its query would load it again and, for a watch,
+    // register a watch whose events go to the instance now stored for the cid. So it is refused.
+    if (this.pendingDisposal) throw this.disposedError();
+    // a count, not a flag: queries of one channel overlap (a watch while the paginator loads more)
+    this._channelQueriesInFlight += 1;
+    try {
+      return await run();
+    } finally {
+      this._channelQueriesInFlight -= 1;
     }
+  }
 
-    this.getClient()._addChannelConfig(state.channel);
-
-    // the only config param that is necessary to be updated based on server config soon as the config is delivered
-    if (typeof state.channel.config?.shared_locations !== 'undefined') {
-      this.messageComposer.updateConfig({
-        location: { enabled: state.channel.config.shared_locations },
-      });
-    }
-
-    // add any messages to our channel state
-    const { messageSet, filteredMessageIds } = this._initializeState(
-      state,
-      messageSetToAddToIfDoesNotExist,
-      !hasMessagePaginationCursor(options?.messages),
-    );
-    messageSet.pagination = {
-      ...messageSet.pagination,
-      ...messageSetPagination({
-        parentSet: messageSet,
-        messagePaginationOptions: options?.messages,
-        requestedPageSize:
-          options?.messages?.limit ?? DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE,
-        returnedPage: state.messages,
-        filteredReturnedPage: state.messages.filter(
-          (m) => !filteredMessageIds.includes(m.id),
-        ),
-        logger: this.getClient().logger,
-      }),
+  /**
+   * Sends the channel query and takes in what the response says about the channel itself: its id,
+   * the cid it is stored under, its config, and its `last_message_at`, against which the message
+   * paginator's head interval is checked before any page is placed (see
+   * `MessagePaginator.unmarkStaleHead`). The request of {@link runChannelQuery} and of the message
+   * paginator's own queries, which run it as a tracked query ({@link runTrackedQuery}); it does not
+   * track the query itself. Refused for a disposed instance, before anything is sent.
+   *
+   * `placesNewestPage`: the caller places the newest page with this response, which brings the
+   * newest messages up to date, so the head interval is not checked.
+   *
+   * @internal
+   */
+  async requestChannelState(
+    options: ChannelGetOrCreateRequest,
+    requestOptions: StreamRequestOptions | undefined,
+    { placesNewestPage = false }: { placesNewestPage?: boolean } = {},
+  ): Promise<StreamResponse<ChannelStateResponse>> {
+    if (this.pendingDisposal) throw this.disposedError();
+    const queryPayload: ChannelGetOrCreateRequest = {
+      data: this._data,
+      state: true,
+      ...options,
     };
 
+    const state = this.id
+      ? await this.getOrCreate(queryPayload, requestOptions)
+      : await this.getClient().getOrCreateDistinctChannel(
+          { type: this.type },
+          queryPayload,
+          requestOptions,
+        );
+
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const channel = state.channel!;
+
+    if (!this.id) {
+      this.id = channel.id;
+      this.storeUnderServerCid(state, { watch: queryPayload.watch });
+    }
+
+    this.getClient()._addChannelConfig(channel);
+
+    // The composer's server config arrives here for a channel opened via `ensure({ type, id })`. A
+    // composer with registered subscriptions hears it through the store, one without is told here.
+    // Applied as restrictions: `updateConfig` would record a server permission as a client request and
+    // re-enable a feature the integrator turned off.
+    this.messageComposer.applyServerRestrictions();
+
+    // This response's `last_message_at`, before any page is placed: the paginator tells from it whether
+    // a page reaches the newest message (`_initializeState` sets it too, after).
+    this.messagePaginator.setQueriedLatestMessageAt(channel.last_message_at);
+    // Checked before any page is placed, as a page that reaches the newest message marks its own
+    // interval as the head.
+    if (!placesNewestPage && this.isHeadLeftWithoutRefresh(queryPayload)) {
+      this.messagePaginator.unmarkStaleHead();
+    }
+
+    return state;
+  }
+
+  /**
+   * Whether nothing but this query brings the head interval up to date, so its `last_message_at` may
+   * show the interval stale: the watch was stopped (`NotWatching`), or this query itself watches
+   * again after a dropped connection (`WasWatching`), leaving nothing to re-watch with the newest
+   * page. While the channel is watched, a message the interval lacks is still on its way; after a
+   * dropped connection, the re-watch that follows places the newest page (see
+   * `ConnectionRecoveryManager`).
+   */
+  private isHeadLeftWithoutRefresh(query: ChannelGetOrCreateRequest): boolean {
+    if (this.watchStatus === ChannelWatchStatus.NotWatching) return true;
+    return this.watchStatus === ChannelWatchStatus.WasWatching && !!query.watch;
+  }
+
+  /**
+   * Applies a channel query response: watch status, read/members state, polls, reminders, composer,
+   * channel data, and the `channels.queried` event and offline write. Called once the response's
+   * page of messages, if any, is placed (see {@link runChannelQuery}).
+   *
+   * @internal
+   */
+  applyChannelStateFromResponse(
+    state: ChannelStateResponseFields,
+    { isLatestMessageSet, watch }: { isLatestMessageSet: boolean; watch?: boolean },
+  ) {
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const channel = state.channel!;
+
+    if (this.supersededBy) {
+      // The stored instance took over the watch (`supersedeChannel`), so this one receives no events.
+      this.watchStatus = ChannelWatchStatus.NotWatching;
+    } else if (watch) {
+      // Set only here: a `watch: false` query does not unwatch server-side, so it must not clear it.
+      this.watchStatus = ChannelWatchStatus.Watching;
+    }
+
+    // Seeds read, members, pinned and thread-cleanup state (messages live in the paginator).
+    this._initializeState(state);
     this.getClient().polls.hydratePollCache(state.messages, true);
     this.getClient().reminders.hydrateState(state.messages);
 
     this.messageComposer.initStateFromChannelResponse(state);
 
-    const areCapabilitiesChanged =
-      [...(state.channel.own_capabilities || [])].sort().join() !==
-      [
-        ...(this.data && Array.isArray(this.data?.own_capabilities)
-          ? this.data.own_capabilities
-          : []),
-      ]
-        .sort()
-        .join();
-    this.data = state.channel;
-    this.offlineMode = false;
-    this.cooldownTimer.refresh();
-
-    if (areCapabilitiesChanged) {
-      this.getClient().dispatchEvent({
-        type: 'capabilities.changed',
-        cid: this.cid,
-        own_capabilities: state.channel.own_capabilities,
-      });
-    }
+    this.data = channel;
+    // One update before the events below: the offline DB reads it when handling them.
+    this.state.partialNext({ initialized: true, offlineMode: false });
 
     this.getClient().dispatchEvent({
       type: 'channels.queried',
       queriedChannels: {
         channels: [state],
-        isLatestMessageSet: messageSet.isLatest,
+        isLatestMessageSet,
       },
     });
     this.getClient().offlineDb?.executeQuerySafely(
       (db) =>
         db.upsertChannels?.({
           channels: [state],
-          isLatestMessagesSet: messageSet.isLatest,
+          isLatestMessagesSet: isLatestMessageSet,
         }),
       { method: 'upsertChannels' },
     );
 
     this.getClient().syncDeliveredCandidates([this]);
-    return state;
   }
 
   /**
-   * banUser - Bans a user from a channel
+   * Bans a user from this channel.
    *
-   * @param {string} targetUserID
-   * @param {BanUserOptions} options
-   * @returns {Promise<APIResponse>}
+   * @param targetUserId - The user to ban.
+   * @param options - Ban options.
+   * @returns The server response.
    */
-  async banUser(targetUserID: string, options: BanUserOptions) {
-    this._checkInitialized();
-    return await this.getClient().banUser(targetUserID, {
+  async banUser(targetUserId: string, options: Omit<BanUserOptions, 'channel_cid'>) {
+    this._checkHasId();
+
+    return await this.getClient().moderation.ban({
+      ...options,
+      target_user_id: targetUserId,
+      channel_cid: this.cid,
+    });
+  }
+
+  /**
+   * Removes the bans of a user on this channel.
+   *
+   * @param targetUserId - The user to unban.
+   * @param options - Unban options (optional).
+   * @returns The server response.
+   */
+  async unbanUser(targetUserId: string, options?: UnBanUserOptions) {
+    this._checkHasId();
+
+    return await this.getClient().unbanUser(targetUserId, {
       ...options,
       type: this.type,
       id: this.id,
@@ -1720,339 +1999,327 @@ export class Channel {
   }
 
   /**
-   * hides the channel from queryChannels for the user until a message is added
-   * If clearHistory is set to true - all messages will be removed for the user
+   * Casts a vote on a poll. `removeVote()` removes one.
    *
-   * @param {string | null} userId
-   * @param {boolean} clearHistory
-   * @returns {Promise<APIResponse>}
+   * @param ...args - `[pathParams, request, requestOptions]`. `pathParams` holds the target
+   *   `message_id` and `poll_id`; `request` holds the vote to cast; `requestOptions` carries
+   *   per-request options such as an abort `signal` and is never serialized into the request.
+   * @returns The poll vote response.
    */
-  async hide(userId: string | null = null, clearHistory = false) {
-    this._checkInitialized();
-
-    return await this.getClient().post<APIResponse>(`${this._channelURL()}/hide`, {
-      user_id: userId,
-      clear_history: clearHistory,
-    });
+  async vote(...args: Parameters<ChatApi['castPollVote']>) {
+    this._checkHasId();
+    return await this.getClient().castPollVote(...args);
   }
 
-  /**
-   * removes the hidden status for a channel
-   *
-   * @param {string | null} userId
-   * @returns {Promise<APIResponse>}
-   */
-  async show(userId: string | null = null) {
-    this._checkInitialized();
-    return await this.getClient().post<APIResponse>(`${this._channelURL()}/show`, {
-      user_id: userId,
-    });
+  async removeVote(...args: Parameters<ChatApi['deletePollVote']>) {
+    this._checkHasId();
+    return await this.getClient().deletePollVote(...args);
   }
 
-  /**
-   * unbanUser - Removes the bans for a user on a channel
-   *
-   * @param {string} targetUserID
-   * @param {UnBanUserOptions} options
-   * @returns {Promise<APIResponse>}
-   */
-  async unbanUser(targetUserID: string, options?: UnBanUserOptions) {
-    this._checkInitialized();
-    return await this.getClient().unbanUser(targetUserID, {
-      ...options,
-      type: this.type,
-      id: this.id,
-    });
+  async _createDraft(...args: Parameters<ChannelApi['createDraft']>) {
+    return await super.createDraft(...args);
   }
 
-  /**
-   * shadowBan - Shadow bans a user from a channel
-   *
-   * @param {string} targetUserID
-   * @param {BanUserOptions} options
-   * @returns {Promise<APIResponse>}
-   */
-  async shadowBan(targetUserID: string, options: BanUserOptions) {
-    this._checkInitialized();
-    return await this.getClient().shadowBan(targetUserID, {
-      ...options,
-      type: this.type,
-      id: this.id,
-    });
-  }
+  /** Creates or updates a draft. With offline support the call is queued and replayed on reconnect. */
+  override async createDraft(...args: Parameters<ChannelApi['createDraft']>) {
+    this._checkHasId();
 
-  /**
-   * removeShadowBan - Removes the shadow ban for a user on a channel
-   *
-   * @param {string} targetUserID
-   * @returns {Promise<APIResponse>}
-   */
-  async removeShadowBan(targetUserID: string) {
-    this._checkInitialized();
-    return await this.getClient().removeShadowBan(targetUserID, {
-      type: this.type,
-      id: this.id,
-    });
-  }
+    const [request] = args;
 
-  /**
-   * Cast or cancel one or more votes on a poll
-   * @param pollId string The poll id
-   * @param votes PollVoteData[] The votes that will be casted (or canceled in case of an empty array)
-   * @returns {APIResponse & PollVoteResponse} The poll votes
-   */
-  async vote(messageId: string, pollId: string, vote: PollVoteData) {
-    return await this.getClient().castPollVote(messageId, pollId, vote);
-  }
-
-  async removeVote(messageId: string, pollId: string, voteId: string) {
-    return await this.getClient().removePollVote(messageId, pollId, voteId);
-  }
-
-  /**
-   * createDraft - Creates or updates a draft message in a channel
-   *
-   * @param {DraftMessagePayload} message The draft message to create or update
-   *
-   * @return {Promise<CreateDraftResponse>} Response containing the created draft
-   */
-  async _createDraft(message: DraftMessagePayload) {
-    return await this.getClient().post<CreateDraftResponse>(
-      this._channelURL() + '/draft',
-      {
-        message,
+    return await queueOrRun({
+      channel: this,
+      client: this.getClient(),
+      task: {
+        channelId: this.id,
+        channelType: this.type,
+        threadId: request.message?.parent_id,
+        payload: args,
+        type: 'create-draft',
       },
-    );
+    });
   }
 
-  /**
-   * createDraft - Creates or updates a draft message in a channel. If offline support is
-   * enabled, it will make sure that creating the draft is queued up if it fails due to
-   * bad internet conditions and executed later.
-   *
-   * @param {DraftMessagePayload} message The draft message to create or update
-   *
-   * @return {Promise<CreateDraftResponse>} Response containing the created draft
-   */
-  async createDraft(message: DraftMessagePayload) {
-    try {
-      const offlineDb = this.getClient().offlineDb;
-      if (offlineDb) {
-        return await offlineDb.queueTask<CreateDraftResponse>({
-          task: {
-            channelId: this.id as string,
-            channelType: this.type,
-            threadId: message.parent_id,
-            payload: [message],
-            type: 'create-draft',
-          },
-        });
-      }
-    } catch (error) {
-      this._client.logger('error', `offlineDb:create-draft`, {
-        tags: ['channel', 'offlineDb'],
-        error,
-      });
-    }
-
-    return this._createDraft(message);
+  async _deleteDraft(...args: Parameters<ChannelApi['deleteDraft']>) {
+    return await super.deleteDraft(...args);
   }
 
-  /**
-   * deleteDraft - Deletes a draft message from a channel or a thread.
-   *
-   * @param {Object} options
-   * @param {string} options.parent_id Optional parent message ID for drafts in threads
-   *
-   * @return {Promise<APIResponse>} API response
-   */
-  async _deleteDraft({ parent_id }: { parent_id?: string } = {}) {
-    return await this.getClient().delete<APIResponse>(this._channelURL() + '/draft', {
-      parent_id,
+  /** Deletes a draft. With offline support the call is queued and replayed on reconnect. */
+  override async deleteDraft(...args: Parameters<ChannelApi['deleteDraft']>) {
+    this._checkHasId();
+
+    const [request] = args;
+
+    return await queueOrRun({
+      channel: this,
+      client: this.getClient(),
+      task: {
+        channelId: this.id,
+        channelType: this.type,
+        threadId: request?.parent_id,
+        payload: args,
+        type: 'delete-draft',
+      },
     });
   }
 
   /**
-   * deleteDraft - Deletes a draft message from a channel or a thread. If offline support is
-   * enabled, it will make sure that deleting the draft is queued up if it fails due to
-   * bad internet conditions and executed later.
+   * Listens to events on this channel. A callback alone listens to all events.
    *
-   * @param {Object} options
-   * @param {string} options.parent_id Optional parent message ID for drafts in threads
+   * @example
+   * channel.on('message.new', (event) => {
+   *   console.log('my new message', event, channel.state.messages);
+   * });
    *
-   * @return {Promise<APIResponse>} API response
+   * @example
+   * channel.on((event) => {
+   *   console.log(event.type);
+   * });
+   *
+   * @param eventType - The event type to listen for.
+   * @param callback - Called with each event of that type.
+   * @returns An object with an `unsubscribe()` method.
    */
-  async deleteDraft(options: { parent_id?: string } = {}) {
-    const { parent_id } = options;
-    try {
-      const offlineDb = this.getClient().offlineDb;
-      if (offlineDb) {
-        return await offlineDb.queueTask<APIResponse>({
-          task: {
-            channelId: this.id as string,
-            channelType: this.type,
-            threadId: parent_id,
-            payload: [options],
-            type: 'delete-draft',
-          },
-        });
-      }
-    } catch (error) {
-      this._client.logger('error', `offlineDb:delete-draft`, {
-        tags: ['channel', 'offlineDb'],
-        error,
-      });
-    }
-
-    return this._deleteDraft(options);
-  }
-
+  on<T extends EventType>(
+    eventType: T,
+    callback: EventHandler<T>,
+  ): { unsubscribe: () => void };
   /**
-   * getDraft - Retrieves a draft message from a channel
+   * Listens to all events on this channel.
    *
-   * @param {Object} options
-   * @param {string} options.parent_id Optional parent message ID for drafts in threads
-   *
-   * @return {Promise<GetDraftResponse>} Response containing the draft
+   * @param callback - Called with every event.
+   * @returns An object with an `unsubscribe()` method.
    */
-  async getDraft({ parent_id }: { parent_id?: string } = {}) {
-    return await this.getClient().get<GetDraftResponse>(this._channelURL() + '/draft', {
-      parent_id,
-    });
-  }
-
-  /**
-   * on - Listen to events on this channel.
-   *
-   * channel.on('message.new', event => {console.log("my new message", event, channel.state.messages)})
-   * or
-   * channel.on(event => {console.log(event.type)})
-   *
-   * @param {EventHandler | EventTypes} callbackOrString  The event type to listen for (optional)
-   * @param {EventHandler} [callbackOrNothing] The callback to call
-   */
-  on(eventType: EventTypes, callback: EventHandler): { unsubscribe: () => void };
   on(callback: EventHandler): { unsubscribe: () => void };
   on(
-    callbackOrString: EventHandler | EventTypes,
+    callbackOrString: EventHandler | EventType,
     callbackOrNothing?: EventHandler,
   ): { unsubscribe: () => void } {
-    const key = callbackOrNothing ? (callbackOrString as string) : 'all';
-    const callback = callbackOrNothing ? callbackOrNothing : callbackOrString;
-    if (!(key in this.listeners)) {
-      this.listeners[key] = [];
-    }
-    this._client.logger(
-      'info',
-      `Attaching listener for ${key} event on channel ${this.cid}`,
-      {
-        tags: ['event', 'channel'],
-        channel: this,
-      },
-    );
+    const key = callbackOrNothing ? (callbackOrString as EventType) : 'all';
+    const callback = callbackOrNothing
+      ? callbackOrNothing
+      : (callbackOrString as EventHandler);
 
-    this.listeners[key].push(callback);
+    const set = this.listeners.get(key) ?? new Set();
+
+    logger
+      .withExtraTags('on', this.cid)
+      .debug(`Attaching a listener for the "${key}" event.`);
+    set.add(callback);
+
+    if (!this.listeners.has(key)) {
+      this.listeners.set(key, set);
+    }
 
     return {
       unsubscribe: () => {
-        this._client.logger(
-          'info',
-          `Removing listener for ${key} event from channel ${this.cid}`,
-          {
-            tags: ['event', 'channel'],
-            channel: this,
-          },
-        );
-
-        this.listeners[key] = this.listeners[key].filter((el) => el !== callback);
+        logger
+          .withExtraTags('on', this.cid)
+          .debug(`Removing the listener for the "${key}" event.`);
+        set.delete(callback);
+        if (!set.size) {
+          this.listeners.delete(key);
+        }
       },
     };
   }
 
   /**
-   * off - Remove the event handler
+   * Removes a listener for one event type.
    *
+   * @param eventType - The event type it listens to.
+   * @param callback - The listener to remove.
    */
-  off(eventType: EventTypes, callback: EventHandler): void;
+  off<T extends EventType>(eventType: T, callback: EventHandler<T>): void;
+  /**
+   * Removes a listener for all events.
+   *
+   * @param callback - The listener to remove.
+   */
   off(callback: EventHandler): void;
   off(
-    callbackOrString: EventHandler | EventTypes,
+    callbackOrString: EventHandler | EventType,
     callbackOrNothing?: EventHandler,
   ): void {
-    const key = callbackOrNothing ? (callbackOrString as string) : 'all';
-    const callback = callbackOrNothing ? callbackOrNothing : callbackOrString;
-    if (!(key in this.listeners)) {
-      this.listeners[key] = [];
+    const key = callbackOrNothing ? (callbackOrString as EventType) : 'all';
+    const callback = callbackOrNothing
+      ? callbackOrNothing
+      : (callbackOrString as EventHandler);
+
+    logger
+      .withExtraTags('off', this.cid)
+      .debug(`Removing the listener for the "${key}" event.`);
+
+    const set = this.listeners.get(key);
+
+    set?.delete(callback);
+
+    if (!set?.size) {
+      this.listeners.delete(key);
+    }
+  }
+
+  private _patchReadState(
+    patch: (currentReadState: ChannelState['read']) => ChannelState['read'],
+    reconcileMeta?: ReadStoreReconcileMeta,
+  ) {
+    let hasStateChanged = false;
+    this.messageReceiptsTracker.setPendingReadStoreReconcileMeta(reconcileMeta);
+
+    this.state.next((currentState) => {
+      const nextReadState = patch(currentState.read);
+
+      if (nextReadState === currentState.read) {
+        return currentState;
+      }
+      hasStateChanged = true;
+
+      return {
+        ...currentState,
+        read: nextReadState,
+      };
+    });
+
+    if (!hasStateChanged) {
+      this.messageReceiptsTracker.setPendingReadStoreReconcileMeta(undefined);
+    }
+  }
+
+  private _upsertReadState(
+    userId: string,
+    update: (
+      currentUserReadState: ChannelState['read'][string] | undefined,
+    ) => ChannelState['read'][string],
+    reconcileMeta?: ReadStoreReconcileMeta,
+  ) {
+    let nextUserReadState: ChannelState['read'][string] | undefined;
+
+    this._patchReadState((currentReadState) => {
+      const currentUserReadState = currentReadState[userId];
+      const updatedUserReadState = update(currentUserReadState);
+
+      nextUserReadState = updatedUserReadState;
+
+      return {
+        ...currentReadState,
+        [userId]: updatedUserReadState,
+      };
+    }, reconcileMeta);
+
+    return nextUserReadState;
+  }
+
+  /**
+   * Sets the current user's unread count in `read[userId].unread_messages`, the one place it lives
+   * (`state.unreadCount` derives from it). Returns whether the count changed.
+   */
+  _setOwnUnreadCount(unreadCount: number): boolean {
+    if (this.pendingDisposal) return false;
+
+    const userId = this.getClient().userId;
+    if (!userId) return false;
+
+    const currentUserReadState = this.state.read[userId];
+    // Only updates an existing read entry, never creates one.
+    if (!currentUserReadState || currentUserReadState.unread_messages === unreadCount) {
+      return false;
     }
 
-    this._client.logger(
-      'info',
-      `Removing listener for ${key} event from channel ${this.cid}`,
-      {
-        tags: ['event', 'channel'],
-        channel: this,
-      },
+    this._upsertReadState(
+      userId,
+      () => ({ ...currentUserReadState, unread_messages: unreadCount }),
+      { changedUserIds: [userId] },
     );
-    this.listeners[key] = this.listeners[key].filter((value) => value !== callback);
+
+    return true;
   }
 
   _handleChannelEvent(event: Event) {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const channel = this;
-    this._client.logger(
-      'info',
-      `channel:_handleChannelEvent - Received event of type { ${event.type} } on ${this.cid}`,
-      {
-        tags: ['event', 'channel'],
-        channel: this,
-      },
-    );
+    logger
+      .withExtraTags('_handleChannelEvent', this.cid)
+      .debug(`Received an event of type "${event.type}".`, { event });
 
     const channelState = channel.state;
+
+    // The server unhides a channel on any new message without sending `channel.visible`.
+    if (
+      (event.type === 'message.new' || event.type === 'notification.message_new') &&
+      channel.data?.hidden
+    ) {
+      channel.data = { ...channel.data, hidden: false };
+    }
+
     switch (event.type) {
       case 'typing.start':
         if (event.user?.id) {
-          channelState.typing[event.user.id] = event;
+          channelState.setTypingEvent(event.user.id, event);
         }
         break;
       case 'typing.stop':
         if (event.user?.id) {
-          delete channelState.typing[event.user.id];
+          channelState.removeTypingEvent(event.user.id);
         }
         break;
-      // `message.read_locally` is the client-only event dispatched by `markReadLocally()` when read
-      // events are disabled (e.g. livestreams with `isLocalUnreadCountEnabled`). It reuses the exact
-      // `message.read` state logic so the read-state update lives in one place — only the
-      // delivery-report network sync below is skipped for it.
+      case 'ai_indicator.update':
+        channelState.partialNext({
+          aiState: (event.ai_state as AIState) ?? AIStates.Idle,
+        });
+        break;
+      case 'ai_indicator.clear':
+        channelState.partialNext({ aiState: AIStates.Idle });
+        break;
+      case 'ai_indicator.stop':
+        channelState.partialNext({ aiState: AIStates.Stop });
+        break;
+      // `notification.mark_read` is the only read signal for a channel the user is not watching
+      // (`message.read` goes to watchers only). `message.read_locally` is the local stand-in when read
+      // events are disabled. All share the `message.read` logic.
+      case 'notification.mark_read':
       case 'message.read_locally':
       case 'message.read':
-        // Thread read events are handled indiscriminately within the reactive `thread` object, we can
-        // skip them here in order to ensure the channel does not get read incidentally when it should
-        // not.
-        if (event.thread) break;
-        if (event.user?.id && event.created_at) {
-          const previousReadState = channelState.read[event.user.id];
-          channelState.read[event.user.id] = {
-            // in case we already have delivery information
-            ...previousReadState,
-            last_read: new Date(event.created_at),
-            last_read_message_id: event.last_read_message_id,
-            user: event.user,
-            unread_messages: 0,
-          };
-          this.messageReceiptsTracker.onMessageRead({
-            user: event.user,
-            readAt: event.created_at,
-            lastReadMessageId: event.last_read_message_id,
-          });
-          const client = this.getClient();
+        if (
+          event.user?.id &&
+          event.created_at != null &&
+          // A thread read (`thread_id` on `notification.mark_read`, `thread` on `message.read`) is the
+          // `thread` object's business and must not reset the channel's unread count.
+          !(event.type === 'notification.mark_read' && event.thread_id) &&
+          !('thread' in event && event.thread)
+        ) {
+          const eventUser = event.user;
+          const readAt = event.created_at;
+          this._upsertReadState(
+            eventUser.id,
+            (currentUserReadState) => {
+              const currentDeliveredAt = currentUserReadState?.last_delivered_at;
 
+              return {
+                ...currentUserReadState,
+                last_read: readAt,
+                last_read_message_id: event.last_read_message_id,
+                last_delivered_at:
+                  !currentDeliveredAt || currentDeliveredAt < readAt
+                    ? readAt
+                    : currentDeliveredAt,
+                last_delivered_message_id:
+                  !currentDeliveredAt || currentDeliveredAt < readAt
+                    ? (event.last_read_message_id ??
+                      currentUserReadState?.last_delivered_message_id)
+                    : currentUserReadState?.last_delivered_message_id,
+                first_unread_message_id: undefined,
+                user: eventUser,
+                unread_messages: 0,
+              };
+            },
+            { changedUserIds: [eventUser.id] },
+          );
+
+          const client = this.getClient();
           const isOwnEvent = event.user?.id === client.user?.id;
 
           if (isOwnEvent) {
-            channelState.unreadCount = 0;
-            // Delivery reporting buffers a `markChannelsDelivered` network request; the local read
-            // must not hit the backend, so only sync for the real server `message.read`.
+            // Delivery reporting buffers a `markChannelsDelivered` request, which a local read must not
+            // trigger: only the server `message.read` syncs.
             if (event.type === 'message.read') {
               client.syncDeliveredCandidates([this]);
             }
@@ -2061,28 +2328,39 @@ export class Channel {
         break;
       case 'message.delivered':
         // todo: update also on thread
-        if (event.user?.id && event.created_at) {
-          const previousReadState = channelState.read[event.user.id];
-          channelState.read[event.user.id] = {
-            ...previousReadState,
-            last_delivered_at: event.last_delivered_at
-              ? new Date(event.last_delivered_at)
-              : undefined,
-            last_delivered_message_id: event.last_delivered_message_id,
-            user: event.user,
-          };
+        if (event.user?.id && event.created_at != null) {
+          const eventUser = event.user;
+          const createdAt = event.created_at;
+          const resolvedDeliveredAt = event.last_delivered_at ?? createdAt;
+          this._upsertReadState(
+            eventUser.id,
+            (currentUserReadState) => {
+              const currentDeliveredAt = currentUserReadState?.last_delivered_at;
+              const currentReadAt = currentUserReadState?.last_read;
 
-          this.messageReceiptsTracker.onMessageDelivered({
-            user: event.user,
-            deliveredAt: event.created_at,
-            lastDeliveredMessageId: event.last_delivered_message_id,
-          });
+              return {
+                ...currentUserReadState,
+                last_delivered_at:
+                  currentDeliveredAt && currentDeliveredAt > resolvedDeliveredAt
+                    ? currentDeliveredAt
+                    : resolvedDeliveredAt,
+                last_delivered_message_id:
+                  currentDeliveredAt && currentDeliveredAt > resolvedDeliveredAt
+                    ? currentUserReadState?.last_delivered_message_id
+                    : event.last_delivered_message_id,
+                user: eventUser,
+                // delivery events can be received before read events
+                last_read: currentReadAt ?? createdAt,
+                unread_messages: currentUserReadState?.unread_messages ?? 0,
+              };
+            },
+            { changedUserIds: [eventUser.id] },
+          );
 
           const client = this.getClient();
           const isOwnEvent = event.user?.id === client.user?.id;
 
-          // make sure not to report deliveries that were
-          // already confirmed from own user from another device
+          // Do not report deliveries the own user already confirmed from another device.
           if (isOwnEvent) {
             client.syncDeliveredCandidates([this]);
           }
@@ -2091,79 +2369,140 @@ export class Channel {
       case 'user.watching.start':
       case 'user.updated':
         if (event.user?.id) {
-          channelState.watchers[event.user.id] = event.user;
+          channelState.watchers = {
+            ...channelState.watchers,
+            [event.user.id]: event.user,
+          };
+          channel.getClient().state.updateUserReference(event.user, channel.cid);
         }
         break;
       case 'user.watching.stop':
-        if (event.user?.id) {
-          delete channelState.watchers[event.user.id];
+        if (event.user?.id && channelState.watchers[event.user.id]) {
+          const newWatchers = { ...channelState.watchers };
+          delete newWatchers[event.user.id];
+          channelState.watchers = newWatchers;
         }
         break;
       case 'message.deleted':
         if (event.message) {
           this._extendEventWithOwnReactions(event);
-          if (event.hard_delete) channelState.removeMessage(event.message);
-          else channelState.addMessageSorted(event.message, false, false);
-
-          channelState.removeQuotedMessageReferences(event.message);
-
-          if (event.message.pinned) {
-            channelState.removePinnedMessage(event.message);
+          const formattedMessage = formatMessage(event.message);
+          // the server lowers unread count regardless of the type of deletion
+          const deletedMessage = this.getClient().messageStore.get(event.message.id);
+          if (deletedMessage) this._lowerUnreadCountForDeletedMessages([deletedMessage]);
+          // Thread-only replies are handled by the Thread object; the channel owns the main list.
+          if (!isThreadOnlyReply(event.message)) {
+            if (event.hard_delete) {
+              this.messagePaginator.removeItem({ id: event.message.id });
+              this.pinnedMessagesPaginator.removeItem({ id: event.message.id });
+            } else {
+              // A soft delete changes neither `created_at` nor `pinned`: one store write reaches every
+              // holder, where an `ingestItem` per collection would re-emit each active interval.
+              const store = this.getClient().messageStore;
+              if (store.has(event.message.id)) store.upsert(formattedMessage);
+            }
           }
+          this.messagePaginator.reflectQuotedMessageUpdate(formattedMessage);
+          this.pinnedMessagesPaginator.reflectQuotedMessageUpdate(formattedMessage);
         }
         break;
       case 'user.messages.deleted':
         if (event.user) {
-          this.state.deleteUserMessages(
-            event.user,
-            !!event.hard_delete,
-            new Date(event.created_at ?? Date.now()),
-          );
+          const deletedAt = event.created_at ?? nowNs();
+          const hardDelete = !!event.hard_delete;
+          const deletedMessages = this.messagePaginator.applyMessageDeletionForUser({
+            userId: event.user.id,
+            hardDelete,
+            deletedAt,
+          });
+          // the server keeps the unread count on a soft bulk delete
+          if (hardDelete) this._lowerUnreadCountForDeletedMessages(deletedMessages);
+          this.pinnedMessagesPaginator.applyMessageDeletionForUser({
+            userId: event.user.id,
+            hardDelete,
+            deletedAt,
+          });
         }
         break;
       case 'message.new':
         if (event.message) {
           const client = this.getClient();
-          /* if message belongs to current user, always assume timestamp is changed to filter it out and add again to avoid duplication */
           const ownMessage = event.user?.id === client.user?.id;
-          const isThreadMessage =
-            event.message.parent_id && !event.message.show_in_channel;
-
-          if (this.state.isUpToDate || isThreadMessage) {
-            channelState.addMessageSorted(event.message, ownMessage);
+          const isThreadMessage = isThreadOnlyReply(event.message);
+          if (!isThreadMessage) {
+            // `ingestItem` advances the tracked latest message. A message arriving while the viewer
+            // is in an older interval lands in the head interval, leaving the view as it is.
+            const formattedMessage = formatMessage(event.message);
+            this.messagePaginator.ingestItem(formattedMessage);
+            // Added only when pinned (`matchesFilter`).
+            this.pinnedMessagesPaginator.ingestItem(formattedMessage);
           }
 
-          if (event.message.pinned) {
-            channelState.addPinnedMessage(event.message);
-          }
-
-          // do not increase the unread count - the back-end does not increase the count neither in the following cases:
-          // 1. the message is mine
-          // 2. the message is a thread reply from any user
+          // The back-end does not count own messages or thread replies as unread.
           const preventUnreadCountUpdate = ownMessage || isThreadMessage;
-          if (ownMessage) {
-            this.cooldownTimer.refresh();
-          }
           if (preventUnreadCountUpdate) break;
 
+          // The own row bumps only for a message that counts as unread and arrives outside the live
+          // view (the SDK marks it read there). Other users' rows always bump: they are receipt data.
+          const countsAsOwnUnread =
+            !this.messagePaginator.isViewingLive &&
+            this._countMessageAsUnread(event.message);
+
           if (event.user?.id) {
-            for (const userId in channelState.read) {
-              if (userId === event.user.id) {
-                channelState.read[event.user.id] = {
-                  last_read: new Date(event.created_at as string),
-                  user: event.user,
-                  unread_messages: 0,
-                  last_delivered_at: new Date(event.created_at as string),
-                  last_delivered_message_id: event.message.id,
-                };
-              } else {
-                channelState.read[userId].unread_messages += 1;
-              }
-            }
+            const eventUser = event.user;
+            const eventUserId = eventUser.id;
+            const createdAt = event.created_at ?? nowNs();
+            const eventMessageId = event.message.id;
+            const ownUserId = client.userId;
+            this._patchReadState(
+              (currentReadState) => {
+                const userIds = Object.keys(currentReadState);
+                if (!userIds.length && !countsAsOwnUnread) return currentReadState;
+
+                const nextReadState = { ...currentReadState };
+
+                for (const userId of userIds) {
+                  if (userId === eventUserId) {
+                    nextReadState[eventUserId] = {
+                      last_read: createdAt,
+                      user: eventUser,
+                      unread_messages: 0,
+                      last_delivered_at: createdAt,
+                      last_delivered_message_id: eventMessageId,
+                    };
+                  } else if (userId === ownUserId && !countsAsOwnUnread) {
+                    // Not counted as own unread: leave the row untouched.
+                    continue;
+                  } else {
+                    nextReadState[userId] = {
+                      ...currentReadState[userId],
+                      unread_messages:
+                        (currentReadState[userId]?.unread_messages ?? 0) + 1,
+                    };
+                  }
+                }
+
+                // Seeds the own row when the channel has none (uninitialized, or queried with
+                // `state: false` so `_initializeState` never ran): the count needs a row to live in.
+                // `last_read` is the epoch: nothing has been read.
+                if (ownUserId && countsAsOwnUnread && !currentReadState[ownUserId]) {
+                  nextReadState[ownUserId] = {
+                    last_read: asTimestampNS(0),
+                    unread_messages: 1,
+                    user: (client.user ?? { id: ownUserId }) as UserResponse,
+                  };
+                }
+
+                return nextReadState;
+              },
+              { changedUserIds: Object.keys(channelState.read) },
+            );
           }
 
-          if (this._countMessageAsUnread(event.message)) {
-            channelState.unreadCount = channelState.unreadCount + 1;
+          if (countsAsOwnUnread) {
+            const { unreadCount } =
+              this.messagePaginator.unreadStateSnapshot.getLatestValue();
+            this.messagePaginator.setUnreadSnapshot({ unreadCount: unreadCount + 1 });
           }
 
           client.syncDeliveredCandidates([this]);
@@ -2173,47 +2512,55 @@ export class Channel {
       case 'message.undeleted':
         if (event.message) {
           this._extendEventWithOwnReactions(event);
-          channelState.addMessageSorted(event.message, false, false);
-          channelState._updateQuotedMessageReferences({ message: event.message });
-          if (event.message.pinned) {
-            channelState.addPinnedMessage(event.message);
+          const formattedMessage = formatMessage(event.message);
+          const { parent_id: parentId } = event.message;
+          const { threads } = this.getClient();
+          // to avoid double state publish
+          const isAppliedByThread =
+            !!parentId && threads.hasSubscriptions && !!threads.get(parentId);
+          if (!isThreadOnlyReply(event.message) && !isAppliedByThread) {
+            this.messagePaginator.ingestItem(formattedMessage);
+            this.messagePaginator.reflectQuotedMessageUpdate(formattedMessage);
+            // Added on pin, removed on unpin (`matchesFilter`).
+            this.pinnedMessagesPaginator.ingestItem(formattedMessage);
+            this.pinnedMessagesPaginator.reflectQuotedMessageUpdate(formattedMessage);
           } else {
-            channelState.removePinnedMessage(event.message);
+            const isListedAsPinned =
+              (this.pinnedMessagesPaginator.locateByItem(formattedMessage).interval
+                ?.currentIndex ?? -1) > -1;
+            const isPinChange = formattedMessage.pinned !== isListedAsPinned;
+            if (!isAppliedByThread || isPinChange) {
+              // Added on pin, removed on unpin (`matchesFilter`).
+              this.pinnedMessagesPaginator.ingestItem(formattedMessage);
+            }
           }
         }
         break;
-      case 'channel.truncated':
-        if (event.channel?.truncated_at) {
-          const truncatedAt = +new Date(event.channel.truncated_at);
-
-          channelState.messageSets.forEach((messageSet, messageSetIndex) => {
-            messageSet.messages.forEach(({ created_at: createdAt, id }) => {
-              if (truncatedAt > +createdAt)
-                channelState.removeMessage({ id, messageSetIndex });
-            });
-          });
-
-          channelState.pinnedMessages.forEach(({ id, created_at: createdAt }) => {
-            if (truncatedAt > +createdAt)
-              channelState.removePinnedMessage({ id } as MessageResponse);
-          });
-          channelState.unreadCount = this.countUnread(
-            new Date(event.channel.truncated_at),
-          );
+      case 'channel.truncated': {
+        if (event.channel) channel.data = { ...channel.data, ...event.channel };
+        const truncatedAt = event.channel?.truncated_at;
+        if (truncatedAt != null) {
+          this._setOwnUnreadCount(this.countUnread(truncatedAt));
+          // Partial truncation keeps messages newer than the cutoff, so the paginator is not wiped. It
+          // resets the channel-wide read context, so the unread snapshot goes too.
+          this.messagePaginator.truncate({ truncatedAt });
+          this.messagePaginator.clearUnreadSnapshot();
+          this.pinnedMessagesPaginator.truncate({ truncatedAt });
         } else {
-          channelState.clearMessages();
-          channelState.unreadCount = 0;
+          this._setOwnUnreadCount(0);
+          this.messagePaginator.clearStateAndCache();
+          this.pinnedMessagesPaginator.clearStateAndCache();
         }
 
         // system messages don't increment unread counts
         if (event.message) {
-          channelState.addMessageSorted(event.message);
-          if (event.message.pinned) {
-            channelState.addPinnedMessage(event.message);
-          }
+          const formattedMessage = formatMessage(event.message);
+          this.messagePaginator.ingestItem(formattedMessage);
+          this.pinnedMessagesPaginator.ingestItem(formattedMessage);
         }
 
         break;
+      }
       case 'member.added':
       case 'member.updated': {
         const memberCopy: ChannelMemberResponse = {
@@ -2233,9 +2580,10 @@ export class Channel {
             ...channelState.members,
             [memberCopy.user.id]: memberCopy,
           };
+          channel.getClient().state.updateUserReference(memberCopy.user, channel.cid);
         }
 
-        const currentUserId = this.getClient().userID;
+        const currentUserId = this.getClient().userId;
         if (
           typeof currentUserId === 'string' &&
           typeof memberCopy?.user?.id === 'string' &&
@@ -2245,40 +2593,60 @@ export class Channel {
         }
         break;
       }
-      case 'member.removed':
-        if (event.user?.id) {
+      case 'member.removed': {
+        // The spec documents `event.user` as the user who removed the member, so the removed
+        // user is read from `event.member` first.
+        const removedUserId =
+          event.member?.user?.id ?? event.member?.user_id ?? event.user?.id;
+        if (removedUserId) {
           const newMembers = {
             ...channelState.members,
           };
 
-          delete newMembers[event.user.id];
+          delete newMembers[removedUserId];
 
           channelState.members = newMembers;
 
-          // TODO?: unset membership
+          if (removedUserId === this.getClient().userId) {
+            channelState.membership = {} as ChannelMemberResponse;
+          }
+
+          this._patchReadState(
+            (currentReadState) => {
+              if (!currentReadState[removedUserId]) return currentReadState;
+              const { [removedUserId]: _removed, ...nextReadState } = currentReadState;
+              return nextReadState;
+            },
+            { removedUserIds: [removedUserId] },
+          );
         }
         break;
+      }
       case 'notification.mark_unread': {
         const ownMessage = event.user?.id === this.getClient().user?.id;
-        if (!ownMessage || !event.user) break;
-
+        if (!ownMessage || !event.user || event.last_read_at == null) break;
+        const eventUser = event.user;
+        const lastReadAt = event.last_read_at;
         const unreadCount = event.unread_messages ?? 0;
-        const currentState = channelState.read[event.user.id];
-        channelState.read[event.user.id] = {
-          // keep the message delivery info
-          ...currentState,
-          first_unread_message_id: event.first_unread_message_id,
-          last_read: new Date(event.last_read_at as string),
-          last_read_message_id: event.last_read_message_id,
-          user: event.user,
-          unread_messages: unreadCount,
-        };
+        this._upsertReadState(
+          eventUser.id,
+          (currentUserReadState) => ({
+            ...currentUserReadState,
+            first_unread_message_id: event.first_unread_message_id,
+            last_read: lastReadAt,
+            last_read_message_id: event.last_read_message_id,
+            user: eventUser,
+            unread_messages: unreadCount,
+          }),
+          { changedUserIds: [eventUser.id] },
+        );
 
-        channelState.unreadCount = unreadCount;
-        this.messageReceiptsTracker.onNotificationMarkUnread({
-          user: event.user,
-          lastReadAt: event.last_read_at,
-          lastReadMessageId: event.last_read_message_id,
+        this.messagePaginator.setUnreadSnapshot({
+          firstUnreadMessageId:
+            channelState.read[event.user.id].first_unread_message_id ?? null,
+          lastReadAt: channelState.read[event.user.id].last_read,
+          lastReadMessageId: channelState.read[event.user.id].last_read_message_id,
+          unreadCount,
         });
         break;
       }
@@ -2293,224 +2661,209 @@ export class Channel {
           const newChannelData = {
             ...event.channel,
             hidden: event.channel?.hidden ?? channel.data?.hidden,
+            member_count: event.channel?.member_count ?? channel.data?.member_count,
             own_capabilities:
               event.channel?.own_capabilities ?? channel.data?.own_capabilities,
           };
           channel.data = newChannelData;
-          this.cooldownTimer.refresh();
         }
         break;
       case 'reaction.new':
-        if (event.message && event.reaction) {
-          const { message, reaction } = event;
-          event.message = channelState.addReaction(reaction, message) as MessageResponse;
-        }
-        break;
+      case 'reaction.updated':
       case 'reaction.deleted':
         if (event.message && event.reaction) {
-          const { message, reaction } = event;
-          event.message = channelState.removeReaction(reaction, message);
+          reflectReactionEvent(this.getClient(), {
+            // reaction.updated is only sent when enforce_unique is set
+            enforceUnique: event.type === 'reaction.updated',
+            message: event.message,
+            reaction: event.reaction,
+            removed: event.type === 'reaction.deleted',
+          });
         }
         break;
-      case 'reaction.updated':
-        if (event.message && event.reaction) {
-          const { message, reaction } = event;
-          // assuming reaction.updated is only called if enforce_unique is true
-          event.message = channelState.addReaction(
-            reaction,
-            message,
-            true,
-          ) as MessageResponse;
-        }
-        break;
-      case 'channel.hidden':
+      case 'channel.hidden': {
         channel.data = {
-          ...channel.data,
-          blocked: !!event.channel?.blocked,
+          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+          ...channel.data!,
+          blocked: event.channel?.blocked ?? false,
           hidden: true,
         };
         if (event.clear_history) {
-          channelState.clearMessages();
+          this.messagePaginator.clearStateAndCache();
+          this.pinnedMessagesPaginator.clearStateAndCache();
         }
         break;
-      case 'channel.visible':
+      }
+      case 'channel.visible': {
         channel.data = {
-          ...channel.data,
-          blocked: !!event.channel?.blocked,
+          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+          ...channel.data!,
+          blocked: event.channel?.blocked ?? false,
           hidden: false,
         };
         this.getClient().offlineDb?.handleChannelVisibilityEvent({ event });
         break;
+      }
       case 'user.banned':
+      case 'user.unbanned': {
         if (!event.user?.id) break;
-        channelState.members[event.user.id] = {
-          ...(channelState.members[event.user.id] || {}),
-          shadow_banned: !!event.shadow,
-          banned: !event.shadow,
-          user: { ...(channelState.members[event.user.id]?.user || {}), ...event.user },
+        const isBanned = event.type === 'user.banned';
+        const member = channelState.members[event.user.id];
+        channelState.members = {
+          ...channelState.members,
+          [event.user.id]: {
+            ...(member || {}),
+            shadow_banned: isBanned && !!event.shadow,
+            banned: isBanned && !event.shadow,
+            user: { ...(member?.user || {}), ...event.user },
+          },
         };
         break;
-      case 'user.unbanned':
-        if (!event.user?.id) break;
-        channelState.members[event.user.id] = {
-          ...(channelState.members[event.user.id] || {}),
-          shadow_banned: false,
-          banned: false,
-          user: { ...(channelState.members[event.user.id]?.user || {}), ...event.user },
-        };
-        break;
+      }
       default:
     }
 
+    const typedEvent = event as Extract<WSEvent, { watcher_count?: any }>;
     // any event can send over the online count
-    if (event.watcher_count !== undefined) {
-      channel.state.watcher_count = event.watcher_count;
+    if (typeof typedEvent.watcher_count !== 'undefined') {
+      channel.state.watcher_count = typedEvent.watcher_count;
     }
   }
 
   _callChannelListeners = (event: Event) => {
-    // snapshot before dispatching: `on` pushes into these arrays in place, so a
-    // listener that subscribes while handling an event must not be invoked for it
+    // Snapshot: a listener added while handling an event must not be invoked for it (`on` adds in
+    // place and iterating a `Set` visits entries appended mid-iteration).
     const listeners = [
-      ...(this.listeners.all ?? []),
-      ...(this.listeners[event.type] ?? []),
+      ...(this.listeners.get('all') ?? []),
+      ...(this.listeners.get(event.type) ?? []),
     ];
 
-    const { logger } = this._client;
     for (const listener of listeners) {
-      if (typeof listener === 'string') continue;
       invokeEventListener(listener, event, logger);
     }
   };
 
   /**
-   * _channelURL - Returns the channel url
-   *
-   * @return {string} The channel url
+   * Throws if the channel has no ID (created from members only). Narrows `id` to `string`. Call it
+   * before any request that uses `this.cid`: it is a string (possibly temporary) even without an ID,
+   * so TypeScript does not flag a missing check.
    */
-  _channelURL = () => {
+  _checkHasId(): asserts this is this & { id: string } {
     if (!this.id) {
-      throw new Error('channel id is not defined');
+      throw new Error(
+        `Channel isn't yet created, call getOrCreateDistinctChannel() before this operation`,
+      );
     }
-    return `${this.getClient().baseURL}/channels/${encodeURIComponent(
-      this.type,
-    )}/${encodeURIComponent(this.id)}`;
-  };
+  }
 
+  /** Throws unless the channel was queried or populated from the offline DB. */
   _checkInitialized() {
-    if (
-      !this.initialized &&
-      !this.offlineMode &&
-      !this.getClient()._isUsingServerAuth()
-    ) {
+    if (!this.initialized && !this.offlineMode) {
       throw Error(
         `Channel ${this.cid} hasn't been initialized yet. Make sure to call .watch() and wait for it to resolve`,
       );
     }
   }
 
-  _initializeState(
-    state: ChannelAPIResponse,
-    messageSetToAddToIfDoesNotExist: MessageSetType = 'latest',
-    isNewestPage = true,
-  ) {
+  _initializeState(state: ChannelStateResponseFields) {
     const { state: clientState, user, userID } = this.getClient();
 
-    // add the members and users
     if (state.members) {
       this._hydrateMembers({ members: state.members });
+    }
 
-      for (const member of state.members) {
-        if (member.user) {
-          clientState.updateUserReference(member.user, this.cid);
-        }
+    if (state.membership) {
+      this.state.membership = state.membership;
+      // the members page of a large channel may leave out the current user, so register them here
+      if (state.membership.user) {
+        clientState.updateUserReference(state.membership.user, this.cid);
       }
     }
 
-    this.state.membership = state.membership || {};
+    // Each channel response's `last_message_at` replaces the queried `latestMessageAt`. Callers
+    // that place a message page set it before placing it, so the paginator can tell whether
+    // the page reaches the newest message; this covers the responses whose page is not placed, such
+    // as a channel-list query for a channel the viewer has jumped away from.
+    this.messagePaginator.setQueriedLatestMessageAt(state.channel?.last_message_at);
 
-    const messages = state.messages || [];
-    if (!this.state.messages) {
-      this.state.initMessages();
-    }
-    if (messageSetToAddToIfDoesNotExist === 'latest' && isNewestPage) {
-      this.state._dropLatestMessagesDisjointFrom(messages);
-    }
-    const { messageSet, filteredMessageIds } = this.state.addMessagesSorted(
-      messages,
-      false,
-      true,
-      true,
-      messageSetToAddToIfDoesNotExist,
+    // The pinned list's first page comes with the channel's state.
+    this.pinnedMessagesPaginator.placeExternalQueryPage(
+      (state.pinned_messages || []).map(formatMessage),
+      this.pinnedMessagesPaginator.pageSize,
     );
-
-    if (!this.state.pinnedMessages) {
-      this.state.pinnedMessages = [];
-    }
-    this.state.addPinnedMessages(state.pinned_messages || []);
     if (state.pending_messages) {
       this.state.pending_messages = state.pending_messages;
     }
     if (state.watcher_count !== undefined) {
       this.state.watcher_count = state.watcher_count;
     }
-    // convert the arrays into objects for easier syncing...
-    if (state.watchers) {
+    if (state.watchers?.length) {
+      const watchers = { ...this.state.watchers };
       for (const watcher of state.watchers) {
         if (watcher) {
           clientState.updateUserReference(watcher, this.cid);
-          this.state.watchers[watcher.id] = watcher;
+          watchers[watcher.id] = watcher;
         }
       }
+      this.state.watchers = watchers;
     }
 
-    // initialize read state to last message or current time if the channel is empty
-    // if the user is a member, this value will be overwritten later on otherwise this ensures
-    // that everything up to this point is not marked as unread
+    // Initialized to the latest message (or now, if empty) so nothing up to here counts as
+    // unread. A member's entry is overwritten below.
+    const readUpdates: ChannelState['read'] = {};
     if (userID != null) {
-      const last_read = this.state.last_message_at || new Date();
+      const last_read = this.messagePaginator.latestMessageAt ?? nowNs();
       if (user) {
-        this.state.read[user.id] = {
-          user,
+        readUpdates[user.id] = {
+          user: user as UserResponse,
           last_read,
           unread_messages: 0,
         };
       }
     }
 
-    // apply read state if part of the state
     if (state.read) {
       for (const read of state.read) {
-        this.state.read[read.user.id] = {
-          last_delivered_at: read.last_delivered_at
-            ? new Date(read.last_delivered_at)
-            : undefined,
+        readUpdates[read.user.id] = {
+          last_delivered_at: read.last_delivered_at ?? undefined,
           last_delivered_message_id: read.last_delivered_message_id,
-          last_read: new Date(read.last_read),
+          last_read: read.last_read,
           last_read_message_id: read.last_read_message_id,
           unread_messages: read.unread_messages ?? 0,
           user: read.user,
         };
-
-        if (read.user.id === user?.id) {
-          this.state.unreadCount = this.state.read[read.user.id].unread_messages;
-        }
       }
-
-      this.messageReceiptsTracker.ingestInitial(state.read);
     }
 
-    return {
-      messageSet,
-      filteredMessageIds,
-    };
+    const entries = Object.entries(readUpdates);
+    if (entries.length) {
+      this._patchReadState(
+        (currentReadState) => {
+          let hasChanges = false;
+          const nextReadState = { ...currentReadState };
+
+          for (const [userId, readState] of entries) {
+            if (nextReadState[userId] === readState) continue;
+            nextReadState[userId] = readState;
+            hasChanges = true;
+          }
+
+          return hasChanges ? nextReadState : currentReadState;
+        },
+        { changedUserIds: entries.map(([userId]) => userId) },
+      );
+    }
   }
 
-  _extendEventWithOwnReactions(event: Event) {
+  _extendEventWithOwnReactions(
+    event: EventPayload<'message.undeleted' | 'message.updated' | 'message.deleted'>,
+  ) {
     if (!event.message) {
       return;
     }
-    const message = this.state.findMessage(event.message.id, event.message.parent_id);
+    // Enriched from the paginator, which owns the channel message list. Thread-only replies are not in
+    // it: the Thread object preserves their `own_reactions`.
+    const message = this.messagePaginator.getItem(event.message.id);
     if (message) {
       event.message.own_reactions = message.own_reactions;
     }
@@ -2521,18 +2874,16 @@ export class Channel {
     overrideCurrentState = true,
   }: {
     members: ChannelMemberResponse[];
-    /**
-     * If set to `true` then `ChannelState.members` will be overriden with the newly
-     * provided `members`, setting this property to `false` will merge current `ChannelState.members`
-     * object with the newly provided `members`
-     * (new members with the same `userId` will replace the old ones).
-     */
+    /** `true` replaces `state.members`. `false` merges (a new member replaces one with the same ID). */
     overrideCurrentState?: boolean;
   }) {
+    const clientState = this.getClient().state;
     const newMembersById = members.reduce<ChannelState['members']>(
       (membersById, member) => {
         if (member.user) {
           membersById[member.user.id] = member;
+          // lets `user.updated` and `user.presence.changed` reach this member
+          clientState.updateUserReference(member.user, this.cid);
         }
         return membersById;
       },
@@ -2541,7 +2892,7 @@ export class Channel {
 
     if (overrideCurrentState) {
       this.state.members = newMembersById;
-    } else if (!overrideCurrentState && members.length) {
+    } else if (members.length) {
       this.state.members = {
         ...this.state.members,
         ...newMembersById,
@@ -2549,18 +2900,41 @@ export class Channel {
     }
   }
 
-  _disconnect() {
-    this._client.logger(
-      'info',
-      `channel:disconnect() - Disconnecting the channel ${this.cid}`,
-      {
-        tags: ['connection', 'channel'],
-        channel: this,
-      },
-    );
+  /**
+   * Ends the instance for good: unsubscribes from the configuration and the server config, stops the
+   * receipts tracker and the cooldown timer, disposes both paginators, then sets
+   * `pendingDisposal: true` and `watchStatus: NotWatching`. It sends no request, so the server keeps a
+   * watch this connection held until the connection ends. Calling it again does nothing.
+   *
+   * The SDK calls it when a channel ends (deleted, current user removed, logout, released as unused).
+   * It does not remove the channel from the channel store. The SDK's own ends remove it; after a
+   * direct call it stays until `client.channelManager.releaseUnusedChannels()`, or until `ensure()`
+   * for the same cid replaces it.
+   */
+  disconnect() {
+    // Once only: a second run would drop subscription counts other consumers hold.
+    if (this.pendingDisposal) return;
+    logger.withExtraTags('disconnect', this.cid).info('Disconnecting the channel.');
 
-    this.disconnected = true;
-    this.cooldownTimer.clearTimeout();
-    this.state.setIsUpToDate(false);
+    // Subscriptions are released before `pendingDisposal` flips, so no handler runs on a
+    // half-disconnected channel.
+
+    // Runs the `'channel'` setup function's teardown and unsubscribes from the configuration store.
+    this.unsubscribeConfiguration?.();
+    this.unsubscribeConfiguration = undefined;
+    this.unsubscribeServerConfig?.();
+    this.unsubscribeServerConfig = undefined;
+    this.messageReceiptsTracker.unregisterSubscriptions();
+    this.cooldownTimer.unregisterSubscriptions();
+    // Otherwise the message store keeps this channel and its messages alive through its subscribers.
+    this.messagePaginator.dispose();
+    this.pinnedMessagesPaginator.dispose();
+
+    // One update, last, so subscribers see both together. A deleted channel must not be re-watched.
+    this._lastWatchOptions = undefined;
+    this.state.partialNext({
+      pendingDisposal: true,
+      watchStatus: ChannelWatchStatus.NotWatching,
+    });
   }
 }

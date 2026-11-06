@@ -1,4 +1,4 @@
-import type { Attachment, LocalMessage, MessageResponse } from '../types';
+import type { Attachment } from '../types';
 
 export const isLocalUrl = (value: string | undefined) =>
   !!value && !value.startsWith('http');
@@ -11,9 +11,10 @@ export const isAttachmentReplayable = (attachment: Attachment) => {
   return !isLocalUrl(attachment.asset_url) && !isLocalUrl(attachment.image_url);
 };
 
-export const isMessageUpdateReplayable = (
-  message: LocalMessage | Partial<MessageResponse>,
-) => !message.attachments?.some((attachment) => !isAttachmentReplayable(attachment));
+export const isMessageUpdateReplayable = (minimalMessage: {
+  attachments?: Attachment[];
+}) =>
+  !minimalMessage.attachments?.some((attachment) => !isAttachmentReplayable(attachment));
 
 export const getPendingTaskChannelData = (cid?: string) => {
   if (!cid) {

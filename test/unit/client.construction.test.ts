@@ -1,0 +1,456 @@
+import axios from 'axios';
+import sinon from 'sinon';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { ClientState } from '../../src/client_state';
+import { FixedSizeQueueCache } from '../../src/utils/FixedSizeQueueCache';
+import { MessageDeliveryReporter } from '../../src/messageDelivery';
+import { Moderation } from '../../src/moderation';
+import { NotificationManager } from '../../src/notifications';
+import { PollManager } from '../../src/poll_manager';
+import { ReminderManager } from '../../src/reminders';
+import { StateStore } from '@stream-io/state-store';
+import { StreamChat } from '../../src/client';
+import { ThreadManager } from '../../src/thread_manager';
+import { TokenManager } from '../../src/token_manager';
+import { UploadManager } from '../../src/uploadManager';
+import { axiosParamsSerializer } from '../../src/utils';
+
+const API_KEY = 'apiKey';
+
+const snapshotLocalTestEnv = () => {
+  const run = process.env.STREAM_LOCAL_TEST_RUN;
+  const host = process.env.STREAM_LOCAL_TEST_HOST;
+  delete process.env.STREAM_LOCAL_TEST_RUN;
+  delete process.env.STREAM_LOCAL_TEST_HOST;
+  return () => {
+    if (typeof run === 'undefined') delete process.env.STREAM_LOCAL_TEST_RUN;
+    else process.env.STREAM_LOCAL_TEST_RUN = run;
+    if (typeof host === 'undefined') delete process.env.STREAM_LOCAL_TEST_HOST;
+    else process.env.STREAM_LOCAL_TEST_HOST = host;
+  };
+};
+
+describe('StreamChat construction', () => {
+  let restoreEnv: () => void;
+
+  beforeEach(() => {
+    delete (StreamChat as unknown as { _instance?: StreamChat })._instance;
+    restoreEnv = snapshotLocalTestEnv();
+  });
+
+  afterEach(() => {
+    sinon.restore();
+    restoreEnv();
+  });
+
+  describe('signature', () => {
+    it('accepts just a key', () => {
+      const client = new StreamChat(API_KEY);
+      expect(client.key).to.equal(API_KEY);
+      expect(client.axiosInstance.defaults.timeout).to.equal(3000);
+    });
+
+    it('accepts (key, options)', () => {
+      const client = new StreamChat(API_KEY, {
+        client: { axiosRequestConfig: { timeout: 5000 } },
+      });
+      expect(client.key).to.equal(API_KEY);
+      expect(client.axiosInstance.defaults.timeout).to.equal(5000);
+    });
+
+    it('treats an omitted config argument as no configuration', () => {
+      const client = new StreamChat(API_KEY);
+      expect(client.config.getTree()).to.deep.equal({});
+    });
+  });
+
+  describe('initial instance state', () => {
+    it('initializes empty collections and unstarted connection refs', () => {
+      const client = new StreamChat(API_KEY);
+
+      expect(client.listeners).to.be.instanceOf(Map);
+      // Nothing. Connectivity used to be wired through the event bus, so a freshly constructed
+      // client already carried the connection-recovery listener; recovery now subscribes to the
+      // socket's status store instead, which is not a client event listener.
+      expect([...client.listeners.keys()]).to.deep.equal([]);
+      expect(client.mutedChannels).to.deep.equal([]);
+      expect(client.mutedUsers).to.deep.equal([]);
+      expect(client.channelManager.values()).to.deep.equal([]);
+      expect(client.channelServerConfigs).to.deep.equal({});
+
+      // `wsConnection` is a stable wrapper created with the client, not the transport itself — that
+      // is what lets a consumer subscribe to `wsConnection.state` before `connectUser` resolves. The
+      // transport underneath is what does not exist yet.
+      expect(client.wsConnection).to.not.be.null;
+      expect(client.wsConnection.connection).to.be.null;
+      expect(client.wsConnection.isHealthy).to.equal(false);
+      expect(client.wsPromise).to.be.null;
+      expect(client.setUserPromise).to.be.null;
+
+      expect(client.anonymous).to.equal(false);
+      expect(client.wsConnection.config.connectTimeoutMs).to.equal(15000);
+    });
+
+    it('initializes blockedUsers as a StateStore with empty userIds', () => {
+      const client = new StreamChat(API_KEY);
+      expect(client.blockedUsers).to.be.instanceOf(StateStore);
+      expect(client.blockedUsers.getLatestValue()).to.deep.equal({ userIds: [] });
+    });
+
+    it('does not share mutable state between instances', () => {
+      const a = new StreamChat(API_KEY);
+      const b = new StreamChat(API_KEY);
+
+      expect(a.listeners).to.not.equal(b.listeners);
+      expect(a.mutedChannels).to.not.equal(b.mutedChannels);
+      expect(a.mutedUsers).to.not.equal(b.mutedUsers);
+      expect(a.channelManager.channelStore).to.not.equal(b.channelManager.channelStore);
+      expect(a.channelServerConfigs).to.not.equal(b.channelServerConfigs);
+      expect(a.blockedUsers).to.not.equal(b.blockedUsers);
+      expect(a.config).to.not.equal(b.config);
+      expect(a.axiosInstance).to.not.equal(b.axiosInstance);
+    });
+  });
+
+  describe('options resolution', () => {
+    it('applies defaults when no options are passed', () => {
+      const client = new StreamChat(API_KEY);
+
+      // No longer an empty `URLSearchParams` on `options` — the field moved to
+      // `wsConnection.config.urlParams` and defaults to `undefined`. `_buildUrl` does
+      // `new URLSearchParams(urlParams)`, which treats `undefined` and an empty instance
+      // identically, so the URL it builds is unchanged.
+      expect(client.wsConnection.config.urlParams).to.be.undefined;
+      // Recovery is on by default, and now says so through its own configuration rather than a
+      // client option.
+      expect(client.connectionRecovery.config.enabled).to.equal(true);
+    });
+
+    it('honors user-provided overrides', () => {
+      const client = new StreamChat(API_KEY, {
+        client: { connectionRecovery: { enabled: false } },
+      });
+
+      // Seeded from the constructor's config before the managers are wired, so it applies from construction.
+      expect(client.connectionRecovery.config.enabled).to.equal(false);
+    });
+
+    it('reads persistUserOnConnectionFailure from the client configuration', () => {
+      const defaultClient = new StreamChat(API_KEY);
+      expect(defaultClient.config.getConfig('client')?.persistUserOnConnectionFailure).to
+        .be.undefined;
+
+      const customClient = new StreamChat(API_KEY, {
+        client: { persistUserOnConnectionFailure: true },
+      });
+      expect(
+        customClient.config.getConfig('client')?.persistUserOnConnectionFailure,
+      ).to.equal(true);
+    });
+  });
+
+  describe('axios instantiation', () => {
+    let createSpy: sinon.SinonSpy<
+      Parameters<typeof axios.create>,
+      ReturnType<typeof axios.create>
+    >;
+
+    beforeEach(() => {
+      createSpy = sinon.spy(axios, 'create');
+    });
+
+    it('invokes axios.create exactly once and stores the result on axiosInstance', () => {
+      const client = new StreamChat(API_KEY);
+      expect(createSpy.calledOnce).to.be.true;
+      expect(client.axiosInstance).to.equal(createSpy.firstCall.returnValue);
+    });
+
+    it('passes baked-in defaults (timeout, withCredentials, paramsSerializer) into axios.create', () => {
+      new StreamChat(API_KEY, { client: { browser: true } });
+      const config = createSpy.firstCall.args[0]!;
+      expect(config.timeout).to.equal(3000);
+      expect(config.withCredentials).to.equal(false);
+      expect(config.paramsSerializer).to.equal(axiosParamsSerializer);
+    });
+
+    it('bakes defaults into the axios instance defaults', () => {
+      const client = new StreamChat(API_KEY);
+      expect(client.axiosInstance.defaults.timeout).to.equal(3000);
+      expect(client.axiosInstance.defaults.withCredentials).to.equal(false);
+      expect(client.axiosInstance.defaults.paramsSerializer).to.equal(
+        axiosParamsSerializer,
+      );
+    });
+
+    it('spreads axiosRequestConfig values into the axios.create config', () => {
+      const axiosRequestConfig = {
+        timeout: 9999,
+        withCredentials: true,
+        headers: { 'Cache-Control': 'no-cache' },
+      };
+      const client = new StreamChat(API_KEY, { client: { axiosRequestConfig } });
+      expect(client.axiosInstance.defaults.timeout).to.equal(9999);
+      expect(client.axiosInstance.defaults.withCredentials).to.equal(true);
+      expect(client.axiosInstance.defaults.headers).to.include({
+        'Cache-Control': 'no-cache',
+      });
+    });
+
+    it('keeps paramsSerializer fixed even when axiosRequestConfig tries to override it', () => {
+      const customSerializer = () => 'overridden';
+      const client = new StreamChat(API_KEY, {
+        client: { axiosRequestConfig: { paramsSerializer: customSerializer } },
+      });
+      expect(client.axiosInstance.defaults.paramsSerializer).to.equal(
+        axiosParamsSerializer,
+      );
+      expect(client.axiosInstance.defaults.paramsSerializer).to.not.equal(
+        customSerializer,
+      );
+    });
+
+    it('registers axiosRequestConfig in the client configuration, as a copy', () => {
+      const axiosRequestConfig = { headers: { 'Cache-Control': 'no-cache' } };
+      const client = new StreamChat(API_KEY, { client: { axiosRequestConfig } });
+      const registered = client.config.getConfig('client')?.axiosRequestConfig;
+      expect(registered).to.deep.equal(axiosRequestConfig);
+      // Copied at the boundary, so changing what the caller passed does not reach the client.
+      expect(registered).to.not.equal(axiosRequestConfig);
+    });
+
+    it('produces a paramsSerializer that matches axiosParamsSerializer behavior', () => {
+      const client = new StreamChat(API_KEY);
+      const serializer = client.axiosInstance.defaults.paramsSerializer as (
+        params: Record<string, unknown>,
+      ) => string;
+      const sample = { a: 1, b: [2, 3], skip: undefined };
+      expect(serializer(sample)).to.equal(axiosParamsSerializer!(sample));
+    });
+
+    describe('httpsAgent', () => {
+      it('does not auto-create an httpsAgent in node mode', () => {
+        const client = new StreamChat(API_KEY, { client: { browser: false } });
+        expect(client.axiosInstance.defaults.httpsAgent).to.be.undefined;
+      });
+
+      it('honors an axiosRequestConfig.httpsAgent supplied by the caller', () => {
+        const customAgent = vi.fn();
+        const client = new StreamChat(API_KEY, {
+          client: { browser: false, axiosRequestConfig: { httpsAgent: customAgent } },
+        });
+        expect(client.axiosInstance.defaults.httpsAgent).to.equal(customAgent);
+      });
+
+      it('does not auto-create an httpsAgent in browser mode', () => {
+        const client = new StreamChat(API_KEY, { client: { browser: true } });
+        expect(client.axiosInstance.defaults.httpsAgent).to.be.undefined;
+      });
+    });
+  });
+
+  describe('baseURL resolution', () => {
+    let setBaseURLSpy: sinon.SinonSpy<[string], void>;
+
+    beforeEach(() => {
+      setBaseURLSpy = sinon.spy(StreamChat.prototype, 'setBaseURL');
+    });
+
+    it('defaults to the production baseURL with a wss WebSocket URL', () => {
+      const client = new StreamChat(API_KEY);
+      expect(client.baseURL).to.equal('https://chat.stream-io-api.com');
+      expect(client.wsBaseURL).to.equal('wss://chat.stream-io-api.com');
+      expect(setBaseURLSpy.calledOnce).to.be.true;
+      expect(setBaseURLSpy.firstCall.args[0]).to.equal('https://chat.stream-io-api.com');
+    });
+
+    it('uses a custom baseURL when provided', () => {
+      const client = new StreamChat(API_KEY, {
+        client: { baseURL: 'http://example.com:3030' },
+      });
+      expect(client.baseURL).to.equal('http://example.com:3030');
+      // http -> ws, :3030 -> :8800
+      expect(client.wsBaseURL).to.equal('ws://example.com:8800');
+    });
+
+    it('overrides the baseURL when STREAM_LOCAL_TEST_RUN is set', () => {
+      process.env.STREAM_LOCAL_TEST_RUN = 'true';
+      const client = new StreamChat(API_KEY);
+      expect(client.baseURL).to.equal('http://localhost:3030');
+      expect(client.wsBaseURL).to.equal('ws://localhost:8800');
+      // default url + override
+      expect(setBaseURLSpy.callCount).to.equal(2);
+    });
+
+    it('further overrides the baseURL when STREAM_LOCAL_TEST_HOST is set', () => {
+      process.env.STREAM_LOCAL_TEST_HOST = 'mybox.test:3030';
+      const client = new StreamChat(API_KEY);
+      expect(client.baseURL).to.equal('http://mybox.test:3030');
+      expect(client.wsBaseURL).to.equal('ws://mybox.test:8800');
+      // default url + host override
+      expect(setBaseURLSpy.callCount).to.equal(2);
+    });
+
+    it('lets STREAM_LOCAL_TEST_HOST win over STREAM_LOCAL_TEST_RUN', () => {
+      process.env.STREAM_LOCAL_TEST_RUN = 'true';
+      process.env.STREAM_LOCAL_TEST_HOST = 'mybox.test:3030';
+      const client = new StreamChat(API_KEY);
+      expect(client.baseURL).to.equal('http://mybox.test:3030');
+      expect(setBaseURLSpy.callCount).to.equal(3);
+    });
+  });
+
+  describe('platform detection', () => {
+    it('auto-detects platform based on the global window', () => {
+      const client = new StreamChat(API_KEY);
+      const expectedBrowser = typeof window !== 'undefined';
+      expect(client.browser).to.equal(expectedBrowser);
+      expect(client.node).to.equal(!expectedBrowser);
+    });
+
+    it('honors an explicit browser:true override', () => {
+      const client = new StreamChat(API_KEY, { client: { browser: true } });
+      expect(client.browser).to.equal(true);
+      expect(client.node).to.equal(false);
+    });
+
+    it('follows a browser value registered after construction', () => {
+      const client = new StreamChat(API_KEY, { client: { browser: false } });
+      client.config.setConfig('client', { browser: true });
+      expect(client.browser).to.equal(true);
+      expect(client.node).to.equal(false);
+    });
+
+    it('honors an explicit browser:false override', () => {
+      const client = new StreamChat(API_KEY, { client: { browser: false } });
+      expect(client.browser).to.equal(false);
+      expect(client.node).to.equal(true);
+    });
+  });
+
+  describe('subsystem managers', () => {
+    it('constructs the canonical set of managers', () => {
+      const client = new StreamChat(API_KEY);
+
+      expect(client.state).to.be.instanceOf(ClientState);
+      expect(client.notifications).to.be.instanceOf(NotificationManager);
+      expect(client.uploadManager).to.be.instanceOf(UploadManager);
+      expect(client.moderation).to.be.instanceOf(Moderation);
+      expect(client.tokenManager).to.be.instanceOf(TokenManager);
+      expect(client.threads).to.be.instanceOf(ThreadManager);
+      expect(client.polls).to.be.instanceOf(PollManager);
+      expect(client.reminders).to.be.instanceOf(ReminderManager);
+      expect(client.messageDeliveryReporter).to.be.instanceOf(MessageDeliveryReporter);
+      expect(client.messageComposerCache).to.be.instanceOf(FixedSizeQueueCache);
+    });
+
+    it('warns when a read-once client field is registered after construction', () => {
+      const warned: string[] = [];
+      const spy = vi.spyOn(console, 'warn').mockImplementation((...args) => {
+        warned.push(args.map(String).join(' '));
+      });
+      const client = new StreamChat(API_KEY);
+      warned.length = 0;
+
+      client.config.setConfig('client', { baseURL: 'http://example.com:3030' });
+
+      // `allowServerSideConnect` is read on every connect, so it is not on the list.
+      client.config.setConfig('client', { allowServerSideConnect: true });
+      spy.mockRestore();
+
+      const lateWarnings = warned.filter((m) => /read once during construction/.test(m));
+      expect(lateWarnings).to.have.length(1);
+      expect(lateWarnings[0]).to.contain('baseURL');
+    });
+
+    it('keeps the configuration a supplied NotificationManager was built with', () => {
+      const notificationManager = new NotificationManager({ durations: { error: 111 } });
+      const client = new StreamChat(API_KEY, {
+        client: {
+          notificationManager,
+          notifications: { durations: { error: 222, info: 333 } },
+        },
+      });
+
+      // The constructor's value wins per field; the tree fills the rest.
+      expect(client.notifications.config.durations.error).to.equal(111);
+      expect(client.notifications.config.durations.info).to.equal(333);
+    });
+
+    it('reuses an externally supplied NotificationManager instead of wrapping it', () => {
+      const notificationManager = new NotificationManager();
+      const client = new StreamChat(API_KEY, { client: { notificationManager } });
+      expect(client.notifications).to.equal(notificationManager);
+    });
+
+    it('constructs the TokenManager with no token', () => {
+      const client = new StreamChat(API_KEY);
+      expect(client.tokenManager.token).to.be.undefined;
+      expect(client.tokenManager.tokenProvider).to.be.undefined;
+      expect(client.tokenManager.isStatic()).to.be.true;
+    });
+
+    it('caps the message composer cache at 64 entries', () => {
+      const client = new StreamChat(API_KEY);
+      for (let i = 0; i < 64; i++) {
+        client.messageComposerCache.add(`k-${i}`, { i } as never);
+      }
+      expect(client.messageComposerCache.peek('k-0')).to.not.be.undefined;
+
+      client.messageComposerCache.add('k-64', { i: 64 } as never);
+
+      expect(client.messageComposerCache.peek('k-0')).to.be.undefined;
+      expect(client.messageComposerCache.peek('k-64')).to.deep.equal({ i: 64 });
+    });
+
+    it('builds fresh manager instances per client', () => {
+      const a = new StreamChat(API_KEY);
+      const b = new StreamChat(API_KEY);
+      expect(a.threads).to.not.equal(b.threads);
+      expect(a.polls).to.not.equal(b.polls);
+      expect(a.reminders).to.not.equal(b.reminders);
+      expect(a.tokenManager).to.not.equal(b.tokenManager);
+      expect(a.moderation).to.not.equal(b.moderation);
+      expect(a.uploadManager).to.not.equal(b.uploadManager);
+      expect(a.messageDeliveryReporter).to.not.equal(b.messageDeliveryReporter);
+      expect(a.messageComposerCache).to.not.equal(b.messageComposerCache);
+      expect(a.notifications).to.not.equal(b.notifications);
+      expect(a.state).to.not.equal(b.state);
+    });
+  });
+
+  describe('getInstance', () => {
+    it('returns the same instance for repeated calls', () => {
+      const a = StreamChat.getInstance(API_KEY);
+      const b = StreamChat.getInstance(API_KEY);
+      expect(a).to.equal(b);
+    });
+
+    it('caches the instance on the static _instance slot', () => {
+      const instance = StreamChat.getInstance(API_KEY);
+      expect((StreamChat as unknown as { _instance: StreamChat })._instance).to.equal(
+        instance,
+      );
+    });
+
+    it('ignores subsequent key and options after the first call', () => {
+      const first = StreamChat.getInstance(API_KEY, {
+        client: { axiosRequestConfig: { timeout: 1111 } },
+      });
+      const second = StreamChat.getInstance('different-key', {
+        client: { axiosRequestConfig: { timeout: 9999 } },
+      });
+
+      expect(second).to.equal(first);
+      expect(first.key).to.equal(API_KEY);
+      expect(first.axiosInstance.defaults.timeout).to.equal(1111);
+    });
+
+    it('routes options through the constructor on first call', () => {
+      const client = StreamChat.getInstance(API_KEY, {
+        client: { axiosRequestConfig: { timeout: 5000 } },
+      });
+      expect(client.axiosInstance.defaults.timeout).to.equal(5000);
+    });
+  });
+});

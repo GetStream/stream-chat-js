@@ -4,12 +4,19 @@ import type {
   MessageCompositionMiddleware,
 } from './types';
 import type { MiddlewareHandlerParams } from '../../../middleware';
-import type { OwnUserResponse } from '../../../types';
+import type { UserResponse } from '../../../types';
 
+export const USER_DATA_INJECTION_MIDDLEWARE_ID =
+  'stream-io/message-composer-middleware/user-data-injection';
+
+/**
+ * Puts the connected user on the composed local message (`user`, `user_id`), so the message
+ * renders with its author before the server responds.
+ */
 export const createUserDataInjectionMiddleware = (
   composer: MessageComposer,
 ): MessageCompositionMiddleware => ({
-  id: 'stream-io/message-composer-middleware/user-data-injection',
+  id: USER_DATA_INJECTION_MIDDLEWARE_ID,
   handlers: {
     compose: ({
       state,
@@ -19,22 +26,24 @@ export const createUserDataInjectionMiddleware = (
       if (!composer.client.user) {
         return forward();
       }
-      // Exclude the following properties from client.user as they can be large objects
-      // that provide no value for localMessage (and will never exist within message.user).
-      // This way we make sure that our localMessage is enriched with data as close as
-      // possible to the actual user.
-      // The reason why we need to explicitly cast is because OwnUserResponse only takes
-      // precedence after we connectUser the first time and we get the connection health
-      // check event. Due to how liberal the type of client.user is, we have to do it this
-      // way to maintain type safety.
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { channel_mutes, devices, mutes, ...messageUser } = composer.client
-        .user as OwnUserResponse;
+      // Leave out large properties that never exist on `message.user`.
+      const {
+        channel_mutes: _channel_mutes,
+        devices: _devices,
+        mutes: _mutes,
+        ...messageUser
+      } = composer.client.user;
       return next({
         ...state,
         localMessage: {
           ...state.localMessage,
-          user: messageUser,
+          // `ClientUser` makes every field but `id` optional, so the cast holds only after connect.
+          // `blocked_user_ids` is optional on `OwnUserResponse` (omitted when nothing is blocked)
+          // but required on `UserResponse`.
+          user: {
+            ...messageUser,
+            blocked_user_ids: messageUser.blocked_user_ids ?? [],
+          } as UserResponse,
           user_id: messageUser.id,
         },
       });

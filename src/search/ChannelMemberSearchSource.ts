@@ -4,8 +4,8 @@ import type { Channel } from '../channel';
 import type {
   ChannelMemberResponse,
   MemberFilters,
-  MemberSort,
   QueryMembersOptions,
+  SortParamRequest,
 } from '../types';
 import type { SearchSourceOptions } from './types';
 
@@ -18,7 +18,7 @@ export type ChannelMemberSearchSourceFilterBuilderContext<
 export type ChannelMemberSearchSourceOptions = SearchSourceOptions & {
   /** Static base filters merged under the dynamically generated ones. */
   filters?: MemberFilters;
-  sort?: MemberSort;
+  sort?: SortParamRequest[];
   searchOptions?: Omit<QueryMembersOptions, 'limit' | 'offset'>;
 };
 
@@ -28,7 +28,7 @@ export class ChannelMemberSearchSource<
   readonly type = 'members';
   channel: Channel;
   filters: MemberFilters | undefined;
-  sort: MemberSort | undefined;
+  sort: SortParamRequest[] | undefined;
   searchOptions: Omit<QueryMembersOptions, 'limit' | 'offset'> | undefined;
   filterBuilder: FilterBuilder<
     MemberFilters,
@@ -82,9 +82,13 @@ export class ChannelMemberSearchSource<
     const sort = this.sort ?? [];
     const options = { ...this.searchOptions, limit: this.pageSize, offset: this.offset };
     const { members } = await this.channel.queryMembers(
-      filters ?? {},
-      sort,
-      options,
+      {
+        payload: {
+          filter_conditions: filters ?? {},
+          sort,
+          ...options,
+        },
+      },
       queryOptions,
     );
     return { items: members };

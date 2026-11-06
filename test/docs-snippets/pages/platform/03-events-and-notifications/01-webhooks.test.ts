@@ -23,9 +23,11 @@ describe('platform/03-events-and-notifications/01-webhooks.md', () => {
 
     // #region snippet docs="platform/03-events-and-notifications/01-webhooks.md" heading="Request info" tab="JavaScript" index=1
     client = new StreamChat(apiKey, {
-      axiosRequestConfig: {
-        headers: {
-          'x-stream-ext': 'device-id=123',
+      client: {
+        axiosRequestConfig: {
+          headers: {
+            'x-stream-ext': 'device-id=123',
+          },
         },
       },
     });
@@ -37,9 +39,11 @@ describe('platform/03-events-and-notifications/01-webhooks.md', () => {
       requests.push(config);
       return config;
     });
-    client.options.allowServerSideConnect = true;
+    client.config.setConfig('client', { allowServerSideConnect: true });
     await client.connectUser({ id: userId }, createUserToken(userId));
-    await client.queryChannels({ members: { $in: [userId] } });
+    await client.queryChannelsAndHydrate({
+      filter_conditions: { members: { $in: [userId] } },
+    });
 
     expect(requests.length).toBeGreaterThan(0);
     for (const request of requests) {

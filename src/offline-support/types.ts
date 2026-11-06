@@ -1,19 +1,21 @@
 import type {
-  AppSettingsAPIResponse,
-  ChannelAPIResponse,
   ChannelFilters,
   ChannelMemberResponse,
   ChannelOptions,
   ChannelResponse,
-  ChannelSort,
+  ChannelStateResponseFields,
   DraftResponse,
+  GetApplicationResponse,
   LocalMessage,
   MessageResponse,
-  PollResponse,
+  ParsedPredefinedFilterResponse,
+  PollResponseData,
+  QueryChannelsRequest,
   ReactionFilters,
   ReactionResponse,
-  ReactionSort,
-  ReadResponse,
+  ReadStateResponse,
+  SortParamRequest,
+  TimestampNS,
 } from '../types';
 import type { Channel } from '../channel';
 import type { StreamChat } from '../client';
@@ -22,332 +24,198 @@ export type PrepareBatchDBQueries =
   | [string]
   | [string, Array<unknown> | Array<Array<unknown>>];
 
-/**
- * Options to insert a reaction into a message.
- */
 export type DBInsertReactionType = {
-  /** Message to which the reaction is applied. */
   message: MessageResponse | LocalMessage;
-  /** The reaction to insert. */
   reaction: ReactionResponse;
-  /** Whether to immediately execute the operation. */
   execute?: boolean;
 };
 
-/**
- * Options to upsert channel IDs associated with a query.
- */
 export type DBUpsertCidsForQueryType = {
-  /** Array of channel IDs. */
   cids: string[];
-  /** Optional filters for the channels. */
   filters?: ChannelFilters;
-  /** Optional full query options for the channels. */
   options?: ChannelOptions;
-  /** Whether to immediately execute the operation. */
   execute?: boolean;
-  /** Optional sorting applied to the channels. */
-  sort?: ChannelSort;
+  /**
+   * The predefined-filter metadata the backend resolved for this query, stored with the cid order
+   * so a cache-seeded list sorts and matches by the same rule. Absent for a plain
+   * `filter_conditions` query, which clears any stored metadata.
+   */
+  predefinedFilter?: ParsedPredefinedFilterResponse;
+  sort?: SortParamRequest[];
 };
 
-/**
- * Options to upsert multiple channels.
- */
 export type DBUpsertChannelsType = {
-  /** Array of channel API responses. */
-  channels: ChannelAPIResponse[];
-  /** Whether to immediately execute the operation. */
+  channels: ChannelStateResponseFields[];
   execute?: boolean;
-  /** If true, marks that the latest messages are already set. */
+  /** True when the channels' messages are their latest page (a channel opened with `watch()` / `create()`, or `queryChannels`). */
   isLatestMessagesSet?: boolean;
 };
 
-/**
- * Options to upsert application settings for a user.
- */
 export type DBUpsertAppSettingsType = {
-  /** App settings data. */
-  appSettings: AppSettingsAPIResponse;
-  /** ID of the user the settings belong to. */
+  appSettings: GetApplicationResponse;
   userId: string;
-  /** Whether to immediately execute the operation. */
   execute?: boolean;
 };
 
-/**
- * Sync status information for a user.
- */
 export type DBUpsertUserSyncStatusType = {
-  /** ID of the user. */
   userId: string;
-  /** ISO timestamp of the last sync. */
+  /** A date string `new Date()` can parse. */
   lastSyncedAt: string;
-  /** Whether to immediately execute the operation. */
   execute?: boolean;
 };
 
-/**
- * Options to upsert a poll.
- */
 export type DBUpsertPollType = {
-  /** Poll data to be stored. */
-  poll: PollResponse;
-  /** Whether to immediately execute the operation. */
+  poll: PollResponseData;
   execute?: boolean;
 };
 
-/**
- * Options to upsert individual channel data.
- */
 export type DBUpsertChannelDataType = {
-  /** Channel data. */
   channel: ChannelResponse;
-  /** Whether to immediately execute the operation. */
   execute?: boolean;
 };
 
-/**
- * Options to upsert read statuses for a channel.
- */
 export type DBUpsertReadsType = {
-  /** Channel ID. */
   cid: string;
-  /** Array of read statuses. */
-  reads: ReadResponse[];
-  /** Whether to immediately execute the operation. */
+  reads: ReadStateResponse[];
   execute?: boolean;
 };
 
-/**
- * Options to upsert multiple messages.
- */
 export type DBUpsertMessagesType = {
-  /** Array of message responses. */
   messages: MessageResponse[];
-  /** Whether to immediately execute the operation. */
   execute?: boolean;
 };
 
-/**
- * Options to upsert members in a channel.
- */
 export type DBUpsertMembersType = {
-  /** Channel ID. */
   cid: string;
-  /** Array of channel members. */
   members: ChannelMemberResponse[];
-  /** Whether to immediately execute the operation. */
   execute?: boolean;
 };
 
-/**
- * Options to update a reaction.
- */
 export type DBUpdateReactionType = {
-  /** Message associated with the reaction. */
   message: MessageResponse | LocalMessage;
-  /** The updated reaction. */
   reaction: ReactionResponse;
-  /** Whether to immediately execute the operation. */
   execute?: boolean;
 };
 
-/**
- * Options to update a message.
- */
 export type DBUpdateMessageType = {
-  /** Message to update. */
   message: MessageResponse | LocalMessage;
-  /** Whether to immediately execute the operation. */
   execute?: boolean;
 };
 
-/**
- * Options to get channels by their IDs.
- */
 export type DBGetChannelsType = {
-  /** Array of channel IDs. */
   cids: string[];
-  /** ID of the user. */
   userId: string;
 };
 
-/**
- * Options to get channels based on filters.
- */
 export type DBGetChannelsForQueryType = {
-  /** ID of the user. */
   userId: string;
-  /** Optional filters for channels. */
-  filters?: ChannelFilters;
-  /** Optional full query options for channels. */
-  options?: ChannelOptions;
-  /** Optional sorting for the channels. */
-  sort?: ChannelSort;
+  options?: QueryChannelsRequest;
 };
 
 /**
- * Get the last sync timestamp for a user.
+ * A cached channel query: its channels in query order, and the predefined-filter metadata that
+ * produced that order. They are written as one cache row, so they are read together.
  */
+export type DBGetChannelsForQueryResult = {
+  channels: Omit<ChannelStateResponseFields, 'duration'>[];
+  /** Set when the query was cached from a predefined-filter query. */
+  predefinedFilter?: ParsedPredefinedFilterResponse;
+};
+
 export type DBGetLastSyncedAtType = {
-  /** ID of the user. */
   userId: string;
 };
 
-/**
- * Options to fetch pending tasks for a specific message.
- */
 export type DBGetPendingTasksType = {
-  /** Optional message ID to filter tasks. */
+  /** Returns only this message's tasks. */
   messageId?: string;
 };
 
-/**
- * Get application settings for a user.
- */
 export type DBGetAppSettingsType = {
-  /** ID of the user. */
   userId: string;
 };
 
-/**
- * Options to retrieve reactions for a message.
- */
 export type DBGetReactionsType = {
-  /** ID of the message. */
   messageId: string;
-  /** Optional filter to apply to reactions. */
-  filters?: Pick<ReactionFilters, 'type'>;
-  /** Optional sorting for reactions. */
-  sort?: ReactionSort;
-  /** Optional maximum number of reactions to return. */
+  filters?: ReactionFilters;
+  sort?: SortParamRequest[];
   limit?: number;
 };
 
-/**
- * Delete a pending task by ID.
- */
 export type DBDeletePendingTaskType = {
-  /** ID of the pending task. */
   id: number;
 };
 
-/**
- * Update a pending task by ID.
- */
 export type DBUpdatePendingTaskType = {
-  /** ID of the pending task. */
   id: number;
-  /** The next task payload to persist. */
   task: PendingTask;
 };
 
-/**
- * Options to delete a reaction from a message.
- */
 export type DBDeleteReactionType = {
-  /** The reaction to delete. */
   reaction: ReactionResponse;
-  /** Optional message associated with the reaction. */
   message?: MessageResponse | LocalMessage;
-  /** Whether to immediately execute the operation. */
   execute?: boolean;
 };
 
-/**
- * Options to delete a channel member.
- */
 export type DBDeleteMemberType = {
-  /** Channel ID. */
   cid: string;
-  /** Member to remove. */
   member: ChannelMemberResponse;
-  /** Whether to immediately execute the operation. */
   execute?: boolean;
 };
 
-/**
- * Options to drop all pending tasks for a message.
- */
 export type DBDropPendingTasksType = {
-  /** ID of the message. */
   messageId: string;
-  /** Whether to immediately execute the operation. */
   execute?: boolean;
 };
 
-/**
- * Options to delete a message.
- */
 export type DBDeleteMessageType = {
-  /** ID of the message. */
   id: string;
-  /** Whether to delete the message for the user only. */
+  /** Delete for the current user only. */
   deleteForMe?: boolean;
-  /** Whether to immediately execute the operation. */
   execute?: boolean;
 };
 
-/**
- * Options to delete a channel.
- */
 export type DBDeleteChannelType = {
-  /** Channel ID. */
   cid: string;
-  /** Whether to immediately execute the operation. */
   execute?: boolean;
 };
 
-/**
- * Options to delete messages in a channel.
- */
 export type DBDeleteMessagesForChannelType = {
-  /** Channel ID. */
   cid: string;
-  /** Timestamp before which messages are deleted. */
-  truncated_at?: string;
-  /** Whether to immediately execute the operation. */
+  /** Messages before this timestamp are deleted (unix nanoseconds, as the API sends it). */
+  truncated_at?: TimestampNS;
   execute?: boolean;
 };
 
-/**
- * Check if a channel exists by ID.
- */
 export type DBChannelExistsType = {
-  /** Channel ID. */
   cid: string;
 };
 
 export type DBUpsertDraftType = {
-  /** Draft message to upsert. */
   draft: DraftResponse;
-  /** Whether to immediately execute the operation. */
   execute?: boolean;
 };
 
 export type DBGetDraftType = {
-  /** Channel ID for which to get the draft. */
   cid: string;
-  /** ID of the user requesting the draft. */
   userId: string;
-  /** Optional parent ID for the parent message in thread, if applicable. */
+  /** The thread's parent message ID, for a thread draft. */
   parent_id?: string;
 };
 
 export type DBDeleteDraftType = {
-  /** Channel ID for which to delete the draft. */
   cid: string;
-  /** Optional parent ID for the parent message in thread, if applicable. */
+  /** The thread's parent message ID, for a thread draft. */
   parent_id?: string;
-  /** Whether to immediately execute the operation. */
   execute?: boolean;
 };
 
-/**
- * Represents a list of batch SQL queries to be executed.
- */
 export type ExecuteBatchDBQueriesType = PrepareBatchDBQueries[];
 
+/**
+ * The storage contract. A member taking `execute` returns its prepared queries whether or not it
+ * already ran them.
+ */
 export interface OfflineDBApi {
   insertReaction: (options: DBInsertReactionType) => Promise<ExecuteBatchDBQueriesType>;
   upsertCidsForQuery: (
@@ -373,15 +241,15 @@ export interface OfflineDBApi {
   getDraft: (options: DBGetDraftType) => Promise<DraftResponse | null>;
   getChannels: (
     options: DBGetChannelsType,
-  ) => Promise<Omit<ChannelAPIResponse, 'duration'>[] | null>;
+  ) => Promise<Omit<ChannelStateResponseFields, 'duration'>[] | null>;
   getChannelsForQuery: (
     options: DBGetChannelsForQueryType,
-  ) => Promise<Omit<ChannelAPIResponse, 'duration'>[] | null>;
+  ) => Promise<DBGetChannelsForQueryResult | null>;
   getAllChannelCids: () => Promise<string[]>;
   getLastSyncedAt: (options: DBGetLastSyncedAtType) => Promise<string | undefined>;
   getAppSettings: (
     options: DBGetAppSettingsType,
-  ) => Promise<AppSettingsAPIResponse | null>;
+  ) => Promise<GetApplicationResponse | null>;
   getReactions: (options: DBGetReactionsType) => Promise<ReactionResponse[] | null>;
   executeSqlBatch: (queries: ExecuteBatchDBQueriesType) => Promise<unknown>;
   addPendingTask: (task: PendingTask) => Promise<() => Promise<void>>;
@@ -424,43 +292,55 @@ export type PendingTaskTypes = {
   deleteDraft: 'delete-draft';
 };
 
-// TODO: Please rethink the definition of PendingTasks as it seems awkward
+/**
+ * Every operation the offline queue can replay, as the method that performs it. `PendingTask` is
+ * derived from it and `QUEUEABLE_OPERATIONS` needs an entry per key, so a new task type does not
+ * compile until both exist.
+ *
+ * Each method only sends the request (a queueing one would re-queue on replay), hence the drafts'
+ * `_`-prefixed forms.
+ *
+ * @internal
+ */
+export type QueueableOperationSignatures = {
+  'create-draft': Channel['_createDraft'];
+  'delete-draft': Channel['_deleteDraft'];
+  'delete-message': StreamChat['deleteMessage'];
+  'delete-reaction': StreamChat['deleteReaction'];
+  'send-message': Channel['sendMessage'];
+  'send-reaction': StreamChat['sendReaction'];
+  'update-message': StreamChat['updateMessage'];
+};
+
+export type QueueableType = keyof QueueableOperationSignatures;
+
+/**
+ * The argument list of a queueable operation, which a task carries as its `payload`.
+ *
+ * @internal
+ */
+export type QueueablePayload<T extends QueueableType> = Parameters<
+  QueueableOperationSignatures[T]
+>;
+
+/** @internal */
+export type QueueableResult<T extends QueueableType> = Awaited<
+  ReturnType<QueueableOperationSignatures[T]>
+>;
+
+/** A queued request: the operation and the arguments to replay it with. */
 export type PendingTask = {
   channelId?: string;
   channelType?: string;
   messageId?: string;
   id?: number;
   threadId?: string;
-} & (
-  | {
-      payload: Parameters<Channel['sendReaction']>;
-      type: PendingTaskTypes['sendReaction'];
-    }
-  | {
-      payload: Parameters<StreamChat['updateMessage']>;
-      type: PendingTaskTypes['updateMessage'];
-    }
-  | {
-      payload: Parameters<StreamChat['deleteMessage']>;
-      type: PendingTaskTypes['deleteMessage'];
-    }
-  | {
-      payload: Parameters<Channel['deleteReaction']>;
-      type: PendingTaskTypes['deleteReaction'];
-    }
-  | {
-      payload: Parameters<Channel['sendMessage']>;
-      type: PendingTaskTypes['sendMessage'];
-    }
-  | {
-      payload: Parameters<Channel['createDraft']>;
-      type: PendingTaskTypes['createDraft'];
-    }
-  | {
-      payload: Parameters<Channel['deleteDraft']>;
-      type: PendingTaskTypes['deleteDraft'];
-    }
-);
+} & {
+  [T in QueueableType]: { payload: QueueablePayload<T>; type: T };
+}[QueueableType];
+
+/** @internal */
+export type PendingTaskOf<T extends QueueableType> = Extract<PendingTask, { type: T }>;
 
 export type OfflineErrorType = 'connection:lost';
 

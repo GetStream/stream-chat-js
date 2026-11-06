@@ -1,5 +1,6 @@
 import type { MiddlewareExecutionResult } from '../../../middleware';
-import type { CreatePollData, VotingVisibility } from '../../../types';
+import type { CreatePollRequest, VotingVisibility } from '../../../types';
+import type { PollComposerValidationError } from './validation';
 
 export type PollComposerOption = {
   id: string;
@@ -19,17 +20,19 @@ export type UpdateFieldsData = Partial<Omit<PollComposerState['data'], 'options'
   options?: PollComposerOptionUpdate;
 };
 
-type Id = string;
-
+/**
+ * Field validation errors, keyed by field (`options` errors by option ID). Each carries a stable
+ * {@link PollComposerValidationError.code} for localization.
+ */
 export type PollComposerFieldErrors = Partial<
-  Omit<Record<keyof CreatePollData, string>, 'options'> & {
-    options?: Record<string, string>;
+  Omit<Record<keyof CreatePollRequest, PollComposerValidationError>, 'options'> & {
+    options?: Record<string, PollComposerValidationError>;
   }
 >;
 
 export type PollComposerState = {
   data: {
-    id: Id;
+    id: string;
     max_votes_allowed: string;
     name: string;
     options: PollComposerOption[];
@@ -38,14 +41,13 @@ export type PollComposerState = {
     description?: string;
     enforce_unique_vote?: boolean;
     is_closed?: boolean;
-    user_id?: string;
     voting_visibility?: VotingVisibility;
   };
   errors: PollComposerFieldErrors;
 };
 
 export type PollComposerCompositionMiddlewareValueState = {
-  data: CreatePollData;
+  data: CreatePollRequest;
   errors: PollComposerFieldErrors;
 };
 

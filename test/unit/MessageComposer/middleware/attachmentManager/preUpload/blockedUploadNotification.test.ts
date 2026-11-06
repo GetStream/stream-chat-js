@@ -12,6 +12,7 @@ import { getClientWithUser } from '../../../../test-utils/getClient';
 
 vi.mock('../../../../../src/utils', () => ({
   generateUUIDv4: vi.fn().mockReturnValue('test-uuid'),
+  getEnv: vi.fn(),
 }));
 
 const setupHandlerParams = (initialState: AttachmentPreUploadMiddlewareState) => {
@@ -31,7 +32,7 @@ const setup = () => {
   const client = getClientWithUser({ id: 'user-id' });
   const composer = new MessageComposer({
     client,
-    compositionContext: client.channel('type', 'id'),
+    compositionContext: client.channelManager.ensure({ type: 'type', id: 'id' }),
   });
   return {
     composer,
@@ -75,7 +76,10 @@ describe('createBlockedAttachmentUploadNotificationMiddleware', () => {
       message: `The attachment upload was blocked`,
       origin: {
         emitter: 'AttachmentManager',
-        context: { blockedAttachment: attachment },
+        context: {
+          blockedAttachment: attachment,
+          composer,
+        },
       },
       options: {
         type: 'validation:attachment:upload:blocked',

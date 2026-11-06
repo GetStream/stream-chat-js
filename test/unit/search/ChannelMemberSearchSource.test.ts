@@ -5,14 +5,15 @@ import { ChannelMemberSearchSource } from '../../../src/search/ChannelMemberSear
 import type {
   ChannelMemberResponse,
   MemberFilters,
-  MemberSort,
+  SortParamRequest,
 } from '../../../src/types';
+import { convertDateToTimestamp } from '../test-utils/time';
 
 const createChannelMember = (
   overrides: Partial<ChannelMemberResponse> = {},
 ): ChannelMemberResponse => ({
-  created_at: '2026-01-01T00:00:00.000000000Z',
-  updated_at: '2026-01-01T00:00:00.000000000Z',
+  created_at: convertDateToTimestamp('2026-01-01T00:00:00.000000000Z'),
+  updated_at: convertDateToTimestamp('2026-01-01T00:00:00.000000000Z'),
   user_id: 'user-1',
   ...overrides,
 });
@@ -171,7 +172,7 @@ describe('ChannelMemberSearchSource', () => {
 
     it('passes filters, sort, and options to channel.queryMembers', async () => {
       const filters: MemberFilters = { user_id: 'user-2' };
-      const sort: MemberSort = [{ name: 1 }];
+      const sort: SortParamRequest[] = [{ field: 'name', direction: 1 }];
       searchSource.filters = filters;
       searchSource.sort = sort;
       searchSource.searchOptions = { user_id_gt: 'user-0' };
@@ -181,14 +182,16 @@ describe('ChannelMemberSearchSource', () => {
 
       expect(channel.queryMembers).toHaveBeenCalledWith(
         {
-          ...getAutocompleteFilters('John'),
-          user_id: 'user-2',
-        },
-        sort,
-        {
-          user_id_gt: 'user-0',
-          limit: searchSource.pageSize,
-          offset: searchSource.offset,
+          payload: {
+            filter_conditions: {
+              ...getAutocompleteFilters('John'),
+              user_id: 'user-2',
+            },
+            sort,
+            user_id_gt: 'user-0',
+            limit: searchSource.pageSize,
+            offset: searchSource.offset,
+          },
         },
         withoutSignal,
       );
@@ -210,9 +213,9 @@ describe('ChannelMemberSearchSource', () => {
       expect(searchSource.items).toEqual(mockMembers);
       expect(searchSource.searchQuery).toBe('');
       expect(channel.queryMembers).toHaveBeenCalledWith(
-        {},
-        [],
-        { limit: 10, offset: 0 },
+        {
+          payload: { filter_conditions: {}, sort: [], limit: 10, offset: 0 },
+        },
         withSignal,
       );
     });
@@ -223,9 +226,14 @@ describe('ChannelMemberSearchSource', () => {
 
       expect(searchSource.searchQuery).toBe('john');
       expect(channel.queryMembers).toHaveBeenCalledWith(
-        getAutocompleteFilters('john'),
-        [],
-        { limit: 10, offset: 0 },
+        {
+          payload: {
+            filter_conditions: getAutocompleteFilters('john'),
+            sort: [],
+            limit: 10,
+            offset: 0,
+          },
+        },
         withSignal,
       );
     });
@@ -239,9 +247,14 @@ describe('ChannelMemberSearchSource', () => {
 
       expect(channel.queryMembers).toHaveBeenCalledTimes(1);
       expect(channel.queryMembers).toHaveBeenCalledWith(
-        getAutocompleteFilters('john'),
-        [],
-        { limit: 10, offset: 0 },
+        {
+          payload: {
+            filter_conditions: getAutocompleteFilters('john'),
+            sort: [],
+            limit: 10,
+            offset: 0,
+          },
+        },
         withSignal,
       );
     });
@@ -255,9 +268,14 @@ describe('ChannelMemberSearchSource', () => {
 
       expect(searchSource.searchQuery).toBe('second');
       expect(channel.queryMembers).toHaveBeenLastCalledWith(
-        getAutocompleteFilters('second'),
-        [],
-        { limit: 10, offset: 0 },
+        {
+          payload: {
+            filter_conditions: getAutocompleteFilters('second'),
+            sort: [],
+            limit: 10,
+            offset: 0,
+          },
+        },
         withSignal,
       );
     });
@@ -288,9 +306,9 @@ describe('ChannelMemberSearchSource', () => {
 
       expect(queryMembersMock).toHaveBeenNthCalledWith(
         2,
-        {},
-        [],
-        { limit: 2, offset: 2 },
+        {
+          payload: { filter_conditions: {}, sort: [], limit: 2, offset: 2 },
+        },
         withSignal,
       );
       expect(paginatedSource.items).toEqual([...firstPage, ...secondPage]);

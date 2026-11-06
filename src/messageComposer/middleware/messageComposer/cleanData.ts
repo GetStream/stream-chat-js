@@ -39,7 +39,7 @@ export const createCompositionDataCleanupMiddleware = (
           ...editedMessagePayloadToBeSent,
           ...state.message,
           ...common,
-        },
+        } as typeof state.message,
         sendOptions:
           composer.editedMessage && state.sendOptions?.skip_enrich_url
             ? { skip_enrich_url: state.sendOptions?.skip_enrich_url }

@@ -1,0 +1,24 @@
+{
+  // The repo's build and codegen scripts, typecheck-only.
+  //
+  // Node strips types from a `.mts` file; it does not check them. Without this project the annotations
+  // in `scripts/*.mts` could be wrong with no signal anywhere -- worse than the JSDoc `@type` comments
+  // they replaced, which at least were inert. `yarn types` runs it.
+  //
+  // `rootDir` is widened to the repo root because the base config pins it to `./src` for declaration
+  // emit; nothing is emitted here, so it only needs to contain the inputs.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": ".",
+    "emitDeclarationOnly": false,
+    "declaration": false,
+    // These scripts run under Node directly, not through a bundler, so resolution has to match Node's
+    // own -- which is what makes `import ... with { type: 'json' }` and `.mjs` specifiers resolve.
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "lib": ["ES2023"],
+    "types": ["node"]
+  },
+  "include": ["./scripts/**/*.mts"]
+}

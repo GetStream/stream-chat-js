@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { StreamChat } from '../../../../../src';
+import type { ChannelFilters, StreamChat } from '../../../../../src';
 import {
   disconnectClients,
   getClientSideClient,
@@ -54,15 +54,15 @@ describe(DOCS, () => {
   it('queries channels', async () => {
     // #region snippet docs="chat/_default/03-channels/02-query_channels.md" heading="" tab="JavaScript" index=1
     // COPY: thierry="thierry"
-    const channels = await chatClient.queryChannels(
-      { type: 'messaging', members: { $in: [thierry] } },
-      [{ last_message_at: -1 }],
-      { limit: 15 },
-    );
+    const channels = await chatClient.queryChannelsAndHydrate({
+      filter_conditions: { type: 'messaging', members: { $in: [thierry] } },
+      sort: [{ field: 'last_message_at', direction: -1 }],
+      limit: 15,
+    });
     // #endregion snippet
 
     expect(channels.map((c) => c.cid)).toEqual(newestFirst);
-    expect(channels[0].state.messages.length).toBeGreaterThan(0);
+    expect(channels[0].messagePaginator.items?.length).toBeGreaterThan(0);
   });
 
   it('filters messaging channels by member', async () => {
@@ -71,7 +71,10 @@ describe(DOCS, () => {
     const filter = { members: { $in: [thierry] }, type: 'messaging' };
     // #endregion snippet
 
-    const channels = await chatClient.queryChannels(filter, {}, { limit: 30 });
+    const channels = await chatClient.queryChannelsAndHydrate({
+      filter_conditions: filter,
+      limit: 30,
+    });
     expect(channels.map((c) => c.cid).sort()).toEqual([...newestFirst].sort());
   });
 
@@ -81,11 +84,12 @@ describe(DOCS, () => {
     // #region snippet docs="chat/_default/03-channels/02-query_channels.md" heading="Pagination" tab="JavaScript" index=1
     // COPY: thierry="thierry"
     // Get channels 11-30
-    const channels = await authClient.queryChannels(
-      { members: { $in: [thierry] } },
-      { last_message_at: -1 },
-      { limit: 20, offset: 10 },
-    );
+    const channels = await authClient.queryChannelsAndHydrate({
+      filter_conditions: { members: { $in: [thierry] } },
+      sort: [{ field: 'last_message_at', direction: -1 }],
+      limit: 20,
+      offset: 10,
+    });
     // #endregion snippet
 
     expect(channels.map((c) => c.cid)).toEqual(newestFirst.slice(10));
@@ -97,9 +101,9 @@ describe(DOCS, () => {
     const channel = chatClient.channel('messaging', channelId);
 
     // #region snippet docs="chat/_default/03-channels/02-query_channels.md" heading="Channel Creation and Watching" tab="JavaScript" index=1
-    channel.create();
-    channel.query();
-    channel.watch();
+    await channel.create();
+    await channel.query();
+    await channel.watch();
     // #endregion snippet
 
     const created = await retry(
@@ -123,24 +127,32 @@ describe(DOCS, () => {
     const typeFilter = { type: 'messaging' };
     // #endregion snippet
 
-    const byCid = await chatClient.queryChannels(cidFilter);
+    const byCid = await chatClient.queryChannelsAndHydrate({
+      filter_conditions: cidFilter,
+    });
     expect(byCid.map((c) => c.cid)).toEqual([channelCID]);
-    const byMembers = await chatClient.queryChannels(membersFilter, {}, { limit: 30 });
+    const byMembers = await chatClient.queryChannelsAndHydrate({
+      filter_conditions: membersFilter,
+      limit: 30,
+    });
     expect(byMembers).toHaveLength(CHANNEL_COUNT);
-    const byType = await chatClient.queryChannels(typeFilter, {}, { limit: 1 });
+    const byType = await chatClient.queryChannelsAndHydrate({
+      filter_conditions: typeFilter,
+      limit: 1,
+    });
     expect(byType.every((c) => c.type === 'messaging')).toBe(true);
   });
 
   it('sorts by last_message_at', async () => {
     // #region snippet docs="chat/_default/03-channels/02-query_channels.md" heading="Sort Best Practices" tab="JavaScript" index=1
-    const sort = { last_message_at: -1 };
+    const sort = [{ field: 'last_message_at', direction: -1 }];
     // #endregion snippet
 
-    const channels = await chatClient.queryChannels(
-      { members: { $in: [thierry] } },
-      { last_message_at: sort.last_message_at < 0 ? -1 : 1 },
-      { limit: 30 },
-    );
+    const channels = await chatClient.queryChannelsAndHydrate({
+      filter_conditions: { members: { $in: [thierry] } },
+      sort,
+      limit: 30,
+    });
     expect(channels.map((c) => c.cid)).toEqual(newestFirst);
   });
 
@@ -163,17 +175,15 @@ describe(DOCS, () => {
     // #endregion snippet
 
     // Both are valid filters: they work, they are just slow at scale.
-    const broad = await chatClient.queryChannels(broadFilter, {}, { limit: 1 });
+    const broad = await chatClient.queryChannelsAndHydrate({
+      filter_conditions: broadFilter,
+      limit: 1,
+    });
     expect(broad.every((c) => c.type === 'messaging')).toBe(true);
-    // `nestedFilter.$and` is inferred as a plain array, not the `ArrayOneOrMore` tuple
-    // `ChannelFilters` asks for, so send it as the raw request body. Filtering on
-    // `disabled` needs the ReadDisabledChannel permission, which users don't have
-    // (the server test runs it).
+    // Filtering on `disabled` needs the ReadDisabledChannel permission, which users
+    // don't have, so the nested filter is rejected client-side.
     await expect(
-      chatClient.post(`${chatClient.baseURL}/channels`, {
-        filter_conditions: nestedFilter,
-        limit: 1,
-      }),
+      chatClient.queryChannels({ filter_conditions: nestedFilter, limit: 1 }),
     ).rejects.toThrow(/ReadDisabledChannel/);
   });
 
@@ -195,15 +205,12 @@ describe(DOCS, () => {
       // #region snippet docs="chat/_default/03-channels/02-query_channels.md" heading="Using Predefined Filters in Production" tab="JavaScript" index=1
       // COPY: userMessagingChannels="user_messaging_channels"
       // Production-ready: Use Predefined Filter
-      const channels = await chatClient.queryChannels(
-        {}, // filter_conditions ignored with predefined_filter
-        { last_message_at: -1 },
-        {
-          predefined_filter: userMessagingChannels,
-          filter_values: { user_id: userId },
-          limit: 20,
-        },
-      );
+      const channels = await chatClient.queryChannelsAndHydrate({
+        predefined_filter: userMessagingChannels,
+        filter_values: { user_id: userId },
+        sort: [{ field: 'last_message_at', direction: -1 }],
+        limit: 20,
+      });
       // #endregion snippet
 
       expect(channels.map((c) => c.cid)).toEqual(newestFirst);
@@ -214,15 +221,12 @@ describe(DOCS, () => {
 
       // #region snippet docs="chat/_default/03-channels/02-query_channels.md" heading="Using Predefined Filters" tab="JavaScript" index=1
       // COPY: userMessagingChannels="user_messaging_channels", user123="user123"
-      const channels = await chatClient.queryChannels(
-        {}, // filter_conditions ignored with predefined_filter
-        { last_message_at: -1 },
-        {
-          predefined_filter: userMessagingChannels,
-          filter_values: { user_id: user123 },
-          limit: 20,
-        },
-      );
+      const channels = await chatClient.queryChannelsAndHydrate({
+        predefined_filter: userMessagingChannels,
+        filter_values: { user_id: user123 },
+        sort: [{ field: 'last_message_at', direction: -1 }],
+        limit: 20,
+      });
       // #endregion snippet
 
       expect(channels.map((c) => c.cid)).toEqual(newestFirst);
@@ -239,20 +243,112 @@ describe(DOCS, () => {
     };
     // #endregion snippet
 
-    const channels = await chatClient.queryChannels(filter, {}, { limit: 30 });
+    const channels = await chatClient.queryChannelsAndHydrate({
+      filter_conditions: filter,
+      limit: 30,
+    });
     expect(channels).toHaveLength(CHANNEL_COUNT);
   });
 
   it('paginates with a members filter', async () => {
     // #region snippet docs="chat/_default/03-channels/02-query_channels.md" heading="Pagination Best Practices" tab="JavaScript" index=1
     // Efficient pagination with members filter
-    const channels = await chatClient.queryChannels(
-      { type: 'messaging', members: { $in: [userId] } },
-      { last_message_at: -1 },
-      { limit: 20 },
-    );
+    const channels = await chatClient.queryChannelsAndHydrate({
+      filter_conditions: { type: 'messaging', members: { $in: [userId] } },
+      sort: [{ field: 'last_message_at', direction: -1 }],
+      limit: 20,
+    });
     // #endregion snippet
 
     expect(channels.map((c) => c.cid)).toEqual(newestFirst);
+  });
+
+  // Own user and channels: hiding or muting the shared ones would change the other tests' results.
+  describe('hidden and muted channels', () => {
+    const memberId = uniqueId('member');
+    // The docs' placeholder value.
+    const userID = memberId;
+    const visibleCid = `messaging:${uniqueId('visible')}`;
+    const hiddenCid = `messaging:${uniqueId('hidden')}`;
+    const mutedCid = `messaging:${uniqueId('muted')}`;
+    let memberClient: StreamChat;
+
+    const queryCids = async (filter_conditions: ChannelFilters) => {
+      const channels = await memberClient.queryChannelsAndHydrate({
+        filter_conditions,
+        limit: 30,
+      });
+      return channels.map((c) => c.cid).sort();
+    };
+
+    beforeAll(async () => {
+      cleanup.users.push(memberId);
+      cleanup.channels.push(visibleCid, hiddenCid, mutedCid);
+      memberClient = await getClientSideClient({ id: memberId });
+      for (const cid of [visibleCid, hiddenCid, mutedCid]) {
+        const [type, id] = cid.split(':');
+        await serverClient.chat.channel(type, id).getOrCreate({
+          data: { members: [{ user_id: memberId }], created_by_id: other },
+        });
+      }
+      const [hiddenType, hiddenId] = hiddenCid.split(':');
+      await serverClient.chat.channel(hiddenType, hiddenId).hide({ user_id: memberId });
+      await serverClient.chat.muteChannel({
+        channel_cids: [mutedCid],
+        user_id: memberId,
+      });
+    });
+
+    afterAll(async () => {
+      await disconnectClients(memberClient);
+    });
+
+    it.skip("BLOCKED: lists a user's hidden and visible channels (the test app leaves the hidden channel out of a `$or: [{ hidden: true }, { hidden: false }]` filter unless it has a top-level `cid: { $in }`)", async () => {
+      // #region snippet docs="chat/_default/03-channels/02-query_channels.md" heading="Listing a User's Channels" tab="JavaScript" index=1
+      const filter = {
+        type: 'messaging',
+        members: { $in: [userID] },
+        $or: [{ hidden: true }, { hidden: false }],
+      };
+      // #endregion snippet
+
+      expect(await queryCids(filter)).toEqual([visibleCid, hiddenCid, mutedCid].sort());
+      // Without the `hidden` condition, the hidden channel is left out.
+      expect(await queryCids({ type: 'messaging', members: { $in: [userID] } })).toEqual(
+        [visibleCid, mutedCid].sort(),
+      );
+    });
+
+    it('queries channels by id together with membership', async () => {
+      // The channels where the user has the member-level setting, kept in your backend.
+      const cids = [visibleCid, hiddenCid];
+
+      // #region snippet docs="chat/_default/03-channels/02-query_channels.md" heading="Filtering by Member Data" tab="JavaScript" index=1
+      const filter = {
+        cid: { $in: cids },
+        members: { $in: [userID] },
+        $or: [{ hidden: true }, { hidden: false }],
+      };
+      // #endregion snippet
+
+      expect(await queryCids(filter)).toEqual([visibleCid, hiddenCid].sort());
+    });
+
+    it.skip('BLOCKED: combines the ids with muted channels (the test app leaves the hidden channel out: the `hidden` $or does not include hidden channels without a top-level `cid: { $in }`)', async () => {
+      const cids = [hiddenCid];
+
+      // #region snippet docs="chat/_default/03-channels/02-query_channels.md" heading="Filtering by Member Data" tab="JavaScript" index=2
+      const filter = {
+        members: { $in: [userID] },
+        $and: [
+          { $or: [{ cid: { $in: cids } }, { muted: true }] },
+          { $or: [{ hidden: true }, { hidden: false }] },
+        ],
+      };
+      // #endregion snippet
+
+      // The hidden channel by id, the muted one by `muted`; the visible one matches neither.
+      expect(await queryCids(filter)).toEqual([hiddenCid, mutedCid].sort());
+    });
   });
 });

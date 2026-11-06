@@ -1,9 +1,4 @@
-import type {
-  CommandsConfig,
-  CommandSendValidator,
-  MessageComposerConfig,
-} from './types';
-import type { DeepPartial } from '../../types.utility';
+import type { CommandsConfig, CommandSendValidator } from './types';
 import { stripMentionTokens } from '../middleware';
 
 export const MENTION_ONLY_COMMANDS = new Set(['mute', 'unmute', 'unban']);
@@ -32,24 +27,4 @@ export const defaultCommandSendabilityValidator: CommandSendValidator = ({
 };
 export const DEFAULT_COMMANDS_CONFIG: CommandsConfig = {
   sendValidator: defaultCommandSendabilityValidator,
-};
-export const applyCommandValidatorOverride = (
-  targetConfig: MessageComposerConfig,
-  sourceConfig?: DeepPartial<MessageComposerConfig>,
-) => {
-  const overrideValidator = sourceConfig?.commands?.sendValidator as
-    | CommandSendValidator
-    | undefined;
-
-  if (typeof overrideValidator === 'undefined') {
-    return targetConfig;
-  }
-
-  return {
-    ...targetConfig,
-    commands: {
-      ...targetConfig.commands,
-      sendValidator: overrideValidator,
-    },
-  };
 };

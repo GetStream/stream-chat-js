@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import type { StreamChat } from '../../../../../../src';
+import type { Channel, StreamChat } from '../../../../../../src';
 import {
   disconnectClients,
   getClientSideClient,
@@ -21,7 +21,7 @@ describe('_default/03-channels/07-channel_management/12-disabling.md', () => {
     client = await getClientSideClient({ id: userId });
     for (const id of [enabledId, disabledId]) {
       cleanup.channels.push(`messaging:${id}`);
-      await client.channel('messaging', id, { members: [userId] }).create();
+      await client.channel('messaging', id, { members: [{ user_id: userId }] }).create();
     }
     await serverClient.chat
       .channel('messaging', disabledId)
@@ -34,13 +34,13 @@ describe('_default/03-channels/07-channel_management/12-disabling.md', () => {
   });
 
   it('filters out disabled channels', async () => {
-    const spy = vi.spyOn(client, 'queryChannels');
+    const spy = vi.spyOn(client, 'queryChannelsAndHydrate');
 
     // #region snippet docs="chat/_default/03-channels/07-channel_management/12-disabling.md" heading="" tab="JavaScript" index=1
-    await client.queryChannels({ disabled: false });
+    await client.queryChannelsAndHydrate({ filter_conditions: { disabled: false } });
     // #endregion snippet
 
-    const results = await Promise.all(spy.mock.results.map((r) => r.value));
+    const results: Channel[][] = await Promise.all(spy.mock.results.map((r) => r.value));
     spy.mockRestore();
     expect(results).toHaveLength(1);
     const cids = results.flat().map((c) => c.cid);
@@ -50,8 +50,10 @@ describe('_default/03-channels/07-channel_management/12-disabling.md', () => {
 
   it('disabled channels are excluded client-side even without the filter', async () => {
     const cids = (
-      await client.queryChannels({
-        cid: { $in: [`messaging:${enabledId}`, `messaging:${disabledId}`] },
+      await client.queryChannelsAndHydrate({
+        filter_conditions: {
+          cid: { $in: [`messaging:${enabledId}`, `messaging:${disabledId}`] },
+        },
       })
     ).map((c) => c.cid);
     expect(cids).toEqual([`messaging:${enabledId}`]);
@@ -59,13 +61,14 @@ describe('_default/03-channels/07-channel_management/12-disabling.md', () => {
 
   it('client-side reads and writes of a disabled channel fail, and disabling is server-only', async () => {
     const disabled = client.channel('messaging', disabledId);
-    await expect(disabled.watch()).rejects.toThrow(/code 17.*is disabled/);
-    await expect(disabled.sendMessage({ text: 'hi' })).rejects.toThrow(
-      /code 17.*is disabled/,
+    const disabledError = { code: 17, message: expect.stringMatching(/is disabled/) };
+    await expect(disabled.watch()).rejects.toMatchObject(disabledError);
+    await expect(disabled.sendMessage({ message: { text: 'hi' } })).rejects.toMatchObject(
+      disabledError,
     );
 
     const enabled = client.channel('messaging', enabledId);
-    await expect(enabled.update({ disabled: true })).rejects.toThrow(
+    await expect(enabled.update({ data: { disabled: true } })).rejects.toThrow(
       'changing channel disabled is not allowed client-side',
     );
     await expect(enabled.updatePartial({ set: { disabled: true } })).rejects.toThrow(

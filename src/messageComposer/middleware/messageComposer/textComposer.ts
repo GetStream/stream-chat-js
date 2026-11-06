@@ -1,5 +1,5 @@
 import type { MiddlewareHandlerParams } from '../../../middleware';
-import type { DraftMessage, LocalMessage, UserResponse } from '../../../types';
+import type { LocalMessage, MessageRequest, UserResponse } from '../../../types';
 import type { MessageComposer } from '../../messageComposer';
 import { mentionEntityToUserResponse } from '../textComposer/mentionUtils';
 import type { MentionEntity } from '../textComposer/types';
@@ -30,7 +30,7 @@ type BuildMentionCompositionMetadataParams = {
 };
 
 type DraftMentionPayload = Pick<
-  DraftMessage,
+  MessageRequest,
   | 'mentioned_channel'
   | 'mentioned_group_ids'
   | 'mentioned_here'
@@ -130,7 +130,7 @@ export const createTextComposerCompositionMiddleware = (
         mentioned_users,
       } = buildMentionCompositionMetadata({ mentions, text });
 
-      // prevent introducing text and mention metadata into the payload sent to the server
+      // Do not add empty text and mention metadata to the payload.
       if (
         !text &&
         !mentioned_channel &&

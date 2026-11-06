@@ -68,8 +68,6 @@ typings/
 /.idea
 .envrc
 
-test/typescript/data.*
-
 # Yarn Berry — keep releases/patches/plugins/sdks/versions, ignore caches
 .yarn/*
 !.yarn/patches

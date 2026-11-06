@@ -1,4 +1,4 @@
 {
-  "**/*.{json,js,mjs,ts,yml,md}": "prettier --list-different",
-  "**/*.{js,mjs,ts}, !test": "eslint --max-warnings 0"
+  "**/*.{json,js,mjs,mts,cjs,ts,yml,md}": "prettier --list-different",
+  "**/*.{js,mjs,mts,cjs,ts}, !test": "eslint --max-warnings 0"
 }

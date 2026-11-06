@@ -1,5 +1,5 @@
 import { TextComposerMiddlewareExecutor } from './middleware';
-import { StateStore } from '../store';
+import { StateStore } from '@stream-io/state-store';
 import { logChatPromiseExecution } from '../utils';
 import type { TextComposerMiddlewareExecutorState } from './middleware';
 import type { TextComposerSuggestion } from './middleware/textComposer/types';
@@ -17,8 +17,9 @@ import {
   mentionEntityToUserResponse,
   userResponseToMentionEntity,
 } from './middleware/textComposer/mentionUtils';
+import { commandTakesNoArguments } from './middleware/textComposer/commandUtils';
 import type { MessageComposer } from './messageComposer';
-import type { CommandResponse, DraftMessage, LocalMessage, UserResponse } from '../types';
+import type { Command, DraftMessage, LocalMessage, UserResponse } from '../types';
 
 export type TextComposerOptions = {
   composer: MessageComposer;
@@ -86,9 +87,7 @@ const getInitialMentions = (message?: DraftMessage | LocalMessage): MentionEntit
       })),
     );
   } else if (message.mentioned_group_ids?.length) {
-    // Composer rehydration can still receive draft/local request-shaped data, where
-    // group mentions are represented only by ids even though response/render paths use
-    // `mentioned_groups` for presentation metadata.
+    // Request-shaped drafts carry group mentions as IDs only.
     mentions.push(
       ...message.mentioned_group_ids.map((groupId) => ({
         id: groupId,
@@ -161,7 +160,6 @@ export class TextComposer {
   }
 
   set enabled(enabled: boolean) {
-    if (enabled === this.enabled) return;
     this.composer.updateConfig({ text: { enabled } });
   }
 
@@ -179,7 +177,8 @@ export class TextComposer {
   }
 
   set maxLengthOnEdit(maxLengthOnEdit: number | undefined) {
-    if (maxLengthOnEdit === this.maxLengthOnEdit) return;
+    // No same-value early return: the getter reads the effective value, and a request the server
+    // masks must still be recorded.
     this.composer.updateConfig({ text: { maxLengthOnEdit } });
   }
 
@@ -188,7 +187,8 @@ export class TextComposer {
   }
 
   set maxLengthOnSend(maxLengthOnSend: number | undefined) {
-    if (maxLengthOnSend === this.maxLengthOnSend) return;
+    // No same-value early return: the getter reads the effective value, and a request the server
+    // masks must still be recorded.
     this.composer.updateConfig({ text: { maxLengthOnSend } });
   }
 
@@ -200,8 +200,6 @@ export class TextComposer {
     if (publishTypingEvents === this.publishTypingEvents) return;
     this.composer.updateConfig({ text: { publishTypingEvents } });
   }
-
-  // --- START STATE API ---
 
   get command() {
     return this.state.getLatestValue().command;
@@ -231,8 +229,36 @@ export class TextComposer {
     return textIsEmpty(this.text);
   }
 
+  /**
+   * Whether the active command is content on its own: a command that takes no arguments is sent as
+   * `/shrug` with no text. A command that takes arguments still needs text.
+   */
+  get activeCommandIsContent() {
+    const { command } = this;
+    return !!command && commandTakesNoArguments(command);
+  }
+
   initState = ({ message }: { message?: DraftMessage | LocalMessage } = {}) => {
     this.state.next(initState({ composer: this.composer, message }));
+  };
+
+  /**
+   * Takes over `source`'s text, selection, mentions and command, not its suggestions (they belong to
+   * `source`'s open search).
+   *
+   * @internal
+   */
+  takeOver = (source: TextComposer) => {
+    const { command, mentionedUsers, mentions, selection, text } =
+      source.state.getLatestValue();
+    this.state.partialNext({
+      command,
+      mentionedUsers,
+      mentions,
+      selection,
+      suggestions: undefined,
+      text,
+    });
   };
 
   getSnapshot = (state = this.state.getLatestValue()): TextComposerSnapshot => state;
@@ -341,7 +367,7 @@ export class TextComposer {
     this.setMentions(mentions);
   };
 
-  setCommand = (command: CommandResponse | null) => {
+  setCommand = (command: Command | null) => {
     if (!command) {
       this.clearCommand();
       return;
@@ -387,12 +413,7 @@ export class TextComposer {
     selection?: TextSelection;
   }) => {
     if (!this.enabled) return;
-    /**
-     * Windows inserts \r\n; macOS inserts \n.
-     * The caret can fall inside a CRLF pair during repeated pastes on Windows.
-     * That corrupts newline alignment (a\nb\na\nba\nb\n\n).
-     * Normalize the text to prevent it.
-     */
+    // Normalize CRLF: a caret inside a CRLF pair during repeated pastes (Windows) corrupts newlines.
     const normalizedText = text.replace(/\r\n/g, '\n');
     const finalSelection: TextSelection = selection ?? this.selection;
     const { maxLengthOnEdit } = this.composer.config.text ?? {};
@@ -452,7 +473,6 @@ export class TextComposer {
     if (!suggestions) return;
     this.state.partialNext({ suggestions: undefined });
   };
-  // --- END STATE API ---
 
   private commitState = (state: TextComposerMiddlewareExecutorState) => {
     const { change, effects, ...nextState } = state;
@@ -461,8 +481,6 @@ export class TextComposer {
     this.state.next(nextState);
     this.composer.applyEffects(effects);
   };
-
-  // --- START TEXT PROCESSING ----
 
   handleChange = async ({
     text,
@@ -506,5 +524,4 @@ export class TextComposer {
     if (output?.status === 'discard') return;
     this.commitState(output.state);
   };
-  // --- END TEXT PROCESSING ----
 }

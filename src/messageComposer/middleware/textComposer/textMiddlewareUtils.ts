@@ -2,9 +2,15 @@ import type { TextSelection } from './types';
 import { escapeCommandRegExp } from './commandUtils';
 
 /**
- * For commands, we want to match all patterns except:
- * 1. Text not starting with trigger
- * 2. Trigger in middle of text
+ * Finds the trigger-prefixed token that ends `text`.
+ *
+ * @param params.trigger - The trigger character, e.g. `@` or `/`.
+ * @param params.text - The text to search.
+ * @param params.isCommand - Require the trigger to start the text and the token to contain no
+ *   whitespace. Defaults to `false`.
+ * @param params.acceptTrailingSpaces - Let the token span one whitespace character. Ignored with
+ *   `isCommand`. Defaults to `true`.
+ * @returns The trimmed token with its trigger, or `null`.
  */
 export const getTriggerCharWithToken = ({
   trigger,
@@ -48,7 +54,7 @@ export const insertItemWithTrigger = ({
   const beforeCursor = text.slice(0, selection.end);
   const afterCursor = text.slice(selection.end);
 
-  // Replace the trigger and query with the user mention
+  // Replace the trigger and query with `insertText`.
   const lastIndex = beforeCursor.lastIndexOf(trigger);
   const newText = beforeCursor.slice(0, lastIndex) + insertText + afterCursor;
   return {

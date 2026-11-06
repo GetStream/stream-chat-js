@@ -1,29 +1,34 @@
 import { describe, expect, it, beforeEach, afterEach, vi, MockInstance } from 'vitest';
 import {
   AbstractOfflineDB,
-  ChannelAPIResponse,
+  APIError,
   ChannelManager,
   StreamChat,
   Event,
   Channel,
-  MessageResponse,
-  ReadResponse,
   ChannelMemberResponse,
   ChannelResponse,
-  PendingTask,
-  APIErrorResponse,
+  ChannelStateResponseFields,
+  LocalMessage,
+  MessageResponse,
   OfflineDBSyncManager,
-  StableWSConnection,
   OfflineError,
+  PendingTask,
+  ReadStateResponse,
+  StableWSConnection,
 } from '../../../src';
+import { chatLoggerSystem } from '../../../src/logger';
+import { QUEUEABLE_OPERATIONS } from '../../../src/offline-support/queueableOperations';
 
 import { generateChannel } from '../test-utils/generateChannel';
 import { generateReadResponse } from '../test-utils/generateReadResponse';
 import { generatePendingTask } from '../test-utils/generatePendingTask';
 import { getClientWithUser } from '../test-utils/getClient';
 import * as utils from '../../../src/utils';
-import { AxiosError } from 'axios';
+import { AxiosError, CanceledError } from 'axios';
 import { MockOfflineDB } from './MockOfflineDB';
+import { nsToDate, nsToMs } from '../../../src/utils/time';
+import { convertDateToTimestamp } from '../test-utils/time';
 
 describe('OfflineSupportApi', () => {
   let client: StreamChat;
@@ -31,7 +36,7 @@ describe('OfflineSupportApi', () => {
 
   beforeEach(async () => {
     client = await getClientWithUser();
-    channelManager = client.createChannelManager({});
+    channelManager = client.channelManager;
     channelManager.registerSubscriptions();
   });
 
@@ -46,7 +51,7 @@ describe('OfflineSupportApi', () => {
       expect(client.offlineDb).toBeDefined();
       const { initialized, userId } = client.offlineDb!.state.getLatestValue() ?? {};
       expect(initialized).toBe(false);
-      expect(userId).toBe(client.userID);
+      expect(userId).toBe(client.userId);
     });
 
     it('should not set client.offlineDb if it has already been set', async () => {
@@ -66,7 +71,7 @@ describe('OfflineSupportApi', () => {
         .spyOn(client.offlineDb!, 'initializeDB')
         .mockResolvedValue(true);
       const initSyncManagerSpy = vi.spyOn(client.offlineDb?.syncManager!, 'init');
-      await client.offlineDb!.init(client.userID as unknown as string);
+      await client.offlineDb!.init(client.userId as unknown as string);
 
       expect(initializeDBSpy).toHaveBeenCalledOnce();
       expect(initSyncManagerSpy).toHaveBeenCalledOnce();
@@ -74,7 +79,7 @@ describe('OfflineSupportApi', () => {
       const { initialized, userId } = client.offlineDb?.state.getLatestValue() ?? {};
 
       expect(initialized).toBe(true);
-      expect(userId).toBe(client.userID);
+      expect(userId).toBe(client.userId);
     });
 
     it('should handle offlineDb.initializeDB failing', async () => {
@@ -83,7 +88,7 @@ describe('OfflineSupportApi', () => {
         .spyOn(client.offlineDb!, 'initializeDB')
         .mockResolvedValue(false);
       const initSyncManagerSpy = vi.spyOn(client.offlineDb?.syncManager!, 'init');
-      await client.offlineDb!.init(client.userID as unknown as string);
+      await client.offlineDb!.init(client.userId as unknown as string);
 
       expect(initializeDBSpy).toHaveBeenCalledOnce();
       expect(initSyncManagerSpy).not.toHaveBeenCalled();
@@ -91,7 +96,7 @@ describe('OfflineSupportApi', () => {
       const { initialized, userId } = client.offlineDb?.state.getLatestValue() ?? {};
 
       expect(initialized).toBe(false);
-      expect(userId).toBe(client.userID);
+      expect(userId).toBe(client.userId);
     });
 
     it('should gracefully handle the state on exceptions during initialization', async () => {
@@ -102,7 +107,7 @@ describe('OfflineSupportApi', () => {
       const initSyncManagerSpy = vi
         .spyOn(client.offlineDb?.syncManager!, 'init')
         .mockRejectedValue(new Error('Sync manager init failed.'));
-      await client.offlineDb!.init(client.userID as unknown as string);
+      await client.offlineDb!.init(client.userId as unknown as string);
 
       expect(initializeDBSpy).toHaveBeenCalledOnce();
       expect(initSyncManagerSpy).toHaveBeenCalledOnce();
@@ -119,9 +124,9 @@ describe('OfflineSupportApi', () => {
         .spyOn(client.offlineDb!, 'initializeDB')
         .mockResolvedValue(true);
       const initSyncManagerSpy = vi.spyOn(client.offlineDb?.syncManager!, 'init');
-      await client.offlineDb!.init(client.userID as unknown as string);
-      await client.offlineDb!.init(client.userID as unknown as string);
-      await client.offlineDb!.init(client.userID as unknown as string);
+      await client.offlineDb!.init(client.userId as unknown as string);
+      await client.offlineDb!.init(client.userId as unknown as string);
+      await client.offlineDb!.init(client.userId as unknown as string);
 
       expect(initializeDBSpy).toHaveBeenCalledOnce();
       expect(initSyncManagerSpy).toHaveBeenCalledOnce();
@@ -129,7 +134,7 @@ describe('OfflineSupportApi', () => {
       const { initialized, userId } = client.offlineDb?.state.getLatestValue() ?? {};
 
       expect(initialized).toBe(true);
-      expect(userId).toBe(client.userID);
+      expect(userId).toBe(client.userId);
     });
 
     it('should reinitialize if the userId changes', async () => {
@@ -138,7 +143,7 @@ describe('OfflineSupportApi', () => {
         .spyOn(client.offlineDb!, 'initializeDB')
         .mockResolvedValue(true);
       const initSyncManagerSpy = vi.spyOn(client.offlineDb?.syncManager!, 'init');
-      await client.offlineDb!.init(client.userID as unknown as string);
+      await client.offlineDb!.init(client.userId as unknown as string);
       await client.offlineDb!.init('user123');
 
       expect(initializeDBSpy).toHaveBeenCalledTimes(2);
@@ -291,7 +296,13 @@ describe('OfflineSupportApi', () => {
     beforeEach(async () => {
       offlineDb = new MockOfflineDB({ client });
       vi.spyOn(offlineDb!, 'initializeDB').mockResolvedValue(true);
-      await offlineDb.init(client.userID as unknown as string);
+      // Socket down on purpose. `OfflineDBSyncManager.init` syncs and replays pending tasks straight
+      // away when the user is connected *and* the socket is up, and these tests are about queueing
+      // tasks rather than about that sync — the mock DB is not set up to serve it. Previously the
+      // socket happened to be down because `getClientWithUser` left it that way; now that the helper
+      // marks a connected client's socket up, a test that wants it down has to say so.
+      client.wsConnection._setStatus({ isHealthy: false });
+      await offlineDb.init(client.userId as unknown as string);
     });
 
     afterEach(() => {
@@ -330,6 +341,18 @@ describe('OfflineSupportApi', () => {
         createQueries = vi.fn(async () => [{ sql: 'MOCK_QUERY', args: [] }]);
       });
 
+      /**
+       * The guard is LAZY: it attempts the write first and only repairs the channel row when that
+       * attempt fails. So a `createQueries` that fails when asked to EXECUTE and succeeds when only
+       * building queries is what a foreign-key violation looks like from the guard's point of view,
+       * and it is what makes the guard engage at all.
+       */
+      const failsOnExecute = () =>
+        vi.fn(async (shouldExecute?: boolean) => {
+          if (shouldExecute) throw new Error('FOREIGN KEY constraint failed');
+          return [{ sql: 'MOCK_QUERY', args: [] }];
+        });
+
       it('returns createQueries result when no cid is present', async () => {
         const event: Event = { type: 'message.new' };
         const result = await offlineDb.queriesWithChannelGuard({ event }, createQueries);
@@ -345,9 +368,10 @@ describe('OfflineSupportApi', () => {
           channel: { id: '123', type: 'messaging' } as any,
         };
 
+        createQueries = failsOnExecute();
         offlineDb.channelExists.mockResolvedValue(false);
         offlineDb.upsertChannelData.mockResolvedValue([{ sql: 'UPSERT', args: [] }]);
-        const clientChannelSpy = vi.spyOn(client, 'channel');
+        const clientChannelSpy = vi.spyOn(client.channelManager, 'get');
 
         const result = await offlineDb.queriesWithChannelGuard({ event }, createQueries);
 
@@ -367,16 +391,31 @@ describe('OfflineSupportApi', () => {
         ]);
       });
 
-      it('uses client.channel when channel data is not present in event', async () => {
+      it('does not store a channel for an event about one that is not loaded', async () => {
+        const event: Event = {
+          type: 'message.new',
+          cid: 'messaging:unknown',
+          channel_type: 'messaging',
+          channel_id: 'unknown',
+        };
+        createQueries = failsOnExecute();
+        offlineDb.channelExists.mockResolvedValue(false);
+
+        await offlineDb.queriesWithChannelGuard({ event }, createQueries);
+
+        expect(client.channelManager.get('messaging:unknown')).toBeUndefined();
+      });
+
+      it('reads the stored channel when channel data is not present in event', async () => {
         const mockChannelData = { id: '123', type: 'messaging' };
         const mockChannel = {
           initialized: true,
-          disconnected: false,
+          pendingDisposal: false,
           data: mockChannelData,
         };
 
         const clientChannelSpy = vi
-          .spyOn(client, 'channel')
+          .spyOn(client.channelManager, 'get')
           .mockReturnValue(mockChannel as unknown as Channel);
 
         const event: Event = {
@@ -386,12 +425,13 @@ describe('OfflineSupportApi', () => {
           channel_id: '123',
         };
 
+        createQueries = failsOnExecute();
         offlineDb.channelExists.mockResolvedValue(false);
         offlineDb.upsertChannelData.mockResolvedValue([{ sql: 'UPSERT', args: [] }]);
 
         const result = await offlineDb.queriesWithChannelGuard({ event }, createQueries);
 
-        expect(clientChannelSpy).toHaveBeenCalledWith('messaging', '123');
+        expect(clientChannelSpy).toHaveBeenCalledWith('messaging:123');
         expect(offlineDb.upsertChannelData).toHaveBeenCalledWith({
           channel: mockChannelData,
           execute: false,
@@ -414,20 +454,26 @@ describe('OfflineSupportApi', () => {
           channel_id: '123',
         };
 
+        createQueries = failsOnExecute();
         offlineDb.channelExists.mockResolvedValue(false);
 
-        const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const sinkSpy = vi.fn();
+        chatLoggerSystem.configureLoggers({
+          default: { sink: sinkSpy, level: 'trace' },
+        });
 
         const result = await offlineDb.queriesWithChannelGuard({ event }, createQueries);
 
-        // TODO: testing against warning logs seems silly, please rethink this
-        expect(consoleWarnSpy).toHaveBeenCalledWith(
-          'Received message.new event for a non initialized channel that is not in DB, skipping event',
+        expect(sinkSpy).toHaveBeenCalledWith(
+          'warn',
+          expect.stringContaining(
+            'Received a "message.new" event for a non-initialized channel that is not in the database. Skipping the event.',
+          ),
           { event },
         );
         expect(result).toEqual([]);
 
-        consoleWarnSpy.mockRestore();
+        chatLoggerSystem.restoreDefaults();
       });
 
       it('returns createQueries result directly when channel exists and forceUpdate is false', async () => {
@@ -440,9 +486,30 @@ describe('OfflineSupportApi', () => {
 
         const result = await offlineDb.queriesWithChannelGuard({ event }, createQueries);
 
-        expect(offlineDb.channelExists).toHaveBeenCalledWith({ cid: 'channel:123' });
+        // The point of the lazy guard: on the overwhelmingly common path the existence probe — a
+        // native round-trip costing a meaningful fraction of the write itself — is never issued.
+        expect(offlineDb.channelExists).not.toHaveBeenCalled();
         expect(createQueries).toHaveBeenCalledWith(true);
         expect(result).toEqual([{ sql: 'MOCK_QUERY', args: [] }]);
+      });
+
+      it('rethrows a write failure that is not a missing channel row, without retrying', async () => {
+        const event: Event = {
+          type: 'message.new',
+          cid: 'channel:123',
+          channel: { id: '123', type: 'messaging' } as any,
+        };
+
+        createQueries = failsOnExecute();
+        // The channel row is there, so the failure is genuine and repairing nothing would help.
+        offlineDb.channelExists.mockResolvedValue(true);
+
+        await expect(
+          offlineDb.queriesWithChannelGuard({ event }, createQueries),
+        ).rejects.toThrow('FOREIGN KEY constraint failed');
+        expect(offlineDb.upsertChannelData).not.toHaveBeenCalled();
+        // Exactly one attempt: a broken statement must not be run twice.
+        expect(createQueries).toHaveBeenCalledTimes(1);
       });
 
       it('does not execute queries when execute is false', async () => {
@@ -468,6 +535,7 @@ describe('OfflineSupportApi', () => {
       });
 
       it('should reject if channelExists throws', async () => {
+        createQueries = failsOnExecute();
         offlineDb.channelExists.mockRejectedValue(new Error('DB failure'));
         const event: Event = {
           type: 'message.new',
@@ -482,6 +550,7 @@ describe('OfflineSupportApi', () => {
       });
 
       it('should reject if upsertChannelData throws when channelExists returns false', async () => {
+        createQueries = failsOnExecute();
         offlineDb.channelExists.mockResolvedValue(false);
         offlineDb.upsertChannelData.mockRejectedValue(new Error('Upsert failed'));
 
@@ -495,11 +564,13 @@ describe('OfflineSupportApi', () => {
         const mockChannelData = { id: '123', type: 'messaging' };
         const mockChannel = {
           initialized: true,
-          disconnected: false,
+          pendingDisposal: false,
           data: mockChannelData,
         };
 
-        vi.spyOn(client, 'channel').mockReturnValue(mockChannel as unknown as Channel);
+        vi.spyOn(client.channelManager, 'get').mockReturnValue(
+          mockChannel as unknown as Channel,
+        );
 
         await expect(
           offlineDb.queriesWithChannelGuard({ event }, createQueries),
@@ -536,18 +607,20 @@ describe('OfflineSupportApi', () => {
       let queriesWithChannelGuardSpy: MockInstance<
         typeof offlineDb.queriesWithChannelGuard
       >;
-      let channelResponse: ChannelAPIResponse;
-      let readResponse: ReadResponse;
+      let channelResponse: ChannelStateResponseFields;
+      let readResponse: ReadStateResponse;
 
       beforeEach(() => {
         queriesWithChannelGuardSpy = vi.spyOn(offlineDb, 'queriesWithChannelGuard');
         vi.spyOn(offlineDb, 'channelExists').mockResolvedValue(true);
-        readResponse = generateReadResponse({ user: client.user });
+        readResponse = generateReadResponse({
+          user: { ...client.user, blocked_user_ids: [] },
+        });
         channelResponse = generateChannel({
           channel: { id: 'channel123', type: 'messaging' },
           read: [readResponse],
-        } as ChannelAPIResponse);
-        client.hydrateActiveChannels([channelResponse]);
+        } as ChannelStateResponseFields);
+        client.hydrateChannels([channelResponse]);
 
         // to make sure queriesWithChannelGuard always passes
         offlineDb.channelExists.mockResolvedValue(true);
@@ -620,7 +693,7 @@ describe('OfflineSupportApi', () => {
             channel: { id: 'no-read-events', own_capabilities: [], type: 'messaging' },
             read: [generateReadResponse({ user: client.user })],
           } as ChannelAPIResponse);
-          client.hydrateActiveChannels([noReadEventsResponse]);
+          client.hydrateChannels([noReadEventsResponse]);
 
           const result = await offlineDb.handleNewMessage({
             event: { ...baseEvent, cid: noReadEventsResponse.channel.cid },
@@ -632,14 +705,16 @@ describe('OfflineSupportApi', () => {
           expect(result).toEqual(mockUpsertMessagesQueries);
         });
 
-        it('should call upsertReads for a read-events-disabled channel when isLocalUnreadCountEnabled is on', async () => {
-          client.options.isLocalUnreadCountEnabled = true;
+        it('should call upsertReads for a read-events-disabled channel when localUnreadCountEnabled is on', async () => {
+          client.config.setConfig('channel', {
+            readEvents: { localUnreadCountEnabled: true },
+          });
           // No `read` for the channel on purpose: the server omits it for read-events-disabled
           // channels, so the own-read row is absent and the persist must fall back gracefully.
           const localUnreadResponse = generateChannel({
             channel: { id: 'local-unread', own_capabilities: [], type: 'messaging' },
           } as unknown as ChannelAPIResponse);
-          client.hydrateActiveChannels([localUnreadResponse]);
+          client.hydrateChannels([localUnreadResponse]);
 
           const result = await offlineDb.handleNewMessage({
             event: { ...baseEvent, cid: localUnreadResponse.channel.cid },
@@ -653,7 +728,7 @@ describe('OfflineSupportApi', () => {
               reads: expect.arrayContaining([
                 expect.objectContaining({
                   unread_messages: expect.any(Number),
-                  user: client.user,
+                  user: { ...client.user, blocked_user_ids: [] },
                 }),
               ]),
             }),
@@ -679,7 +754,7 @@ describe('OfflineSupportApi', () => {
           expect(result).toEqual(mockUpsertMessagesQueries);
         });
 
-        it('should not call upsertReads event.cid does not exist in client.activeChannels', async () => {
+        it('should not call upsertReads event.cid does not exist in the channel store', async () => {
           const eventWithDifferentCid = { ...baseEvent, cid: 'channel321' };
 
           const result = await offlineDb.handleNewMessage({
@@ -695,6 +770,30 @@ describe('OfflineSupportApi', () => {
             expect.any(Function),
           );
           expect(result).toEqual(mockUpsertMessagesQueries);
+        });
+
+        it('writes the channel row and retries when the first write misses the channel', async () => {
+          const event = {
+            ...baseEvent,
+            channel_type: 'messaging',
+            channel_id: 'channel123',
+          } as Event;
+          const channelQueries = ['INSERT INTO channels'];
+          offlineDb.channelExists.mockResolvedValue(false);
+          offlineDb.upsertChannelData.mockResolvedValue(channelQueries);
+          offlineDb.executeSqlBatch
+            .mockRejectedValueOnce(new Error('FOREIGN KEY constraint failed'))
+            .mockResolvedValue(undefined);
+
+          const result = await offlineDb.handleNewMessage({ event, execute: true });
+
+          expect(offlineDb.executeSqlBatch).toHaveBeenCalledTimes(2);
+          expect(offlineDb.executeSqlBatch).toHaveBeenNthCalledWith(1, mockQueries);
+          expect(offlineDb.executeSqlBatch).toHaveBeenNthCalledWith(2, [
+            ...channelQueries,
+            ...mockQueries,
+          ]);
+          expect(result).toEqual([...channelQueries, ...mockQueries]);
         });
 
         it('should not call executeSqlBatch if execute is false', async () => {
@@ -910,18 +1009,263 @@ describe('OfflineSupportApi', () => {
         });
       });
 
+      describe('hardDeleteMessages', () => {
+        beforeEach(() => {
+          offlineDb.hardDeleteMessage.mockResolvedValue([['DELETE hard']]);
+          offlineDb.executeSqlBatch.mockResolvedValue(undefined);
+        });
+
+        afterEach(() => {
+          vi.resetAllMocks();
+        });
+
+        it('hard deletes every id and runs all queries as a single batch', async () => {
+          const result = await offlineDb.hardDeleteMessages({ ids: ['a', 'b'] });
+
+          expect(offlineDb.hardDeleteMessage).toHaveBeenCalledTimes(2);
+          expect(offlineDb.hardDeleteMessage).toHaveBeenCalledWith({
+            id: 'a',
+            execute: false,
+          });
+          expect(offlineDb.hardDeleteMessage).toHaveBeenCalledWith({
+            id: 'b',
+            execute: false,
+          });
+          // Each id's queries are collected (execute:false) and flushed in one transaction.
+          expect(offlineDb.executeSqlBatch).toHaveBeenCalledTimes(1);
+          expect(offlineDb.executeSqlBatch).toHaveBeenCalledWith([
+            ['DELETE hard'],
+            ['DELETE hard'],
+          ]);
+          expect(result).toEqual([['DELETE hard'], ['DELETE hard']]);
+        });
+
+        it('returns the collected queries without executing them when execute is false', async () => {
+          const result = await offlineDb.hardDeleteMessages({
+            ids: ['a'],
+            execute: false,
+          });
+
+          expect(offlineDb.hardDeleteMessage).toHaveBeenCalledWith({
+            id: 'a',
+            execute: false,
+          });
+          expect(offlineDb.executeSqlBatch).not.toHaveBeenCalled();
+          expect(result).toEqual([['DELETE hard']]);
+        });
+
+        it('is a no-op for an empty id set (touches neither the delete nor the batch)', async () => {
+          const result = await offlineDb.hardDeleteMessages({ ids: [] });
+
+          expect(offlineDb.hardDeleteMessage).not.toHaveBeenCalled();
+          expect(offlineDb.executeSqlBatch).not.toHaveBeenCalled();
+          expect(result).toEqual([]);
+        });
+      });
+
+      describe('upsertMessageWithChannelGuard', () => {
+        beforeEach(() => {
+          offlineDb.upsertMessages.mockResolvedValue([['UPSERT message']]);
+          offlineDb.upsertChannelData.mockResolvedValue([['UPSERT channel']]);
+          offlineDb.executeSqlBatch.mockResolvedValue(undefined);
+        });
+
+        afterEach(() => {
+          vi.resetAllMocks();
+        });
+
+        const message = {
+          cid: 'messaging:c1',
+          id: 'm1',
+          status: 'failed',
+        } as LocalMessage;
+
+        /** What a foreign-key violation looks like: the direct write fails, building queries does not. */
+        const failWriteSucceedBuild = () => {
+          offlineDb.upsertMessages.mockImplementation(
+            async ({ execute }: { execute?: boolean }) => {
+              if (execute) throw new Error('FOREIGN KEY constraint failed');
+              return [['UPSERT message']];
+            },
+          );
+        };
+
+        it('writes the message directly, without probing for the channel row', async () => {
+          const result = await offlineDb.upsertMessageWithChannelGuard({ message });
+
+          // The lazy guard's whole point: no existence probe on the common path.
+          expect(offlineDb.channelExists).not.toHaveBeenCalled();
+          expect(offlineDb.upsertChannelData).not.toHaveBeenCalled();
+          expect(offlineDb.upsertMessages).toHaveBeenCalledWith({
+            messages: [message],
+            execute: true,
+          });
+          expect(result).toEqual([['UPSERT message']]);
+        });
+
+        it('creates the missing channel row and retries, in one batch', async () => {
+          failWriteSucceedBuild();
+          offlineDb.channelExists.mockResolvedValue(false);
+          client.channelManager.getOrCreateChannel(
+            'messaging:c1',
+            () =>
+              ({
+                data: { cid: 'messaging:c1' },
+                initialized: true,
+                pendingDisposal: false,
+              }) as never,
+          );
+
+          const result = await offlineDb.upsertMessageWithChannelGuard({ message });
+
+          // Ordering matters: the message insert would otherwise violate the foreign key again.
+          expect(result).toEqual([['UPSERT channel'], ['UPSERT message']]);
+          expect(offlineDb.executeSqlBatch).toHaveBeenCalledTimes(1);
+        });
+
+        it('rethrows a failure that is not a missing channel row, without retrying', async () => {
+          failWriteSucceedBuild();
+          offlineDb.channelExists.mockResolvedValue(true);
+
+          await expect(
+            offlineDb.upsertMessageWithChannelGuard({ message }),
+          ).rejects.toThrow('FOREIGN KEY constraint failed');
+          // A write that fails for some other reason must not be run a second time.
+          expect(offlineDb.upsertChannelData).not.toHaveBeenCalled();
+        });
+
+        it('skips the write when there is no channel row and nothing to build one from', async () => {
+          failWriteSucceedBuild();
+          offlineDb.channelExists.mockResolvedValue(false);
+          client.channelManager.removeChannel('messaging:c1');
+
+          const result = await offlineDb.upsertMessageWithChannelGuard({ message });
+
+          expect(offlineDb.upsertChannelData).not.toHaveBeenCalled();
+          expect(offlineDb.executeSqlBatch).not.toHaveBeenCalled();
+          expect(result).toEqual([]);
+        });
+
+        it('probes up front when execute is false, since there is no failure to catch', async () => {
+          offlineDb.channelExists.mockResolvedValue(true);
+
+          const result = await offlineDb.upsertMessageWithChannelGuard({
+            message,
+            execute: false,
+          });
+
+          expect(offlineDb.executeSqlBatch).not.toHaveBeenCalled();
+          expect(result).toEqual([['UPSERT message']]);
+        });
+
+        it('skips a message with no cid rather than guessing a channel', async () => {
+          const result = await offlineDb.upsertMessageWithChannelGuard({
+            message: { id: 'm1', status: 'failed' } as LocalMessage,
+          });
+
+          expect(offlineDb.channelExists).not.toHaveBeenCalled();
+          expect(offlineDb.upsertMessages).not.toHaveBeenCalled();
+          expect(result).toEqual([]);
+        });
+      });
+
+      describe('getFailedMessages', () => {
+        afterEach(() => {
+          vi.resetAllMocks();
+        });
+
+        it('returns only the locally failed messages of the channel', async () => {
+          offlineDb.state.partialNext({ initialized: true, userId: 'user-1' });
+          offlineDb.getChannels.mockResolvedValue([
+            {
+              messages: [
+                {
+                  id: 'sent',
+                  status: 'received',
+                  updated_at: convertDateToTimestamp(new Date().toISOString()),
+                },
+                {
+                  id: 'unsent',
+                  status: 'failed',
+                  updated_at: convertDateToTimestamp(new Date().toISOString()),
+                },
+                // No status at all — a plain server message, which must not be mistaken for unsent.
+                {
+                  id: 'plain',
+                  updated_at: convertDateToTimestamp(new Date().toISOString()),
+                },
+              ],
+            },
+          ]);
+
+          const result = await offlineDb.getFailedMessages({ cid: 'messaging:c1' });
+
+          expect(offlineDb.getChannels).toHaveBeenCalledWith({
+            cids: ['messaging:c1'],
+            userId: 'user-1',
+          });
+          expect(result.map((message) => message.id)).toEqual(['unsent']);
+        });
+
+        it('formats the rows it returns', async () => {
+          offlineDb.state.partialNext({ initialized: true, userId: 'user-1' });
+          offlineDb.getChannels.mockResolvedValue([
+            {
+              messages: [
+                {
+                  created_at: convertDateToTimestamp('2024-01-01T00:00:00.000Z'),
+                  id: 'unsent',
+                  status: 'failed',
+                  updated_at: convertDateToTimestamp('2024-01-01T00:00:00.000Z'),
+                },
+              ],
+            },
+          ]);
+
+          const [failed] = await offlineDb.getFailedMessages({ cid: 'messaging:c1' });
+
+          // The paginator compares `updated_at` as a wire number, so a raw storable row cannot be re-ingested.
+          expect(failed.created_at).toEqual(expect.any(Number));
+          expect(failed.updated_at).toEqual(expect.any(Number));
+        });
+
+        it('returns nothing when the channel is not in the database', async () => {
+          offlineDb.state.partialNext({ initialized: true, userId: 'user-1' });
+          offlineDb.getChannels.mockResolvedValue([]);
+
+          expect(await offlineDb.getFailedMessages({ cid: 'messaging:c1' })).toEqual([]);
+        });
+
+        it('does not query before the database is initialized', async () => {
+          offlineDb.state.partialNext({ initialized: false, userId: 'user-1' });
+
+          expect(await offlineDb.getFailedMessages({ cid: 'messaging:c1' })).toEqual([]);
+          expect(offlineDb.getChannels).not.toHaveBeenCalled();
+        });
+
+        it('does not query without a user', async () => {
+          offlineDb.state.partialNext({ initialized: true, userId: undefined });
+
+          expect(await offlineDb.getFailedMessages({ cid: 'messaging:c1' })).toEqual([]);
+          expect(offlineDb.getChannels).not.toHaveBeenCalled();
+        });
+      });
+
       describe('handleRead', () => {
         let readEvent: Event;
 
         beforeEach(() => {
           readEvent = {
             ...baseEvent,
+            type: 'message.read',
             cid: 'channel-123',
+            created_at: convertDateToTimestamp('2023-01-01T00:00:00Z'),
             user: { id: 'user-1', name: 'Alice' },
             last_read_message_id: 'msg-987',
-            received_at: '2023-01-01T00:00:00Z',
+            // The local receipt time, deliberately later than `created_at`: it must not be persisted.
+            received_at: convertDateToTimestamp('2023-01-01T00:00:05Z'),
             unread_messages: 3,
-          };
+          } as Event;
           offlineDb.upsertReads.mockResolvedValue([['UPSERT read']]);
         });
 
@@ -940,7 +1284,7 @@ describe('OfflineSupportApi', () => {
             execute: true,
             reads: [
               {
-                last_read: readEvent.received_at,
+                last_read: readEvent.created_at,
                 last_read_message_id: readEvent.last_read_message_id,
                 unread_messages: 5,
                 user: readEvent.user,
@@ -965,7 +1309,7 @@ describe('OfflineSupportApi', () => {
             execute: true,
             reads: [
               {
-                last_read: readEvent.received_at,
+                last_read: readEvent.created_at,
                 last_read_message_id: readEvent.last_read_message_id,
                 unread_messages: readEvent.unread_messages,
                 user: readEvent.user,
@@ -991,7 +1335,7 @@ describe('OfflineSupportApi', () => {
             execute: false,
             reads: [
               {
-                last_read: readEvent.received_at,
+                last_read: readEvent.created_at,
                 last_read_message_id: readEvent.last_read_message_id,
                 unread_messages: readEvent.unread_messages,
                 user: readEvent.user,
@@ -1004,6 +1348,38 @@ describe('OfflineSupportApi', () => {
             expect.any(Function),
           );
           expect(result).toEqual([['UPSERT read']]);
+        });
+
+        it('persists the server `last_read_at` for a mark-unread, not the receipt time', async () => {
+          const lastReadAt = convertDateToTimestamp('2022-12-31T23:00:00Z');
+          const markUnreadEvent = {
+            ...readEvent,
+            type: 'notification.mark_unread',
+            last_read_at: lastReadAt,
+          } as Event;
+
+          await offlineDb.handleRead({ event: markUnreadEvent });
+
+          expect(offlineDb.upsertReads).toHaveBeenCalledWith(
+            expect.objectContaining({
+              reads: [expect.objectContaining({ last_read: lastReadAt })],
+            }),
+          );
+        });
+
+        it('falls back to `received_at` when the event carries no server timestamp', async () => {
+          const { created_at: _createdAt, ...eventWithoutCreatedAt } =
+            readEvent as Event & {
+              created_at?: number;
+            };
+
+          await offlineDb.handleRead({ event: eventWithoutCreatedAt as Event });
+
+          expect(offlineDb.upsertReads).toHaveBeenCalledWith(
+            expect.objectContaining({
+              reads: [expect.objectContaining({ last_read: readEvent.received_at })],
+            }),
+          );
         });
 
         it('returns empty array if user is missing', async () => {
@@ -1331,7 +1707,7 @@ describe('OfflineSupportApi', () => {
           ...baseEvent,
           channel: {
             cid: 'messaging:to-truncate',
-            truncated_at: '2025-05-20T10:00:00Z',
+            truncated_at: convertDateToTimestamp('2025-05-20T10:00:00Z'),
           } as ChannelResponse,
         };
 
@@ -1346,7 +1722,7 @@ describe('OfflineSupportApi', () => {
           offlineDb.upsertReads.mockResolvedValue(['UPDATE * IN reads']);
 
           readResponse = generateReadResponse({
-            user: client.user,
+            user: { ...client.user, blocked_user_ids: [] },
             last_read: lastReadDate,
             last_read_message_id: lastReadMessageId,
             unread_messages: unreadMessagesCount,
@@ -1354,8 +1730,8 @@ describe('OfflineSupportApi', () => {
           channelResponse = generateChannel({
             channel: { id: 'to-truncate', type: 'messaging' },
             read: [readResponse],
-          } as ChannelAPIResponse);
-          client.hydrateActiveChannels([channelResponse]);
+          } as ChannelStateResponseFields);
+          client.hydrateChannels([channelResponse]);
         });
 
         afterEach(() => {
@@ -1386,7 +1762,7 @@ describe('OfflineSupportApi', () => {
 
         it('calls deleteMessagesForChannel and upsertReads with correct arguments and returns combined queries', async () => {
           const countUnreadSpy = vi
-            .spyOn(client.activeChannels[truncatedEvent.channel!.cid], 'countUnread')
+            .spyOn(client.channelManager.get(truncatedEvent.channel!.cid), 'countUnread')
             .mockReturnValue(2);
 
           const result = await offlineDb.handleChannelTruncatedEvent({
@@ -1402,7 +1778,7 @@ describe('OfflineSupportApi', () => {
 
           expect(countUnreadSpy).toHaveBeenCalled();
           expect(countUnreadSpy).toHaveBeenCalledWith(
-            new Date(truncatedEvent.channel!.truncated_at as unknown as string),
+            truncatedEvent.channel!.truncated_at,
           );
 
           expect(offlineDb.upsertReads).toHaveBeenCalledWith({
@@ -1410,10 +1786,10 @@ describe('OfflineSupportApi', () => {
             execute: false,
             reads: [
               {
-                last_read: lastReadDate.toString(),
+                last_read: lastReadDate,
                 last_read_message_id: lastReadMessageId,
                 unread_messages: 2,
-                user: client.user,
+                user: { ...client.user, blocked_user_ids: [] },
               },
             ],
           });
@@ -1441,10 +1817,10 @@ describe('OfflineSupportApi', () => {
             execute: false,
             reads: [
               {
-                last_read: lastReadDate.toString(),
+                last_read: lastReadDate,
                 last_read_message_id: lastReadMessageId,
                 unread_messages: 0,
-                user: client.user,
+                user: { ...client.user, blocked_user_ids: [] },
               },
             ],
           });
@@ -1453,7 +1829,7 @@ describe('OfflineSupportApi', () => {
 
         it('handles missing truncated_at gracefully with unread count 0', async () => {
           const countUnreadSpy = vi.spyOn(
-            client.activeChannels[truncatedEvent.channel!.cid],
+            client.channelManager.get(truncatedEvent.channel!.cid),
             'countUnread',
           );
           const channelWithoutTruncatedAt = truncatedEvent.channel!;
@@ -1483,10 +1859,10 @@ describe('OfflineSupportApi', () => {
             execute: false,
             reads: [
               {
-                last_read: lastReadDate.toString(),
+                last_read: lastReadDate,
                 last_read_message_id: lastReadMessageId,
                 unread_messages: 0,
-                user: client.user,
+                user: { ...client.user, blocked_user_ids: [] },
               },
             ],
           });
@@ -1498,23 +1874,25 @@ describe('OfflineSupportApi', () => {
           expect(result).toEqual(['DELETE * FROM messages', 'UPDATE * IN reads']);
         });
 
-        it('persists the local unread count on truncate for a read-events-disabled channel when isLocalUnreadCountEnabled is on', async () => {
-          client.options.isLocalUnreadCountEnabled = true;
+        it('persists the local unread count on truncate for a read-events-disabled channel when localUnreadCountEnabled is on', async () => {
+          client.config.setConfig('channel', {
+            readEvents: { localUnreadCountEnabled: true },
+          });
           // read-events-disabled channel with no own-read row (the server omits it for these channels),
           // so this also exercises the defensive last_read fallback.
           const localChannelResponse = generateChannel({
             channel: { id: 'local-truncate', own_capabilities: [], type: 'messaging' },
           } as unknown as ChannelAPIResponse);
-          client.hydrateActiveChannels([localChannelResponse]);
+          client.hydrateChannels([localChannelResponse]);
           const event = {
             ...truncatedEvent,
             channel: {
               cid: localChannelResponse.channel.cid,
-              truncated_at: '2025-05-20T10:00:00Z',
+              truncated_at: convertDateToTimestamp('2025-05-20T10:00:00Z'),
             } as ChannelResponse,
           };
           vi.spyOn(
-            client.activeChannels[localChannelResponse.channel.cid],
+            client.channelManager.get(localChannelResponse.channel.cid),
             'countUnread',
           ).mockReturnValue(3);
 
@@ -1524,12 +1902,17 @@ describe('OfflineSupportApi', () => {
           expect(offlineDb.upsertReads).toHaveBeenCalledWith(
             expect.objectContaining({
               cid: localChannelResponse.channel.cid,
-              reads: [expect.objectContaining({ unread_messages: 3, user: client.user })],
+              reads: [
+                expect.objectContaining({
+                  unread_messages: 3,
+                  user: { ...client.user, blocked_user_ids: [] },
+                }),
+              ],
             }),
           );
         });
 
-        it('does not persist read state on truncate for a read-events-disabled channel when isLocalUnreadCountEnabled is off', async () => {
+        it('does not persist read state on truncate for a read-events-disabled channel when localUnreadCountEnabled is off', async () => {
           const localChannelResponse = generateChannel({
             channel: {
               id: 'local-truncate-off',
@@ -1537,12 +1920,12 @@ describe('OfflineSupportApi', () => {
               type: 'messaging',
             },
           } as ChannelAPIResponse);
-          client.hydrateActiveChannels([localChannelResponse]);
+          client.hydrateChannels([localChannelResponse]);
           const event = {
             ...truncatedEvent,
             channel: {
               cid: localChannelResponse.channel.cid,
-              truncated_at: '2025-05-20T10:00:00Z',
+              truncated_at: convertDateToTimestamp('2025-05-20T10:00:00Z'),
             } as ChannelResponse,
           };
 
@@ -1854,12 +2237,14 @@ describe('OfflineSupportApi', () => {
         });
 
         describe('message.read_locally', () => {
-          it('routes to handleRead for a read-events-disabled channel when isLocalUnreadCountEnabled is on', async () => {
-            client.options.isLocalUnreadCountEnabled = true;
+          it('routes to handleRead for a read-events-disabled channel when localUnreadCountEnabled is on', async () => {
+            client.config.setConfig('channel', {
+              readEvents: { localUnreadCountEnabled: true },
+            });
             const localChannelResponse = generateChannel({
               channel: { id: 'local-read', own_capabilities: [], type: 'messaging' },
             } as unknown as ChannelAPIResponse);
-            client.hydrateActiveChannels([localChannelResponse]);
+            client.hydrateChannels([localChannelResponse]);
             const event = {
               ...dummyEvent,
               type: 'message.read_locally',
@@ -1877,7 +2262,9 @@ describe('OfflineSupportApi', () => {
           });
 
           it('is a no-op when the channel has read events enabled', async () => {
-            client.options.isLocalUnreadCountEnabled = true;
+            client.config.setConfig('channel', {
+              readEvents: { localUnreadCountEnabled: true },
+            });
             const readEventsResponse = generateChannel({
               channel: {
                 id: 'read-events-on',
@@ -1885,7 +2272,7 @@ describe('OfflineSupportApi', () => {
                 type: 'messaging',
               },
             } as ChannelAPIResponse);
-            client.hydrateActiveChannels([readEventsResponse]);
+            client.hydrateChannels([readEventsResponse]);
             const event = {
               ...dummyEvent,
               type: 'message.read_locally',
@@ -1898,11 +2285,11 @@ describe('OfflineSupportApi', () => {
             expect(result).toEqual([]);
           });
 
-          it('is a no-op when isLocalUnreadCountEnabled is off', async () => {
+          it('is a no-op when localUnreadCountEnabled is off', async () => {
             const localChannelResponse = generateChannel({
               channel: { id: 'local-read-off', own_capabilities: [], type: 'messaging' },
             } as ChannelAPIResponse);
-            client.hydrateActiveChannels([localChannelResponse]);
+            client.hydrateChannels([localChannelResponse]);
             const event = {
               ...dummyEvent,
               type: 'message.read_locally',
@@ -1953,19 +2340,34 @@ describe('OfflineSupportApi', () => {
           offlineDb,
         );
 
-        expect(
-          shouldSkipQueueingTask({ response: { data: { code: 4 } } } as AxiosError),
-        ).toBe(true);
+        // The offline replay path surfaces a `StreamAPIError`, which exposes the Stream error code
+        // at the top-level `code` (copied from `response.data.code` by the api-client) alongside a
+        // `response`. `shouldSkipQueueingTask` is `!isEphemeral`, so a task is skipped only when the
+        // server responded with a NON-retryable code; retryable codes and pure network/connection
+        // failures (no `response`) are kept in the queue for a later retry.
+        const serverError = (code: number) =>
+          ({ code, response: {} }) as unknown as AxiosError;
 
-        expect(
-          shouldSkipQueueingTask({ response: { data: { code: 17 } } } as AxiosError),
-        ).toBe(true);
+        // Retryable server codes → ephemeral → keep queued (do NOT skip).
+        expect(shouldSkipQueueingTask(serverError(9))).toBe(false); // RateLimitError
+        expect(shouldSkipQueueingTask(serverError(23))).toBe(false); // RequestTimeoutError
 
-        expect(
-          shouldSkipQueueingTask({ response: { data: { code: 999 } } } as AxiosError),
-        ).toBe(false);
+        // Non-retryable server codes → skip (a retry would never succeed).
+        expect(shouldSkipQueueingTask(serverError(4))).toBe(true); // InputError
+        expect(shouldSkipQueueingTask(serverError(17))).toBe(true); // NotAllowedError
 
+        // Unknown server code (not in APIErrorCodes) → treated as non-retryable → skip.
+        expect(shouldSkipQueueingTask(serverError(999))).toBe(true);
+
+        // Network/connection failure — server never responded → ephemeral → keep queued.
         expect(shouldSkipQueueingTask({} as AxiosError)).toBe(false);
+
+        // Caller cancelled via `StreamRequestOptions.signal`. Also has no `response`, but it is a
+        // deliberate rejection rather than a transient failure, so it is skipped — queueing it
+        // would replay on reconnect the very request the caller aborted.
+        expect(shouldSkipQueueingTask(new CanceledError('canceled') as AxiosError)).toBe(
+          true,
+        );
       });
 
       describe('queueTask', () => {
@@ -2024,7 +2426,7 @@ describe('OfflineSupportApi', () => {
           const error = {
             isAxiosError: true,
             response: { data: { code: 999 } },
-          } as AxiosError<APIErrorResponse>;
+          } as AxiosError<APIError>;
 
           shouldSkipSpy.mockReturnValue(false);
           executeTaskSpy.mockRejectedValue(error);
@@ -2039,7 +2441,7 @@ describe('OfflineSupportApi', () => {
           const error = {
             isAxiosError: true,
             response: { data: { code: 4 } },
-          } as AxiosError<APIErrorResponse>;
+          } as AxiosError<APIError>;
 
           shouldSkipSpy.mockReturnValue(true);
           executeTaskSpy.mockRejectedValue(error);
@@ -2061,18 +2463,22 @@ describe('OfflineSupportApi', () => {
           expect(addPendingTaskSpy).toHaveBeenCalledWith(task);
         });
 
-        it('adds replayable update-message tasks as-is', async () => {
+        it('adds replayable update-message tasks as-is when nothing is queued for the message', async () => {
           const task = generatePendingTask('update-message') as PendingTask;
           const addPendingTaskSpy = vi.spyOn(offlineDb, 'addPendingTask');
-          const getPendingTasksSpy = vi.spyOn(offlineDb, 'getPendingTasks');
+          const getPendingTasksSpy = vi
+            .spyOn(offlineDb, 'getPendingTasks')
+            .mockResolvedValue([]);
+          const updatePendingTaskSpy = vi.spyOn(offlineDb, 'updatePendingTask');
 
           await offlineDb.handleAddPendingTask({ task });
 
+          expect(getPendingTasksSpy).toHaveBeenCalled();
           expect(addPendingTaskSpy).toHaveBeenCalledWith(task);
-          expect(getPendingTasksSpy).not.toHaveBeenCalled();
+          expect(updatePendingTaskSpy).not.toHaveBeenCalled();
         });
 
-        it('does not persist non-replayable update-message tasks', async () => {
+        it('does not persist a non-replayable update-message task with nothing to fold into', async () => {
           const task = generatePendingTask(
             'update-message',
             1,
@@ -2084,19 +2490,21 @@ describe('OfflineSupportApi', () => {
               },
             },
           ) as PendingTask;
+          vi.spyOn(offlineDb, 'getPendingTasks').mockResolvedValue([]);
           const addPendingTaskSpy = vi.spyOn(offlineDb, 'addPendingTask');
-          const getPendingTasksSpy = vi.spyOn(offlineDb, 'getPendingTasks');
           const updatePendingTaskSpy = vi.spyOn(offlineDb, 'updatePendingTask');
 
           await offlineDb.handleAddPendingTask({ task });
 
           expect(addPendingTaskSpy).not.toHaveBeenCalled();
-          expect(getPendingTasksSpy).not.toHaveBeenCalled();
           expect(updatePendingTaskSpy).not.toHaveBeenCalled();
         });
 
-        it('rewrites a queued send-message task for offline failed update-message tasks', async () => {
-          client.wsConnection = { isHealthy: false } as StableWSConnection;
+        // The replayability guard protects a STANDALONE `update-message` replay, which would send a
+        // `file://` path to the server verbatim. A fold issues no update at all - it rewrites a queued
+        // send that already carries those same local URIs - so running the guard first discarded edits
+        // that were safe.
+        it('folds a non-replayable edit into a queued send-message task rather than dropping it', async () => {
           const task = generatePendingTask(
             'update-message',
             1,
@@ -2104,20 +2512,68 @@ describe('OfflineSupportApi', () => {
             {
               message: {
                 id: 'msg-123',
-                status: 'failed',
-                text: 'edited',
-                message_text_updated_at: '2026-04-01T20:48:43.886269Z',
+                attachments: [{ type: 'image', image_url: 'file://local-image.jpg' }],
+                text: 'edited caption',
               },
             },
           ) as PendingTask;
-          const pendingSendOptions = { skip_enrich_url: true };
           vi.spyOn(offlineDb, 'getPendingTasks').mockResolvedValue([
             {
               id: 7,
               messageId: 'msg-123',
               payload: [
-                { id: 'msg-123', status: 'sending', text: 'original' },
-                pendingSendOptions,
+                {
+                  message: {
+                    id: 'msg-123',
+                    attachments: [{ type: 'image', image_url: 'file://local-image.jpg' }],
+                    text: 'original caption',
+                  },
+                },
+              ],
+              type: 'send-message',
+            } as PendingTask,
+          ]);
+          const addPendingTaskSpy = vi.spyOn(offlineDb, 'addPendingTask');
+          const updatePendingTaskSpy = vi.spyOn(offlineDb, 'updatePendingTask');
+
+          await offlineDb.handleAddPendingTask({ task });
+
+          expect(addPendingTaskSpy).not.toHaveBeenCalled();
+          expect(updatePendingTaskSpy).toHaveBeenCalledWith({
+            id: 7,
+            task: expect.objectContaining({ id: 7, type: 'send-message' }),
+          });
+          expect(updatePendingTaskSpy.mock.calls[0][0].task.payload[0].message.text).toBe(
+            'edited caption',
+          );
+        });
+
+        // Both payloads reaching the queue have been through `localMessageToNewMessagePayload`, so
+        // `mentioned_users` is already a list of ids. Normalizing a second time inside the fold would
+        // map `.id` over those strings and write `[undefined]` - silently dropping the mentions from a
+        // message that has not been sent yet.
+        it('folds the edit without re-normalizing an already-flattened payload', async () => {
+          const task = generatePendingTask(
+            'update-message',
+            1,
+            {},
+            {
+              message: {
+                id: 'msg-123',
+                mentioned_users: ['alice'],
+                text: 'edited @alice',
+              },
+            },
+          ) as PendingTask;
+          vi.spyOn(offlineDb, 'getPendingTasks').mockResolvedValue([
+            {
+              id: 7,
+              messageId: 'msg-123',
+              payload: [
+                {
+                  message: { id: 'msg-123', mentioned_users: [], text: 'original' },
+                  skip_enrich_url: true,
+                },
               ],
               type: 'send-message',
             } as PendingTask,
@@ -2135,42 +2591,32 @@ describe('OfflineSupportApi', () => {
               type: 'send-message',
             }),
           });
-          expect(updatePendingTaskSpy.mock.calls[0][0].task.payload[0]).toMatchObject({
-            id: 'msg-123',
-            status: 'sending',
-            text: 'edited',
+          // `skip_enrich_url` survives: the fold rewrites the message, not the send request.
+          expect(updatePendingTaskSpy.mock.calls[0][0].task.payload[0]).toEqual({
+            message: {
+              id: 'msg-123',
+              mentioned_users: ['alice'],
+              text: 'edited @alice',
+            },
+            skip_enrich_url: true,
           });
-          expect(
-            updatePendingTaskSpy.mock.calls[0][0].task.payload[0],
-          ).not.toHaveProperty('message_text_updated_at');
-          expect(updatePendingTaskSpy.mock.calls[0][0].task.payload[1]).toBe(
-            pendingSendOptions,
-          );
           expect(addPendingTaskSpy).not.toHaveBeenCalled();
         });
 
-        it('re-adds the rewritten send-message task if the pending task does not have an id', async () => {
-          client.wsConnection = { isHealthy: false } as StableWSConnection;
+        // A task read back from the DB always carries its row id, so this is unreachable in practice.
+        // It is asserted because the alternative - re-adding the rewritten task - would queue a SECOND
+        // send for a message that already has one.
+        it('queues the edit rather than duplicating a send task that has no row to rewrite', async () => {
           const task = generatePendingTask(
             'update-message',
             1,
             {},
-            {
-              message: {
-                id: 'msg-123',
-                status: 'failed',
-                text: 'edited',
-                message_text_updated_at: '2026-04-01T20:48:43.886269Z',
-              },
-            },
+            { message: { id: 'msg-123', text: 'edited' } },
           ) as PendingTask;
           vi.spyOn(offlineDb, 'getPendingTasks').mockResolvedValue([
             {
               messageId: 'msg-123',
-              payload: [
-                { id: 'msg-123', status: 'sending', text: 'original' },
-                undefined,
-              ],
+              payload: [{ message: { id: 'msg-123', text: 'original' } }],
               type: 'send-message',
             } as PendingTask,
           ]);
@@ -2180,15 +2626,10 @@ describe('OfflineSupportApi', () => {
           await offlineDb.handleAddPendingTask({ task });
 
           expect(updatePendingTaskSpy).not.toHaveBeenCalled();
-          expect(addPendingTaskSpy).toHaveBeenCalledWith({
-            messageId: 'msg-123',
-            payload: [{ id: 'msg-123', status: 'sending', text: 'edited' }, undefined],
-            type: 'send-message',
-            id: undefined,
-          });
+          expect(addPendingTaskSpy).toHaveBeenCalledWith(task);
         });
 
-        it('does nothing for failed offline update-message tasks without a matching pending send task', async () => {
+        it('queues the edit on its own when the message has no pending send-message task', async () => {
           client.wsConnection = { isHealthy: false } as StableWSConnection;
           const task = generatePendingTask(
             'update-message',
@@ -2197,7 +2638,6 @@ describe('OfflineSupportApi', () => {
             {
               message: {
                 id: 'msg-123',
-                status: 'failed',
                 text: 'edited',
               },
             },
@@ -2212,74 +2652,274 @@ describe('OfflineSupportApi', () => {
 
           await offlineDb.handleAddPendingTask({ task });
 
-          expect(addPendingTaskSpy).not.toHaveBeenCalled();
+          expect(addPendingTaskSpy).toHaveBeenCalledWith(task);
           expect(updatePendingTaskSpy).not.toHaveBeenCalled();
+        });
+
+        // The regression this guards: a task payload is built by `localMessageToNewMessagePayload`,
+        // which strips `status`. Keying the fold on the payload's status meant it never fired outside
+        // of hand-written tests, and a replay sent the original text and then edited it.
+        it('folds the edit into a queued send-message task whose payload carries no status', async () => {
+          const task = generatePendingTask(
+            'update-message',
+            1,
+            {},
+            { message: { id: 'msg-123', text: 'edited' } },
+          ) as PendingTask;
+          vi.spyOn(offlineDb, 'getPendingTasks').mockResolvedValue([
+            {
+              id: 7,
+              messageId: 'msg-123',
+              payload: [
+                { message: { id: 'msg-123', text: 'original' }, skip_enrich_url: true },
+              ],
+              type: 'send-message',
+            } as PendingTask,
+          ]);
+          const addPendingTaskSpy = vi.spyOn(offlineDb, 'addPendingTask');
+          const updatePendingTaskSpy = vi.spyOn(offlineDb, 'updatePendingTask');
+
+          await offlineDb.handleAddPendingTask({ task });
+
+          expect(addPendingTaskSpy).not.toHaveBeenCalled();
+          expect(updatePendingTaskSpy).toHaveBeenCalledWith({
+            id: 7,
+            task: expect.objectContaining({
+              id: 7,
+              type: 'send-message',
+              payload: [
+                { message: { id: 'msg-123', text: 'edited' }, skip_enrich_url: true },
+              ],
+            }),
+          });
+        });
+
+        // The same fold, driven through the production chain rather than a hand-built payload: the
+        // full edit's default request queues the task, and `client.updateMessage` is only the wire.
+        it('folds an edit made through messageOperations.update into the queued send-message task', async () => {
+          client.setOfflineDBApi(offlineDb);
+          client.wsConnection = { isHealthy: false } as StableWSConnection;
+          // The wire call, stubbed so neither the queued attempt nor the direct fallback reaches the
+          // network.
+          vi.spyOn(client, 'updateMessage').mockRejectedValue(new Error('offline'));
+          const editedMessage = {
+            id: 'msg-123',
+            cid: 'messaging:channel123',
+            created_at: convertDateToTimestamp(new Date()),
+            pinned_at: null,
+            status: 'failed',
+            text: 'A edited',
+            type: 'regular',
+            updated_at: convertDateToTimestamp(new Date()),
+          } as unknown as LocalMessage;
+          vi.spyOn(offlineDb, 'getPendingTasks').mockResolvedValue([
+            {
+              id: 7,
+              messageId: 'msg-123',
+              payload: [{ message: { id: 'msg-123', text: 'A' } }],
+              type: 'send-message',
+            } as PendingTask,
+          ]);
+          const addPendingTaskSpy = vi.spyOn(offlineDb, 'addPendingTask');
+          const updatePendingTaskSpy = vi.spyOn(offlineDb, 'updatePendingTask');
+
+          await client
+            .channel('messaging', 'channel123')
+            .messageOperations.update({ localMessage: editedMessage })
+            .catch(() => undefined);
+
+          expect(addPendingTaskSpy).not.toHaveBeenCalled();
+          expect(updatePendingTaskSpy).toHaveBeenCalledWith({
+            id: 7,
+            task: expect.objectContaining({
+              id: 7,
+              type: 'send-message',
+              payload: [
+                { message: expect.objectContaining({ id: 'msg-123', text: 'A edited' }) },
+              ],
+            }),
+          });
         });
       });
 
       describe('executeTask', () => {
         let mockChannel: Channel;
-        let _updateMessageSpy: MockInstance;
-        let _deleteMessageSpy: MockInstance;
+        let updateMessageSpy: MockInstance;
+        let deleteMessageSpy: MockInstance;
+        let sendReactionSpy: MockInstance;
+        let deleteReactionSpy: MockInstance;
         let clientChannelSpy: MockInstance;
 
         beforeEach(() => {
           mockChannel = {
             initialized: true,
             watch: vi.fn(),
-            _sendMessage: vi.fn(),
-            _sendReaction: vi.fn(),
-            _deleteReaction: vi.fn(),
+            sendMessage: vi.fn(),
             _createDraft: vi.fn(),
             _deleteDraft: vi.fn(),
-            state: { addMessageSorted: vi.fn() },
+            messagePaginator: { trackLatestMessage: vi.fn() },
           } as unknown as Channel;
 
-          _updateMessageSpy = vi
-            .spyOn(client, '_updateMessage')
+          updateMessageSpy = vi
+            .spyOn(client, 'updateMessage')
             .mockImplementation(vi.fn());
-          _deleteMessageSpy = vi
-            .spyOn(client, '_deleteMessage')
+          deleteMessageSpy = vi
+            .spyOn(client, 'deleteMessage')
             .mockImplementation(vi.fn());
-          clientChannelSpy = vi.spyOn(client, 'channel').mockReturnValue(mockChannel);
+          sendReactionSpy = vi.spyOn(client, 'sendReaction').mockImplementation(vi.fn());
+          deleteReactionSpy = vi
+            .spyOn(client, 'deleteReaction')
+            .mockImplementation(vi.fn());
+          clientChannelSpy = vi
+            .spyOn(client.channelManager, 'ensure')
+            .mockReturnValue(mockChannel);
         });
 
         afterEach(() => {
           vi.resetAllMocks();
         });
 
-        it('should call _updateMessage for update-message task', async () => {
+        it('should call updateMessage for update-message task', async () => {
           const task = generatePendingTask('update-message') as PendingTask;
 
           await offlineDb['executeTask']({ task });
 
-          expect(_updateMessageSpy).toHaveBeenCalledWith(...task.payload);
+          expect(updateMessageSpy).toHaveBeenCalledWith(...task.payload);
           expect(clientChannelSpy).not.toHaveBeenCalled();
         });
 
-        it('should call _deleteMessage for delete-message task', async () => {
+        it('should call deleteMessage for delete-message task', async () => {
           const task = generatePendingTask('delete-message') as PendingTask;
 
           await offlineDb['executeTask']({ task });
 
-          expect(_deleteMessageSpy).toHaveBeenCalledWith(...task.payload);
+          expect(deleteMessageSpy).toHaveBeenCalledWith(...task.payload);
         });
 
-        it('should call _sendReaction for send-reaction task', async () => {
+        it('should call client.sendReaction for send-reaction task', async () => {
           const task = generatePendingTask('send-reaction') as PendingTask;
 
           await offlineDb['executeTask']({ task });
 
-          expect(clientChannelSpy).toHaveBeenCalledWith(task.channelType, task.channelId);
-          expect(mockChannel._sendReaction).toHaveBeenCalledWith(...task.payload);
+          // A reaction is message-scoped, so its replay needs no channel instance.
+          expect(clientChannelSpy).not.toHaveBeenCalled();
+          expect(sendReactionSpy).toHaveBeenCalledWith(...task.payload);
         });
 
-        it('should call _deleteReaction for delete-reaction task', async () => {
+        // A task payload is the replayed method's argument list, so it carries that method's
+        // trailing `requestOptions` too.
+        it('forwards requestOptions queued in the payload on replay', async () => {
+          const controller = new AbortController();
+          const task = generatePendingTask('send-reaction') as PendingTask;
+          const taskWithOptions = {
+            ...task,
+            payload: [task.payload[0], task.payload[1], { signal: controller.signal }],
+          } as PendingTask;
+
+          await offlineDb['executeTask']({ task: taskWithOptions });
+
+          expect(sendReactionSpy).toHaveBeenCalledWith(task.payload[0], task.payload[1], {
+            signal: controller.signal,
+          });
+        });
+
+        // An omitted middle argument - a soft delete has no `request` - comes back from JSON as `null`,
+        // and only `undefined` stands in for an optional parameter.
+        it('replays a persisted null argument as undefined', async () => {
+          const task = generatePendingTask('delete-message') as PendingTask;
+          const persisted = JSON.parse(
+            JSON.stringify({ ...task, payload: [task.payload[0], undefined, undefined] }),
+          ) as PendingTask;
+          expect(persisted.payload).toEqual([task.payload[0], null, null]);
+
+          await offlineDb['executeTask']({ task: persisted });
+
+          expect(deleteMessageSpy).toHaveBeenCalledWith(
+            task.payload[0],
+            undefined,
+            undefined,
+          );
+        });
+
+        // A task that reached the pending-tasks table was serialized, so its signal revives as
+        // an inert `{}`. Replay must still go through - ApiClient is what drops the dead signal.
+        it('replays a task whose persisted signal did not survive serialization', async () => {
+          const task = generatePendingTask('send-reaction') as PendingTask;
+          const persisted = JSON.parse(
+            JSON.stringify({
+              ...task,
+              payload: [
+                task.payload[0],
+                task.payload[1],
+                { signal: new AbortController().signal },
+              ],
+            }),
+          ) as PendingTask;
+
+          await offlineDb['executeTask']({ task: persisted });
+
+          expect(sendReactionSpy).toHaveBeenCalledWith(
+            persisted.payload[0],
+            persisted.payload[1],
+            { signal: {} },
+          );
+        });
+
+        // Cancelling is not a way to shed a task: an aborted request is a definitive rejection, so
+        // `queueTask` must not stash it for replay on reconnect.
+        it('does not queue a task whose request the caller cancelled', async () => {
+          const handleAddPendingTaskSpy = vi
+            .spyOn(offlineDb as any, 'handleAddPendingTask')
+            .mockResolvedValue(undefined);
+          (client as any).wsConnection = { isHealthy: true };
+          sendReactionSpy.mockRejectedValue(new CanceledError('canceled'));
+          const task = generatePendingTask('send-reaction') as PendingTask;
+
+          await expect(offlineDb.queueTask({ task })).rejects.toThrow(CanceledError);
+
+          expect(handleAddPendingTaskSpy).not.toHaveBeenCalled();
+        });
+
+        // Contrast: a genuine network failure is transient, so it IS queued.
+        it('queues a task that failed on a network error', async () => {
+          const handleAddPendingTaskSpy = vi
+            .spyOn(offlineDb as any, 'handleAddPendingTask')
+            .mockResolvedValue(undefined);
+          (client as any).wsConnection = { isHealthy: true };
+          sendReactionSpy.mockRejectedValue(new Error('network down'));
+          const task = generatePendingTask('send-reaction') as PendingTask;
+
+          await expect(offlineDb.queueTask({ task })).rejects.toThrow('network down');
+
+          expect(handleAddPendingTaskSpy).toHaveBeenCalledTimes(1);
+        });
+
+        it('should call client.deleteReaction for delete-reaction task', async () => {
           const task = generatePendingTask('delete-reaction') as PendingTask;
 
           await offlineDb['executeTask']({ task });
 
-          expect(mockChannel._deleteReaction).toHaveBeenCalledWith(...task.payload);
+          expect(deleteReactionSpy).toHaveBeenCalledWith(...task.payload);
+        });
+
+        // `deleteReaction` has no request of its own, so its `requestOptions` sits behind an unused
+        // `_request` slot. That slot persists as `null` and has to come back as `undefined`, with
+        // the options still in third position.
+        it('replays a persisted delete-reaction with requestOptions behind the empty request slot', async () => {
+          const task = generatePendingTask('delete-reaction') as PendingTask;
+          const persisted = JSON.parse(
+            JSON.stringify({
+              ...task,
+              payload: [task.payload[0], undefined, { timeout: 5000 }],
+            }),
+          ) as PendingTask;
+          expect(persisted.payload).toEqual([task.payload[0], null, { timeout: 5000 }]);
+
+          await offlineDb['executeTask']({ task: persisted });
+
+          expect(deleteReactionSpy).toHaveBeenCalledWith(task.payload[0], undefined, {
+            timeout: 5000,
+          });
         });
 
         it('should call _createDraft for create-reaction task', async () => {
@@ -2298,20 +2938,19 @@ describe('OfflineSupportApi', () => {
           expect(mockChannel._deleteDraft).toHaveBeenCalledWith(...task.payload);
         });
 
-        it('should call _sendMessage and addMessageSorted if isPendingTask is true', async () => {
+        it('should call sendMessage and track the latest message if isPendingTask is true', async () => {
           const task = generatePendingTask('send-message') as PendingTask;
 
           const messageResponse = { message: { id: 'msg1', text: 'hello' } };
           // no idea why this complains, the test works just fine
           // @ts-ignore
-          mockChannel._sendMessage.mockResolvedValue(messageResponse);
+          mockChannel.sendMessage.mockResolvedValue(messageResponse);
 
           await offlineDb['executeTask']({ task }, true);
 
-          expect(mockChannel._sendMessage).toHaveBeenCalledWith(...task.payload);
-          expect(mockChannel.state.addMessageSorted).toHaveBeenCalledWith(
-            messageResponse.message,
-            true,
+          expect(mockChannel.sendMessage).toHaveBeenCalledWith(...task.payload);
+          expect(mockChannel.messagePaginator.trackLatestMessage).toHaveBeenCalledWith(
+            expect.objectContaining({ id: 'msg1' }),
           );
         });
 
@@ -2341,7 +2980,7 @@ describe('OfflineSupportApi', () => {
         const skippableError = {
           isAxiosError: true,
           response: { data: { code: 4 } },
-        } as AxiosError<APIErrorResponse>;
+        } as AxiosError<APIError>;
 
         beforeEach(() => {
           getPendingTasksSpy = vi
@@ -2395,6 +3034,20 @@ describe('OfflineSupportApi', () => {
           expect(deletePendingTaskSpy).toHaveBeenCalledWith({ id: 2 });
         });
 
+        it('hands a rejected replay to its operation', async () => {
+          const onReplayRejected = vi.spyOn(
+            QUEUEABLE_OPERATIONS['send-message'],
+            'onReplayRejected',
+          );
+          executeTaskSpy.mockRejectedValueOnce(skippableError);
+
+          await offlineDb.executePendingTasks();
+
+          expect(onReplayRejected).toHaveBeenCalledWith(
+            expect.objectContaining({ error: skippableError, task: task1 }),
+          );
+        });
+
         it('should skip tasks with no id', async () => {
           const taskWithoutId = generatePendingTask('delete-reaction', 1, {
             id: undefined,
@@ -2420,7 +3073,10 @@ describe('OfflineDBSyncManager', () => {
 
   beforeEach(async () => {
     client = await getClientWithUser();
-    client.wsConnection = { isHealthy: false } as StableWSConnection;
+    // The real wrapper, driven through its store. It used to be swapped for `{ isOnline }`, which
+    // was enough while the manager read a client event; it now subscribes to
+    // `client.wsConnection.state`, so it needs the store that fixture had no room for.
+    client.wsConnection._setStatus({ isHealthy: false });
     offlineDb = new MockOfflineDB({ client });
     client.setOfflineDBApi(offlineDb);
     syncManager = new OfflineDBSyncManager({ client, offlineDb });
@@ -2469,8 +3125,7 @@ describe('OfflineDBSyncManager', () => {
     });
 
     it('does not call sync if the ws connection is not healthy', async () => {
-      // @ts-ignore
-      syncManager.client.wsConnection = { isHealthy: false };
+      client.wsConnection._setStatus({ isHealthy: false });
 
       await syncManager.init();
 
@@ -2480,49 +3135,62 @@ describe('OfflineDBSyncManager', () => {
 
     it('unsubscribes previous listener if already present', async () => {
       const unsubscribeFn = vi.fn();
-      syncManager.connectionChangedListener = { unsubscribe: unsubscribeFn };
+      syncManager.connectionChangedListener = unsubscribeFn;
 
       await syncManager.init();
 
       expect(unsubscribeFn).toHaveBeenCalled();
     });
 
-    it('calls sync when connection.changed triggers online=true', async () => {
-      client.wsConnection = { isHealthy: true } as StableWSConnection;
+    it('calls sync when the socket store reports it is back online', async () => {
+      // Driven by `client.wsConnection.state` rather than an event: the store is written on every
+      // transition, including the deliberate close that mobile backgrounding uses, which the event
+      // never announced.
+      client.wsConnection._setStatus({ isHealthy: true, connectionId: 'conn' });
 
       await syncManager.init();
 
-      client.dispatchEvent({
-        type: 'connection.changed',
-        online: true,
-      });
+      client.wsConnection._setStatus({ isHealthy: false });
+      client.wsConnection._setStatus({ isHealthy: true, connectionId: 'conn-2' });
 
-      expect(syncAndExecutePendingTasksSpy).toHaveBeenCalledTimes(2);
+      await vi.waitFor(() =>
+        expect(syncAndExecutePendingTasksSpy).toHaveBeenCalledTimes(2),
+      );
       expect(invokeSyncStatusListenersSpy).toHaveBeenCalledWith(true);
     });
 
-    it('sets sync status to false on connection.changed with online=false', async () => {
+    it('sets sync status to false when the socket store reports a drop', async () => {
+      client.wsConnection._setStatus({ isHealthy: true, connectionId: 'conn' });
       await syncManager.init();
+      syncAndExecutePendingTasksSpy.mockClear();
 
-      client.dispatchEvent({
-        type: 'connection.changed',
-        online: false,
-      });
+      client.wsConnection._setStatus({ isHealthy: false });
 
+      await vi.waitFor(() =>
+        expect(invokeSyncStatusListenersSpy).toHaveBeenCalledWith(false),
+      );
       expect(syncAndExecutePendingTasksSpy).not.toHaveBeenCalled();
-      expect(invokeSyncStatusListenersSpy).toHaveBeenCalledWith(false);
     });
 
     it('handles errors in init gracefully', async () => {
-      client.wsConnection = { isHealthy: true } as StableWSConnection;
+      client.wsConnection._setStatus({ isHealthy: true, connectionId: 'conn' });
 
       const error = new Error('Sync failed');
       syncAndExecutePendingTasksSpy.mockRejectedValueOnce(error);
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      const sinkSpy = vi.fn();
+      chatLoggerSystem.configureLoggers({
+        default: { sink: sinkSpy, level: 'trace' },
+      });
 
       await syncManager.init();
 
-      expect(consoleSpy).toHaveBeenCalledWith('Error in DBSyncManager.init: ', error);
+      expect(sinkSpy).toHaveBeenCalledWith(
+        'error',
+        expect.stringContaining('Failed to initialize the offline DB sync manager.'),
+        { error },
+      );
+
+      chatLoggerSystem.restoreDefaults();
     });
   });
 
@@ -2532,23 +3200,23 @@ describe('OfflineDBSyncManager', () => {
       offlineDb.getPendingTasks.mockResolvedValue([]);
       offlineDb.getAllChannelCids.mockResolvedValue([]);
       offlineDb.resetDB.mockResolvedValue(undefined);
-      client.wsConnection = { isHealthy: true } as StableWSConnection;
+      client.wsConnection._setStatus({ isHealthy: true, connectionId: 'conn' });
     });
 
-    it('recovers syncStatus to true when executePendingTasks() rejects, and still runs sync()', async () => {
+    it('recovers isSynced to true when executePendingTasks() rejects, and still runs sync()', async () => {
       offlineDb.getPendingTasks.mockRejectedValue(
         new Error('missing userSyncStatus table'),
       );
 
       await syncManager.init();
 
-      expect(syncManager.syncStatus).toBe(true);
+      expect(syncManager.isSynced).toBe(true);
       // The two steps are isolated, so a failure in executePendingTasks() must not
       // prevent sync() from running (sync() reads channel cids first).
       expect(offlineDb.getAllChannelCids).toHaveBeenCalled();
     });
 
-    it('still registers the connection.changed listener and runs scheduled callbacks when the init sync throws', async () => {
+    it('still subscribes to the socket store and runs scheduled callbacks when the init sync throws', async () => {
       offlineDb.getPendingTasks.mockRejectedValue(new Error('db read failure'));
       const scheduledCallback = vi.fn().mockResolvedValue(undefined);
       syncManager.scheduleSyncStatusChangeCallback('channel-list', scheduledCallback);
@@ -2556,12 +3224,12 @@ describe('OfflineDBSyncManager', () => {
       await syncManager.init();
 
       expect(syncManager.connectionChangedListener).not.toBeNull();
-      expect(syncManager.syncStatus).toBe(true);
+      expect(syncManager.isSynced).toBe(true);
       expect(scheduledCallback).toHaveBeenCalledTimes(1);
       expect(syncManager['scheduledSyncStatusCallbacks'].size).toBe(0);
     });
 
-    it('recovers syncStatus to true when sync() re-throws via a failing resetDB()', async () => {
+    it('recovers isSynced to true when sync() re-throws via a failing resetDB()', async () => {
       offlineDb.getAllChannelCids.mockResolvedValue(['channel-1']);
       offlineDb.getLastSyncedAt.mockResolvedValue(new Date().toString());
       // Force sync() into its catch block, where the unguarded resetDB() itself
@@ -2572,32 +3240,32 @@ describe('OfflineDBSyncManager', () => {
       await syncManager.init();
 
       expect(offlineDb.resetDB).toHaveBeenCalled();
-      expect(syncManager.syncStatus).toBe(true);
+      expect(syncManager.isSynced).toBe(true);
     });
 
-    it('recovers syncStatus to true on reconnect even when the sync fails', async () => {
-      // Not connected at init time, so init() only registers the listener.
-      client.wsConnection = { isHealthy: false } as StableWSConnection;
+    it('recovers isSynced to true on reconnect even when the sync fails', async () => {
+      // Not connected at init time, so init() only subscribes.
+      client.wsConnection._setStatus({ isHealthy: false });
       offlineDb.getPendingTasks.mockRejectedValue(new Error('db failure on reconnect'));
 
       await syncManager.init();
 
-      expect(syncManager.syncStatus).toBe(false);
+      expect(syncManager.isSynced).toBe(false);
       expect(syncManager.connectionChangedListener).not.toBeNull();
 
-      client.dispatchEvent({ type: 'connection.changed', online: true });
+      client.wsConnection._setStatus({ isHealthy: true, connectionId: 'reconnected' });
 
-      // The listener is dispatched as a fire and forget, so poll until it settles.
-      await vi.waitFor(() => expect(syncManager.syncStatus).toBe(true));
+      // The subscription handler is async and nobody awaits it, so poll until it settles.
+      await vi.waitFor(() => expect(syncManager.isSynced).toBe(true));
     });
 
-    it('leaves the success path unchanged: syncStatus true, deferred callbacks run once, queue cleared', async () => {
+    it('leaves the success path unchanged: isSynced true, deferred callbacks run once, queue cleared', async () => {
       const scheduledCallback = vi.fn().mockResolvedValue(undefined);
       syncManager.scheduleSyncStatusChangeCallback('tag-1', scheduledCallback);
 
       await syncManager.init();
 
-      expect(syncManager.syncStatus).toBe(true);
+      expect(syncManager.isSynced).toBe(true);
       expect(scheduledCallback).toHaveBeenCalledTimes(1);
       expect(syncManager['scheduledSyncStatusCallbacks'].size).toBe(0);
       expect(offlineDb.resetDB).not.toHaveBeenCalled();
@@ -2674,7 +3342,7 @@ describe('OfflineDBSyncManager', () => {
     });
 
     describe('invokeSyncStatusListeners', () => {
-      it('updates syncStatus and notifies all listeners', async () => {
+      it('updates isSynced and notifies all listeners', async () => {
         const listener1 = vi.fn();
         const listener2 = vi.fn();
 
@@ -2685,7 +3353,7 @@ describe('OfflineDBSyncManager', () => {
 
         expect(listener1).toHaveBeenCalledWith(true);
         expect(listener2).toHaveBeenCalledWith(true);
-        expect(syncManager['syncStatus']).toBe(true);
+        expect(syncManager['isSynced']).toBe(true);
       });
 
       it('does not call scheduled callbacks, but calls listeners if status is false', async () => {
@@ -2738,7 +3406,7 @@ describe('OfflineDBSyncManager', () => {
         expect(order).toContain('cb2');
       });
 
-      it('keeps notifying other listeners and still sets syncStatus when a listener throws', async () => {
+      it('keeps notifying other listeners and still sets isSynced when a listener throws', async () => {
         const goodListener = vi.fn();
         syncManager.onSyncStatusChange(() => {
           throw new Error('listener boom');
@@ -2748,7 +3416,7 @@ describe('OfflineDBSyncManager', () => {
         await (syncManager as any).invokeSyncStatusListeners(true);
 
         expect(goodListener).toHaveBeenCalledWith(true);
-        expect(syncManager['syncStatus']).toBe(true);
+        expect(syncManager['isSynced']).toBe(true);
       });
 
       it('runs every scheduled callback and clears the queue even when one callback throws', async () => {
@@ -2787,7 +3455,7 @@ describe('OfflineDBSyncManager', () => {
       });
 
       // See issue #1816: syncAndExecutePendingTasks() must never throw, otherwise
-      // the subsequent invokeSyncStatusListeners(true) is skipped and syncStatus
+      // the subsequent invokeSyncStatusListeners(true) is skipped and isSynced
       // is stuck false, freezing all future channel queries.
       it('does not throw when executePendingTasks fails and still performs sync', async () => {
         const error = new Error('Failed to execute pending tasks');
@@ -2896,15 +3564,74 @@ describe('OfflineDBSyncManager', () => {
 
         await (syncManager as any).sync();
 
-        expect(syncApiSpy).toHaveBeenCalledWith(
-          ['channel-1'],
-          expect.stringMatching(
-            /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/, // ISO8601 regex, YYYY-MM-DDTHH:mm:ss.sssZ
-          ),
-        );
+        expect(syncApiSpy).toHaveBeenCalledWith({
+          channel_cids: ['channel-1'],
+          last_sync_at: expect.any(Date),
+        });
         expect(handleEventSpy).toHaveBeenCalledTimes(mockEvents.length);
         expect(executeSqlBatchSpy).toHaveBeenCalledWith(['query1', 'query2']);
         expect(upsertUserSyncStatusSpy).toHaveBeenCalled();
+      });
+
+      // `/sync` hands back the `WSEvent` union with the timestamps the API put on the wire: unix
+      // nanosecond integers. Nothing decodes them any more, which is the point — this suite pins
+      // the pass-through, and pins that consumers convert with `nsToMs`/`nsToDate` rather than
+      // handing a raw wire value to `new Date`. `new Date(1786219962651957000)` overflows the Date
+      // range, and the resulting `RangeError` used to be misread by the catch in `sync()` as the
+      // "too many events" API error, which answered with `resetDB()`.
+      describe('the events the sync API returns', () => {
+        const NANOS = 1786219962651957000;
+        const EXPECTED_MS = Math.floor(NANOS / 1000000);
+
+        const syncWithEvents = async (events: unknown[]) => {
+          const recentDate = new Date();
+          recentDate.setDate(recentDate.getDate() - 10);
+          getLastSyncedAtSpy.mockResolvedValueOnce(recentDate.toString());
+          syncApiSpy.mockResolvedValueOnce({ events });
+
+          await (syncManager as any).sync();
+
+          return handleEventSpy.mock.calls.map(([{ event }]) => event);
+        };
+
+        it('passes nanosecond timestamps through untouched, nested ones included', async () => {
+          const [event] = await syncWithEvents([
+            {
+              type: 'message.new',
+              cid: 'messaging:test',
+              created_at: NANOS,
+              message: { id: 'msg-1', created_at: NANOS, updated_at: NANOS },
+            },
+          ]);
+
+          expect(event.created_at).toBe(NANOS);
+          // The nested message is the part that actually gets written, so it matters just as much.
+          expect(event.message.created_at).toBe(NANOS);
+          expect(event.message.updated_at).toBe(NANOS);
+        });
+
+        it('yields timestamps a consumer can convert without overflowing Date', async () => {
+          const [event] = await syncWithEvents([
+            { type: 'message.new', created_at: NANOS },
+          ]);
+
+          // Handing the raw wire value to `new Date` is the call that threw `RangeError`; going
+          // through the conversion helpers is what every consumer must do instead.
+          expect(() => new Date(event.created_at).toISOString()).toThrow(RangeError);
+          expect(nsToMs(event.created_at)).toBe(EXPECTED_MS);
+          expect(nsToDate(event.created_at).toISOString()).toBe(
+            new Date(EXPECTED_MS).toISOString(),
+          );
+        });
+
+        it('passes an event type the spec does not know through rather than dropping it', async () => {
+          const events = await syncWithEvents([
+            { type: 'some.unpublished.event', created_at: NANOS },
+          ]);
+
+          expect(events).toHaveLength(1);
+          expect(events[0].type).toBe('some.unpublished.event');
+        });
       });
 
       it('do not reset the DB if sync API throws an AxiosError with request timeout', async () => {
@@ -2916,7 +3643,7 @@ describe('OfflineDBSyncManager', () => {
           isAxiosError: true,
           code: 'ECONNABORTED',
           response: { data: { code: 4 } },
-        } as AxiosError<APIErrorResponse>;
+        } as AxiosError<APIError>;
 
         syncApiSpy.mockRejectedValueOnce(axiosError);
 
@@ -2933,7 +3660,7 @@ describe('OfflineDBSyncManager', () => {
 
         const axiosError = {
           response: { data: { code: 23 } },
-        } as AxiosError<APIErrorResponse>;
+        } as AxiosError<APIError>;
 
         syncApiSpy.mockRejectedValueOnce(axiosError);
 

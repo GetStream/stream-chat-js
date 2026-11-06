@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { MessageComposerMiddlewareState } from '../../../../../src';
-import { createUserDataInjectionMiddleware } from '../../../../../src/messageComposer/middleware/messageComposer/userDataInjection';
+import {
+  createUserDataInjectionMiddleware,
+  MessageComposerMiddlewareState,
+  USER_DATA_INJECTION_MIDDLEWARE_ID,
+} from '../../../../../src';
+import { convertDateToTimestamp } from '../../../test-utils/time';
 
 const setupMiddlewareApi = (initialState: MessageComposerMiddlewareState) => {
   return {
@@ -20,7 +24,7 @@ const stateSeed: MessageComposerMiddlewareState = {
   },
   localMessage: {
     attachments: [],
-    created_at: new Date(),
+    created_at: convertDateToTimestamp(new Date()),
     deleted_at: null,
     error: undefined,
     id: 'test-id',
@@ -31,7 +35,7 @@ const stateSeed: MessageComposerMiddlewareState = {
     status: 'sending',
     text: '',
     type: 'regular',
-    updated_at: new Date(),
+    updated_at: convertDateToTimestamp(new Date()),
   },
   sendOptions: {},
 };
@@ -46,6 +50,15 @@ const mockComposer = {
 } as any;
 
 describe('stream-io/message-composer-middleware/user-data-injection', () => {
+  it('is installed under the exported id', () => {
+    expect(USER_DATA_INJECTION_MIDDLEWARE_ID).toBe(
+      'stream-io/message-composer-middleware/user-data-injection',
+    );
+    expect(createUserDataInjectionMiddleware(mockComposer).id).toBe(
+      USER_DATA_INJECTION_MIDDLEWARE_ID,
+    );
+  });
+
   it('should complete if composer.client.user is defined', async () => {
     const middleware = createUserDataInjectionMiddleware(mockComposer);
     const middlewareApi = setupMiddlewareApi(stateSeed);
@@ -55,7 +68,7 @@ describe('stream-io/message-composer-middleware/user-data-injection', () => {
       ...stateSeed,
       localMessage: {
         ...stateSeed.localMessage,
-        user: mockComposer.client.user,
+        user: { ...mockComposer.client.user, blocked_user_ids: [] },
         user_id: mockComposer.client.user.id,
       },
     });
@@ -100,7 +113,7 @@ describe('stream-io/message-composer-middleware/user-data-injection', () => {
       ...stateSeed,
       localMessage: {
         ...stateSeed.localMessage,
-        user: mockComposer.client.user,
+        user: { ...mockComposer.client.user, blocked_user_ids: [] },
         user_id: mockComposer.client.user.id,
       },
     });

@@ -1,4 +1,4 @@
-import { StateStore } from '..';
+import { StateStore } from '@stream-io/state-store';
 import type {
   CustomMessageComposerData,
   CustomMessageData,
@@ -20,11 +20,15 @@ export type CustomDataManagerOptions = {
   message?: DraftMessage | LocalMessage;
 };
 
-const initState = (options: CustomDataManagerOptions): CustomDataManagerState => {
-  if (!options)
-    return { message: {} as CustomMessageData, custom: {} as CustomMessageComposerData };
-  return { message: {} as CustomMessageData, custom: {} as CustomMessageComposerData };
-};
+const restoreCustomMessageData = (
+  message?: DraftMessage | LocalMessage,
+): CustomMessageData => ({ ...message?.custom }) as CustomMessageData;
+
+const initState = (options?: CustomDataManagerOptions): CustomDataManagerState => ({
+  message: restoreCustomMessageData(options?.message),
+  // Composer-only data that is never sent, so there is nothing to restore.
+  custom: {} as CustomMessageComposerData,
+});
 
 export class CustomDataManager {
   composer: MessageComposer;
@@ -50,6 +54,15 @@ export class CustomDataManager {
 
   initState = ({ message }: { message?: DraftMessage | LocalMessage } = {}) => {
     this.state.next(initState({ composer: this.composer, message }));
+  };
+
+  /**
+   * Takes over `source`'s custom message data.
+   *
+   * @internal
+   */
+  takeOver = (source: CustomDataManager) => {
+    this.state.next({ ...source.state.getLatestValue() });
   };
 
   getSnapshot = (): CustomDataManagerSnapshot => this.state.getLatestValue();

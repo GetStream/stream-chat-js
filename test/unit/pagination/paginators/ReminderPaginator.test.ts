@@ -1,0 +1,157 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import type { ReminderResponse, StreamChat } from '../../../../src';
+import { ReminderPaginator } from '../../../../src/pagination/paginators/ReminderPaginator';
+import { getClientWithUser } from '../../test-utils/getClient';
+
+const makeReminder = (messageId: string, createdAt: string): ReminderResponse =>
+  ({
+    channel_cid: 'messaging:x',
+    created_at: createdAt,
+    updated_at: createdAt,
+    user_id: 'user',
+    message_id: messageId,
+  }) as unknown as ReminderResponse;
+
+const response = (
+  reminders: ReminderResponse[],
+  cursors: { next?: string; prev?: string } = {},
+) => ({ duration: '', reminders, ...cursors });
+
+describe('ReminderPaginator', () => {
+  let client: StreamChat;
+
+  beforeEach(() => {
+    client = getClientWithUser({ id: 'user' });
+  });
+
+  it('stores results in interval storage keyed by message_id', async () => {
+    const paginator = new ReminderPaginator(client, { pageSize: 2 });
+    vi.spyOn(client, 'queryReminders').mockResolvedValue(
+      response(
+        [
+          makeReminder('m1', '2020-01-01T00:00:00.000Z'),
+          makeReminder('m2', '2020-01-02T00:00:00.000Z'),
+        ],
+        { next: 'next-cursor' },
+      ),
+    );
+
+    await paginator.executeQuery({});
+
+    expect(paginator.items?.map((r) => r.message_id)).toEqual(['m1', 'm2']);
+    // interval storage: addressable by message_id + mirrored into the head window
+    expect(paginator.getItem('m1')?.message_id).toBe('m1');
+    expect(paginator.anchoredHeadItems.map((r) => r.message_id)).toEqual(['m1', 'm2']);
+    expect(paginator.hasMoreTail).toBe(true);
+    expect(paginator.cursor?.tailward).toBe('next-cursor');
+  });
+
+  it('appends forward pages and dedupes by message_id', async () => {
+    const paginator = new ReminderPaginator(client, { pageSize: 2 });
+    const spy = vi.spyOn(client, 'queryReminders');
+    spy.mockResolvedValueOnce(
+      response(
+        [
+          makeReminder('m1', '2020-01-01T00:00:00.000Z'),
+          makeReminder('m2', '2020-01-02T00:00:00.000Z'),
+        ],
+        { next: 'c1' },
+      ),
+    );
+    await paginator.executeQuery({});
+
+    spy.mockResolvedValueOnce(
+      response([
+        makeReminder('m2', '2020-01-02T00:00:00.000Z'), // duplicate
+        makeReminder('m3', '2020-01-03T00:00:00.000Z'),
+      ]),
+    );
+    await paginator.toTail();
+
+    expect(paginator.items?.map((r) => r.message_id)).toEqual(['m1', 'm2', 'm3']);
+    expect(paginator.hasMoreTail).toBe(false);
+    expect(paginator.cursor?.tailward).toBeNull();
+  });
+
+  it('keeps the loaded reminders while the next page loads', async () => {
+    const paginator = new ReminderPaginator(client, { pageSize: 2 });
+    const spy = vi.spyOn(client, 'queryReminders');
+    spy.mockResolvedValueOnce(
+      response(
+        [
+          makeReminder('m1', '2020-01-01T00:00:00.000Z'),
+          makeReminder('m2', '2020-01-02T00:00:00.000Z'),
+        ],
+        { next: 'c1' },
+      ),
+    );
+    await paginator.executeQuery({});
+
+    const published: Array<string[] | undefined> = [];
+    const unsubscribe = paginator.state.subscribeWithSelector(
+      ({ items }) => ({ items }),
+      ({ items }) => published.push(items?.map((r) => r.message_id)),
+    );
+    spy.mockResolvedValueOnce(response([makeReminder('m3', '2020-01-03T00:00:00.000Z')]));
+    await paginator.toTail();
+    unsubscribe();
+
+    // A next page is not a new query: the list must never be blanked while it loads.
+    expect(published).not.toContain(undefined);
+    expect(published.at(-1)).toEqual(['m1', 'm2', 'm3']);
+  });
+
+  it('sends the tailward cursor as the request `next`', async () => {
+    const paginator = new ReminderPaginator(client, { pageSize: 2 });
+    const spy = vi.spyOn(client, 'queryReminders');
+    spy.mockResolvedValueOnce(
+      response(
+        [
+          makeReminder('m1', '2020-01-01T00:00:00.000Z'),
+          makeReminder('m2', '2020-01-02T00:00:00.000Z'),
+        ],
+        { next: 'c1' },
+      ),
+    );
+    await paginator.executeQuery({});
+    // A first page carries no cursor at all - neither the request's nor a direction-named key.
+    expect(spy.mock.calls[0][0]).toEqual({
+      filter: undefined,
+      limit: 2,
+      sort: undefined,
+    });
+
+    spy.mockResolvedValueOnce(response([makeReminder('m3', '2020-01-03T00:00:00.000Z')]));
+    await paginator.toTail();
+
+    // The request is sent as given, so a `tailward` key would reach the server and `next` would not.
+    expect(spy.mock.calls[1][0]).toEqual({
+      filter: undefined,
+      limit: 2,
+      next: 'c1',
+      sort: undefined,
+    });
+  });
+
+  it('orders by the requested sort; changing sort resets and re-orders', async () => {
+    const paginator = new ReminderPaginator(client, { pageSize: 3 });
+    const page = [
+      makeReminder('m2', '2020-01-02T00:00:00.000Z'),
+      makeReminder('m1', '2020-01-01T00:00:00.000Z'),
+      makeReminder('m3', '2020-01-03T00:00:00.000Z'),
+    ];
+    const spy = vi.spyOn(client, 'queryReminders').mockResolvedValue(response(page));
+
+    // default sort: created_at ascending
+    await paginator.executeQuery({});
+    expect(paginator.items?.map((r) => r.message_id)).toEqual(['m1', 'm2', 'm3']);
+
+    // changing sort resets accumulated pages and re-orders the next load
+    paginator.sort = [{ field: 'created_at', direction: -1 }];
+    expect(paginator.items).toBeUndefined();
+    spy.mockResolvedValue(response(page));
+    await paginator.executeQuery({});
+    expect(paginator.items?.map((r) => r.message_id)).toEqual(['m3', 'm2', 'm1']);
+  });
+});

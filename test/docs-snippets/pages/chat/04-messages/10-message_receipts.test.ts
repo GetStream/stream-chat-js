@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { Channel, Event } from '../../../../../src';
+import type { Channel, EventPayload } from '../../../../../src';
 import { StreamChat } from '../../../../../src';
 import {
   createUserToken,
@@ -28,11 +28,13 @@ describe('_default/04-messages/10-message_receipts.md', () => {
   let observer: StreamChat;
   let control: StreamChat;
   let observerChannel: Channel;
-  const events: Event[] = [];
+  const events: EventPayload<'message.delivered' | 'message.read'>[] = [];
   const clients: StreamChat[] = [];
 
   const newChatClient = () => {
-    const chatClient = new StreamChat(apiKey, { allowServerSideConnect: true });
+    const chatClient = new StreamChat(apiKey, {
+      client: { allowServerSideConnect: true },
+    });
     clients.push(chatClient);
     return chatClient;
   };
@@ -48,7 +50,9 @@ describe('_default/04-messages/10-message_receipts.md', () => {
     control = await getClientSideClient({ id: controlId });
     clients.push(observer, control);
     observerChannel = observer.channel('messaging', channelId, {
-      members: [observerId, controlId, deliveryUserId, readUserId],
+      members: [observerId, controlId, deliveryUserId, readUserId].map((user_id) => ({
+        user_id,
+      })),
     });
     cleanup.channels.push(cid);
     await observerChannel.watch();
@@ -86,7 +90,9 @@ describe('_default/04-messages/10-message_receipts.md', () => {
 
     // The user confirms delivery, then the control user does: only the control's
     // `message.delivered` reaches the other members.
-    const { message } = await observerChannel.sendMessage({ text: 'delivered?' });
+    const { message } = await observerChannel.sendMessage({
+      message: { text: 'delivered?' },
+    });
     const latest_delivered_messages = [{ cid, id: message.id }];
     await chatClient.markChannelsDelivered({ latest_delivered_messages });
     await control.markChannelsDelivered({ latest_delivered_messages });
@@ -122,7 +128,7 @@ describe('_default/04-messages/10-message_receipts.md', () => {
 
     // The user reads the channel, then the control user does: only the control's
     // `message.read` reaches the other members.
-    await observerChannel.sendMessage({ text: 'read?' });
+    await observerChannel.sendMessage({ message: { text: 'read?' } });
     const readerChannel = chatClient.channel('messaging', channelId);
     await readerChannel.watch();
     const controlChannel = control.channel('messaging', channelId);

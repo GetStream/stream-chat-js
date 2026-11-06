@@ -4,6 +4,7 @@ import { MessageComposer } from '../../../src/messageComposer/messageComposer';
 import { Channel } from '../../../src/channel';
 import { StreamChat } from '../../../src/client';
 import { LocalMessage } from '../../../src/types';
+import { convertDateToTimestamp } from '../test-utils/time';
 
 describe('CustomDataManager', () => {
   let customDataManager: CustomDataManager;
@@ -16,10 +17,13 @@ describe('CustomDataManager', () => {
     vi.clearAllMocks();
 
     // Setup mocks
-    mockClient = new StreamChat('apiKey', 'apiSecret');
+    mockClient = new StreamChat('apiKey');
     mockClient.user = { id: 'user-id', name: 'Test User' };
 
-    mockChannel = mockClient.channel('channelType', 'channelId');
+    mockChannel = mockClient.channelManager.ensure({
+      type: 'channelType',
+      id: 'channelId',
+    });
     mockComposer = new MessageComposer({
       client: mockClient,
       compositionContext: mockChannel,
@@ -36,19 +40,20 @@ describe('CustomDataManager', () => {
       expect(customDataManager.customMessageData).toEqual({});
     });
 
-    it('should initialize with message data if provided', () => {
+    it("should initialize with the message's custom data if provided", () => {
       const message: LocalMessage = {
-        custom_field: 'test-value',
+        custom: { custom_field: 'test-value' },
+        top_level_field: 'ignored',
         id: 'test-message-id',
         text: 'Test message',
         type: 'regular',
         attachments: [],
         mentioned_users: [],
-        created_at: new Date(),
+        created_at: convertDateToTimestamp(new Date()),
         deleted_at: null,
         pinned_at: null,
         status: 'sent',
-        updated_at: new Date(),
+        updated_at: convertDateToTimestamp(new Date()),
       };
 
       const managerWithMessage = new CustomDataManager({
@@ -56,7 +61,20 @@ describe('CustomDataManager', () => {
         message,
       });
 
-      expect(managerWithMessage.customMessageData).toEqual({});
+      expect(managerWithMessage.customMessageData).toEqual({
+        custom_field: 'test-value',
+      });
+    });
+
+    it("should not share the message's custom object", () => {
+      const custom = { custom_field: 'test-value' };
+      const managerWithMessage = new CustomDataManager({
+        composer: mockComposer,
+        message: { id: 'draft-id', text: '', custom },
+      });
+
+      expect(managerWithMessage.customMessageData).toEqual(custom);
+      expect(managerWithMessage.customMessageData).not.toBe(custom);
     });
   });
 
@@ -71,23 +89,25 @@ describe('CustomDataManager', () => {
       expect(customDataManager.customMessageData).toEqual({});
     });
 
-    it('should reset state with message data if provided', () => {
+    it("should reset state to the message's custom data if provided", () => {
+      customDataManager.setMessageData({ stale: true });
       const message: LocalMessage = {
-        custom_field: 'test-value',
+        custom: { custom_field: 'test-value' },
+        top_level_field: 'ignored',
         id: 'test-message-id',
         text: 'Test message',
         type: 'regular',
         attachments: [],
         mentioned_users: [],
-        created_at: new Date(),
+        created_at: convertDateToTimestamp(new Date()),
         deleted_at: null,
         pinned_at: null,
         status: 'sent',
-        updated_at: new Date(),
+        updated_at: convertDateToTimestamp(new Date()),
       };
 
       customDataManager.initState({ message });
-      expect(customDataManager.customMessageData).toEqual({});
+      expect(customDataManager.customMessageData).toEqual({ custom_field: 'test-value' });
     });
   });
 

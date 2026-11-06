@@ -2,7 +2,7 @@ import type { LinkPreview } from '../linkPreviewsManager';
 import type { FileUploadFilter } from '../attachmentManager';
 import type { MessageComposer } from '../messageComposer';
 import type { FileLike, FileReference } from '../types';
-import type { CommandResponse, UserResponse } from '../../types';
+import type { Command, UserResponse } from '../../types';
 
 export type MinimumUploadRequestResult = { file: string; thumb_url?: string } & Partial<
   Record<string, unknown>
@@ -10,8 +10,8 @@ export type MinimumUploadRequestResult = { file: string; thumb_url?: string } & 
 
 /**
  * Optional second argument to `UploadRequestFn`.
- * - Call `onProgress` to report 0–100 or `undefined` when indeterminate.
- * - Forward `abortSignal` to your upload implementation to cancel the upload if the user deletes the attachment while it's uploading.
+ * - Call `onProgress` to report 0 to 100, or `undefined` when indeterminate.
+ * - Forward `abortSignal` to your upload to cancel it when the attachment is deleted mid-upload.
  */
 export type UploadRequestOptions = {
   onProgress?: (percent: number | undefined) => void;
@@ -30,7 +30,7 @@ export type DraftsConfiguration = {
 export type TextComposerConfig = {
   /** If false, the text input, change and selection events are disabled */
   enabled: boolean;
-  /** If true, triggers typing events on text input keystroke. Disabled for threads and message editing by default. */
+  /** If true, triggers typing events on text input keystroke. Defaults to `true`. */
   publishTypingEvents: boolean;
   /** Default value for the message input */
   defaultValue?: string;
@@ -41,14 +41,14 @@ export type TextComposerConfig = {
 };
 
 export type CommandSendability = {
-  command: CommandResponse;
+  command: Command;
   ready: boolean;
   reason?: string & {};
   metadata?: Record<string, unknown>;
 };
 
 export type CommandSendValidationContext = {
-  command: CommandResponse;
+  command: Command;
   composer: MessageComposer;
   commandArgsText: string;
   mentionedUsersInText: UserResponse[];
@@ -64,33 +64,55 @@ export type CommandsConfig = {
 };
 
 export type AttachmentManagerConfig = {
-  // todo: document removal of noFiles prop showing how to achieve the same with custom fileUploadFilter function
   /**
-   * Function that allows to prevent uploading files based on the functions output.
-   * Use this option to simulate deprecated prop noFiles which was actually a filter to upload only image files.
+   * Toggles file attachments. ANDed with the channel config's `uploads` unless `customCdn` is set.
+   * Defaults to `true`.
    */
+  enabled: boolean;
+  // todo: document removal of noFiles prop showing how to achieve the same with custom fileUploadFilter function
+  /** Prevents uploading a file when it returns `false`. */
   fileUploadFilter: FileUploadFilter;
   /** Maximum number of attachments allowed per message */
   maxNumberOfFilesPerMessage: number;
   /**
-   * Array of one or more file types, or unique file type specifiers (https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Attributes/accept#unique_file_type_specifiers),
-   * describing which file types are allowed to be selected when uploading files.
+   * File types or unique file type specifiers
+   * (https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Attributes/accept#unique_file_type_specifiers)
+   * allowed for selection. Empty means all files.
    */
   acceptedFiles: string[];
   /** Function that allows to customize the upload request. */
   doUploadRequest?: UploadRequestFn;
   /**
-   * When true, the attachment manager sets `localMetadata.uploadProgress` and passes `options.onProgress`
-   * to `doUploadRequest` (built-in and custom). Set to false to disable progress tracking.
-   * @default true
+   * Whether a custom {@link AttachmentManagerConfig.doUploadRequest} stores files outside Stream.
+   * When `false`, Stream's rules apply (the `upload-file` capability and the channel type's
+   * `uploads` flag). When `true`, only {@link AttachmentManagerConfig.enabled} governs uploads.
+   * Defaults to `false`.
+   */
+  customCdn: boolean;
+  /**
+   * When `true`, a message may be sent while its attachments are still uploading. The message is
+   * composed and shown right away, and the send request waits for those uploads to settle before
+   * it goes out; if one of them fails, the whole message fails. Defaults to `false`.
+   */
+  pendingUploadsEnabled: boolean;
+  /**
+   * When `true`, the attachment manager sets `localMetadata.uploadProgress` and passes
+   * `options.onProgress` to `doUploadRequest` (built-in and custom). Set to `false` to disable
+   * progress tracking. Defaults to `true`.
    */
   trackUploadProgress: boolean;
 };
 
 export type LinkPreviewsManagerConfig = {
-  /** Number of milliseconds to debounce firing the URL enrichment queries when typing. The default value is 1500(ms). */
+  /**
+   * Number of milliseconds to debounce firing the URL enrichment queries when typing. Defaults to
+   * `1500`.
+   */
   debounceURLEnrichmentMs: number;
-  /** Allows for toggling the URL enrichment and link previews in `MessageInput`. By default, the feature is disabled. */
+  /**
+   * Toggles URL enrichment and link previews. ANDed with the channel type's `url_enrichment`.
+   * Defaults to `true`.
+   */
   enabled: boolean;
   /** Custom function to identify URLs in a string and request OG data */
   findURLFn: (text: string) => string[];
@@ -100,25 +122,36 @@ export type LinkPreviewsManagerConfig = {
 
 export type LocationComposerConfig = {
   /**
-   * Allows for toggling the location addition.
-   * By default, the feature is enabled but has to be enabled also on channel level config via shared_locations.
+   * Toggles location sharing. ANDed with the channel config's `shared_locations`. Defaults to
+   * `true`.
    */
   enabled: boolean;
-  /** Function that provides a stable id for a device from which the location is shared */
+  /** Function that provides a stable ID for the device from which the location is shared. */
   getDeviceId: () => string;
+  /** Shortest live-location duration in ms. A shorter `durationMs` is invalid. Defaults to 60s. */
+  minShareDurationMs: number;
+};
+
+export type PollComposerConfig = {
+  /** Toggles poll composition. ANDed with the channel config's `polls`. Defaults to `true`. */
+  enabled: boolean;
 };
 
 export type MessageComposerConfig = {
   /** If true, enables creating drafts on the server */
   drafts: DraftsConfiguration;
-  /** Configuration for command sendability validation */
   commands: CommandsConfig;
-  /** Configuration for the attachment manager */
   attachments: AttachmentManagerConfig;
-  /** Configuration for the link previews manager */
   linkPreviews: LinkPreviewsManagerConfig;
-  /** Configuration for the location composer */
   location: LocationComposerConfig;
-  /** Maximum number of characters in a message */
+  polls: PollComposerConfig;
+  /**
+   * Whether submitting keeps the composer's contents instead of clearing them (also leaving unresolved
+   * uploads in place). Defaults to retaining when the poll is sent alone: a poll is set, the
+   * composer is not editing or composing a thread reply, and `POLL_ONLY_COMPOSITION_MIDDLEWARE_ID`
+   * is installed. The drafted text and attachments then stay for the next message. Otherwise the
+   * poll goes out with them, and the composer clears.
+   */
+  retainCompositionOnSubmit: (composer: MessageComposer) => boolean;
   text: TextComposerConfig;
 };

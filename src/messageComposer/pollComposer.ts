@@ -3,8 +3,7 @@ import {
   PollComposerStateMiddlewareExecutor,
   VALID_MAX_VOTES_VALUE_REGEX,
 } from './middleware/pollComposer';
-import { StateStore } from '../store';
-import { VotingVisibility } from '../types';
+import { StateStore } from '@stream-io/state-store';
 import { generateUUIDv4 } from '../utils';
 import type { MessageComposer } from './messageComposer';
 import type {
@@ -45,8 +44,7 @@ export class PollComposer {
         max_votes_allowed: '',
         name: '',
         options: [{ id: generateUUIDv4(), text: '' }],
-        user_id: this.composer.client.user?.id,
-        voting_visibility: VotingVisibility.public,
+        voting_visibility: 'public',
       },
       errors: {},
     };
@@ -76,9 +74,6 @@ export class PollComposer {
   get options() {
     return this.state.getLatestValue().data.options;
   }
-  get user_id() {
-    return this.state.getLatestValue().data.user_id;
-  }
   get voting_visibility() {
     return this.state.getLatestValue().data.voting_visibility;
   }
@@ -86,7 +81,7 @@ export class PollComposer {
   get canCreatePoll() {
     const { data, errors } = this.state.getLatestValue();
     const hasAtLeastOneNonEmptyOption =
-      data.options.filter((o) => !!o.text.trim()).length > 0;
+      Array.isArray(data.options) && data.options.some((o) => !!o.text?.trim());
     const hasName = !!data.name;
     const maxVotesAllowedNumber = parseInt(
       data.max_votes_allowed?.match(VALID_MAX_VOTES_VALUE_REGEX)?.[0] || '',
@@ -109,6 +104,15 @@ export class PollComposer {
     this.state.next(this.initialState);
   };
 
+  /**
+   * Takes over the poll `source` is composing.
+   *
+   * @internal
+   */
+  takeOver = (source: PollComposer) => {
+    this.state.next({ ...source.state.getLatestValue() });
+  };
+
   getSnapshot = (): PollComposerSnapshot => this.state.getLatestValue();
 
   restoreSnapshot = (snapshot: PollComposerSnapshot) => {
@@ -116,15 +120,20 @@ export class PollComposer {
   };
 
   /**
-   * Updates specified fields and generates relevant errors
-   * @param data
-   * @param injectedFieldErrors - errors produced externally that will take precedence over the errors generated in the middleware chaing
+   * Updates specified fields and generates relevant errors.
+   *
+   * @param params - The fields to update and any externally produced errors.
+   * @param params.data - Partial poll data with the fields to update.
+   * @param params.injectedFieldErrors - Errors produced externally that will take precedence over
+   *   the errors generated in the middleware chain (optional).
    */
-  // FIXME: change method params to a single object with the next major release
-  updateFields = async (
-    data: UpdateFieldsData,
-    injectedFieldErrors?: PollComposerFieldErrors,
-  ) => {
+  updateFields = async ({
+    data,
+    injectedFieldErrors,
+  }: {
+    data: UpdateFieldsData;
+    injectedFieldErrors?: PollComposerFieldErrors;
+  }) => {
     const { state, status } = await this.stateMiddlewareExecutor.execute({
       eventName: 'handleFieldChange',
       initialValue: {

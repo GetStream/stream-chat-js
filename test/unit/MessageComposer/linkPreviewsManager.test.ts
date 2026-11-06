@@ -11,17 +11,14 @@ import {
 } from '../../../src';
 import { DeepPartial } from '../../../src/types.utility';
 import { mergeWith } from '../../../src/utils/mergeWith';
+import { stubServerConfig } from '../test-utils/stubServerConfig';
+import { convertDateToTimestamp } from '../test-utils/time';
 
 const existingLinkUrl = 'https://existing.com';
 const linkUrl = 'https://example.com';
-// Mock dependencies
-vi.mock('../../src/store', () => ({
-  StateStore: vi.fn().mockImplementation(() => ({
-    getLatestValue: vi.fn().mockReturnValue({}),
-    next: vi.fn(),
-    partialNext: vi.fn(),
-  })),
-}));
+// No `StateStore` mock: the one that used to sit here pointed at '../../src/store', which from
+// this directory resolves to `test/src/store` and never existed — so it never applied, and these
+// tests have always exercised the real store. Removed rather than repaired.
 
 vi.mock('../../src/utils', () => ({
   debounce: vi.fn().mockImplementation((fn) => {
@@ -30,10 +27,12 @@ vi.mock('../../src/utils', () => ({
     debouncedFn.flush = vi.fn();
     return debouncedFn;
   }),
+  getEnv: vi.fn(),
 }));
 
 vi.mock('../../src/utils/mergeWith', () => ({
   mergeWith: vi.fn().mockImplementation((target, source) => ({ ...target, ...source })),
+  getEnv: vi.fn(),
 }));
 
 vi.mock('linkifyjs', () => ({
@@ -85,18 +84,22 @@ const setup = ({
   vi.clearAllMocks();
 
   // Setup mocks
-  const mockClient = new StreamChat('apiKey', 'apiSecret');
-  mockClient.enrichURL = vi.fn().mockResolvedValue(enrichURLReturnValue);
+  const mockClient = new StreamChat('apiKey');
+  mockClient.user = { id: 'user' };
+  mockClient.getOG = vi.fn().mockResolvedValue(enrichURLReturnValue);
 
-  const mockChannel = mockClient.channel('channelType', 'channelId');
-  mockChannel.getConfig = vi.fn().mockImplementation(() => ({ url_enrichment: true }));
+  const mockChannel = mockClient.channelManager.ensure({
+    type: 'channelType',
+    id: 'channelId',
+  });
+  const setServerConfig = stubServerConfig(mockChannel, { url_enrichment: true });
   const messageComposer = new MessageComposer({
     client: mockClient,
     composition,
     compositionContext: mockChannel,
     config: config === null ? {} : mergeWith(DEFAULT_CONFIG, { linkPreviews: config }),
   });
-  return { mockClient, mockChannel, messageComposer };
+  return { messageComposer, mockChannel, mockClient, setServerConfig };
 };
 
 describe('LinkPreviewsManager', () => {
@@ -109,7 +112,9 @@ describe('LinkPreviewsManager', () => {
       const {
         messageComposer: { linkPreviewsManager },
       } = setup({ config: null });
-      expect(linkPreviewsManager.config.enabled).toBe(false);
+      // `true` means "no opinion — let the server decide", matching every other server-gated feature.
+      // The channel type's `url_enrichment` still has to allow it; the harness sets that flag to true.
+      expect(linkPreviewsManager.config.enabled).toBe(true);
       expect(linkPreviewsManager.config.debounceURLEnrichmentMs).toBe(
         DEFAULT_LINK_PREVIEW_MANAGER_CONFIG.debounceURLEnrichmentMs,
       );
@@ -133,11 +138,11 @@ describe('LinkPreviewsManager', () => {
         id: 'test-message-id',
         text: '',
         type: 'regular',
-        created_at: new Date(),
+        created_at: convertDateToTimestamp(new Date()),
         deleted_at: null,
         pinned_at: null,
         status: 'pending',
-        updated_at: new Date(),
+        updated_at: convertDateToTimestamp(new Date()),
         attachments: [
           {
             og_scrape_url: linkUrl,
@@ -160,11 +165,11 @@ describe('LinkPreviewsManager', () => {
         id: 'test-message-id',
         text: '',
         type: 'regular',
-        created_at: new Date(),
+        created_at: convertDateToTimestamp(new Date()),
         deleted_at: null,
         pinned_at: null,
         status: 'pending',
-        updated_at: new Date(),
+        updated_at: convertDateToTimestamp(new Date()),
         attachments: [
           {
             og_scrape_url: linkUrl,
@@ -190,7 +195,7 @@ describe('LinkPreviewsManager', () => {
       } = setup();
 
       // Mock the enrichURL to never resolve
-      mockClient.enrichURL = vi.fn().mockImplementation(() => new Promise(() => {}));
+      mockClient.getOG = vi.fn().mockImplementation(() => new Promise(() => {}));
 
       // Add a loading preview
       linkPreviewsManager.findAndEnrichUrls('Check out https://example.com');
@@ -395,7 +400,7 @@ describe('LinkPreviewsManager', () => {
         mockClient,
       } = setup();
       let resolveEnrichment: (value: typeof enrichURLReturnValue) => void = () => {};
-      mockClient.enrichURL = vi.fn(
+      mockClient.getOG = vi.fn(
         () =>
           new Promise((resolve) => {
             resolveEnrichment = resolve;
@@ -414,17 +419,79 @@ describe('LinkPreviewsManager', () => {
     });
   });
 
+  describe('the setter against a disabling server', () => {
+    // The server has the last word, so `enabled = true` cannot win — that part always held. What did not
+    // is the *record* of what was asked for: the setter used to skip the write when the new value equalled
+    // the current one, and while the server masks the field the current one is always `false`. So asking
+    // for `false` after asking for `true` recorded nothing, the earlier `true` stayed in the retained
+    // patch layer, and the moment the server relented it was honoured — the opposite of the last
+    // instruction given.
+    const setup2 = (url_enrichment: boolean) => {
+      const client = new StreamChat('apiKey');
+      client.user = { id: 'user' } as never;
+      client.channelServerConfigsStore.partialNext({
+        configs: { 'channelType:channelId': { url_enrichment } as never },
+      });
+      const channel = client.channelManager.ensure({
+        type: 'channelType',
+        id: 'channelId',
+      });
+      const composer = new MessageComposer({
+        client,
+        compositionContext: channel,
+      });
+      composer.registerSubscriptions();
+      return { client, composer };
+    };
+
+    it('cannot enable previews the server has disabled', () => {
+      const { composer } = setup2(false);
+
+      composer.linkPreviewsManager.enabled = true;
+
+      expect(composer.linkPreviewsManager.enabled).toBe(false);
+      expect(composer.config.linkPreviews.enabled).toBe(false);
+    });
+
+    it('honours the last request once the server relents', () => {
+      const { client, composer } = setup2(false);
+
+      composer.linkPreviewsManager.enabled = true;
+      composer.linkPreviewsManager.enabled = false; // changed their mind, while masked
+
+      client.channelServerConfigsStore.partialNext({
+        configs: { 'channelType:channelId': { url_enrichment: true } as never },
+      });
+
+      expect(composer.linkPreviewsManager.enabled).toBe(false);
+    });
+
+    it('still applies a request made while masked, if it was the last one', () => {
+      const { client, composer } = setup2(false);
+
+      composer.linkPreviewsManager.enabled = true;
+
+      client.channelServerConfigsStore.partialNext({
+        configs: { 'channelType:channelId': { url_enrichment: true } as never },
+      });
+
+      expect(composer.linkPreviewsManager.enabled).toBe(true);
+    });
+  });
+
   describe('findAndEnrichUrls', () => {
     it('should not process URLs if disabled back-end url_enrichment', async () => {
-      const {
-        messageComposer: { linkPreviewsManager },
-        mockChannel,
-        mockClient,
-      } = setup();
-      mockChannel.getConfig.mockReturnValueOnce({ url_enrichment: false });
+      const { messageComposer, mockChannel, mockClient, setServerConfig } = setup();
+      const { linkPreviewsManager } = messageComposer;
+      // `url_enrichment` is reconciled into `config.linkPreviews.enabled` by the composer's server
+      // restrictions rather than read live, so a *late* change reaches it through the composer's
+      // subscription — the same route its four sibling gates already take. A real consumer registers
+      // these on mount.
+      messageComposer.registerSubscriptions();
+      setServerConfig({ url_enrichment: false });
       linkPreviewsManager.findAndEnrichUrls('Check out https://example.com');
       let enrichPromiseResolve;
-      mockClient.enrichURL = vi.fn().mockImplementation(() => {
+      mockClient.getOG = vi.fn().mockImplementation(() => {
         return new Promise((resolve) => {
           enrichPromiseResolve = resolve;
         });
@@ -432,7 +499,7 @@ describe('LinkPreviewsManager', () => {
       linkPreviewsManager.findAndEnrichUrls('Check out https://example.com');
       // Wait for the debounced function to be called
       await new Promise((resolve) => setTimeout(resolve, 0));
-      expect(mockClient.enrichURL).not.toHaveBeenCalled();
+      expect(mockClient.getOG).not.toHaveBeenCalled();
       expect(linkPreviewsManager.previews.size).toBe(0);
     });
 
@@ -443,7 +510,7 @@ describe('LinkPreviewsManager', () => {
       } = setup({ config: { enabled: false } });
       linkPreviewsManager.findAndEnrichUrls('Check out https://example.com');
       let enrichPromiseResolve;
-      mockClient.enrichURL = vi.fn().mockImplementation(() => {
+      mockClient.getOG = vi.fn().mockImplementation(() => {
         return new Promise((resolve) => {
           enrichPromiseResolve = resolve;
         });
@@ -451,7 +518,7 @@ describe('LinkPreviewsManager', () => {
       linkPreviewsManager.findAndEnrichUrls('Check out https://example.com');
       // Wait for the debounced function to be called
       await new Promise((resolve) => setTimeout(resolve, 0));
-      expect(mockClient.enrichURL).not.toHaveBeenCalled();
+      expect(mockClient.getOG).not.toHaveBeenCalled();
       expect(linkPreviewsManager.previews.size).toBe(0);
     });
 
@@ -461,7 +528,7 @@ describe('LinkPreviewsManager', () => {
         mockClient,
       } = setup();
       let enrichPromiseResolve;
-      mockClient.enrichURL = vi.fn().mockImplementation(() => {
+      mockClient.getOG = vi.fn().mockImplementation(() => {
         return new Promise((resolve) => {
           enrichPromiseResolve = resolve;
         });
@@ -470,7 +537,7 @@ describe('LinkPreviewsManager', () => {
       // Wait for the debounced function to be called
       await new Promise((resolve) => setTimeout(resolve, 0));
 
-      expect(mockClient.enrichURL).toHaveBeenCalledWith(linkUrl);
+      expect(mockClient.getOG).toHaveBeenCalledWith({ url: linkUrl });
       expect(linkPreviewsManager.previews.size).toBe(1);
 
       const preview = linkPreviewsManager.previews.get(linkUrl);
@@ -497,7 +564,7 @@ describe('LinkPreviewsManager', () => {
         messageComposer: { linkPreviewsManager },
         mockClient,
       } = setup();
-      mockClient.enrichURL.mockRejectedValueOnce(new Error('Enrichment failed'));
+      mockClient.getOG.mockRejectedValueOnce(new Error('Enrichment failed'));
 
       linkPreviewsManager.findAndEnrichUrls('Check out https://example.com');
 
@@ -523,7 +590,7 @@ describe('LinkPreviewsManager', () => {
       // Wait for the debounced function to be called
       await new Promise((resolve) => setTimeout(resolve, 0));
 
-      expect(mockClient.enrichURL).toHaveBeenCalledTimes(1);
+      expect(mockClient.getOG).toHaveBeenCalledTimes(1);
       expect(linkPreviewsManager.previews.size).toBe(1);
     });
 
@@ -606,7 +673,10 @@ describe('LinkPreviewsManager', () => {
       } = setup();
       linkPreviewsManager.state.partialNext({
         previews: new Map([
-          [linkUrl, { og_scrape_url: linkUrl, status: LinkPreviewStatus.LOADED }],
+          [
+            linkUrl,
+            { og_scrape_url: linkUrl, status: LinkPreviewStatus.LOADED, custom: {} },
+          ],
         ]),
       });
       const onLinkPreviewDismissed = vi.fn();

@@ -30,13 +30,19 @@ describe('_default/04-messages/06-search.md', () => {
     await serverClient.upsertUsers([{ id: otherUserId }]);
     client = await getClientSideClient({ id: userId });
 
-    const channel = client.channel('messaging', searchChannelId, { members: [userId] });
+    const channel = client.channel('messaging', searchChannelId, {
+      members: [{ user_id: userId }],
+    });
     cleanup.channels.push(`messaging:${searchChannelId}`);
     await channel.create();
     ids.text = (
-      await channel.sendMessage({ text: 'supercalifragilisticexpialidocious' })
+      await channel.sendMessage({
+        message: { text: 'supercalifragilisticexpialidocious' },
+      })
     ).message.id;
-    ids.plain = (await channel.sendMessage({ text: 'superb, no attachment' })).message.id;
+    ids.plain = (
+      await channel.sendMessage({ message: { text: 'superb, no attachment' } })
+    ).message.id;
     // Sent server-side: client-side attachments need the `create-attachment` grant.
     ids.attachment = (
       await sendServerMessage(serverClient, `messaging:${searchChannelId}`, {
@@ -65,14 +71,13 @@ describe('_default/04-messages/06-search.md', () => {
     ).id;
 
     const pagingChannel = client.channel('messaging', pagingChannelId, {
-      members: [userId],
+      members: [{ user_id: userId }],
     });
     cleanup.channels.push(myChannelCid);
     await pagingChannel.create();
     for (let i = 0; i < PAGING_COUNT; i++) {
       const { message } = await pagingChannel.sendMessage({
-        text: `supercali ${i}`,
-        my_custom_field: i,
+        message: { text: `supercali ${i}`, custom: { my_custom_field: i } },
       });
       pagingIds.push(message.id);
     }
@@ -80,11 +85,18 @@ describe('_default/04-messages/06-search.md', () => {
     // Search indexing is eventually consistent: wait until every message is searchable.
     await retry(async () => {
       const [a, b] = await Promise.all([
-        client.search(
-          { cid: `messaging:${searchChannelId}` },
-          { text: { $autocomplete: 'super' } },
-        ),
-        client.search({ cid: myChannelCid }, { text: { $autocomplete: 'supercali' } }),
+        client.search({
+          payload: {
+            filter_conditions: { cid: `messaging:${searchChannelId}` },
+            message_filter_conditions: { text: { $autocomplete: 'super' } },
+          },
+        }),
+        client.search({
+          payload: {
+            filter_conditions: { cid: myChannelCid },
+            message_filter_conditions: { text: { $autocomplete: 'supercali' } },
+          },
+        }),
       ]);
       expect(a.results).toHaveLength(3);
       expect(b.results).toHaveLength(PAGING_COUNT);
@@ -100,22 +112,29 @@ describe('_default/04-messages/06-search.md', () => {
     // #region snippet docs="chat/_default/04-messages/06-search.md" heading="Searching Messages" tab="JavaScript" index=1
     // COPY: userId="john"
     // Search for messages containing text
-    const results = await client.search(
-      { members: { $in: [userId] } },
-      'supercalifragilisticexpialidocious',
-      { limit: 10 },
-    );
+    const results = await client.search({
+      payload: {
+        filter_conditions: { members: { $in: [userId] } },
+        query: 'supercalifragilisticexpialidocious',
+        limit: 10,
+      },
+    });
 
     // Search with message filters
-    const filtered = await client.search(
-      { members: { $in: [userId] } },
-      { text: { $autocomplete: 'super' }, attachments: { $exists: true } },
-      { limit: 10 },
-    );
+    const filtered = await client.search({
+      payload: {
+        filter_conditions: { members: { $in: [userId] } },
+        message_filter_conditions: {
+          text: { $autocomplete: 'super' },
+          attachments: { $exists: true },
+        },
+        limit: 10,
+      },
+    });
     // #endregion snippet
 
-    expect(results.results.map((r) => r.message.id)).toEqual([ids.text]);
-    expect(filtered.results.map((r) => r.message.id)).toEqual([ids.attachment]);
+    expect(results.results.map((r) => r.message?.id)).toEqual([ids.text]);
+    expect(filtered.results.map((r) => r.message?.id)).toEqual([ids.attachment]);
   });
 
   it('paginates search results with a cursor', async () => {
@@ -125,25 +144,41 @@ describe('_default/04-messages/06-search.md', () => {
     const messageFilters = { text: { $autocomplete: 'supercali' } };
 
     // First page with custom sorting
-    const page1 = await client.search(channelFilters, messageFilters, {
-      sort: [{ relevance: -1 }, { updated_at: 1 }, { my_custom_field: -1 }],
-      limit: 10,
+    const page1 = await client.search({
+      payload: {
+        filter_conditions: channelFilters,
+        message_filter_conditions: messageFilters,
+        sort: [
+          { field: 'relevance', direction: -1 },
+          { field: 'updated_at', direction: 1 },
+          { field: 'my_custom_field', direction: -1 },
+        ],
+        limit: 10,
+      },
     });
 
     // Next page using cursor
-    const page2 = await client.search(channelFilters, messageFilters, {
-      limit: 10,
-      next: page1.next,
+    const page2 = await client.search({
+      payload: {
+        filter_conditions: channelFilters,
+        message_filter_conditions: messageFilters,
+        limit: 10,
+        next: page1.next,
+      },
     });
 
     // Previous page
-    const page1Again = await client.search(channelFilters, messageFilters, {
-      limit: 10,
-      next: page2.previous,
+    const page1Again = await client.search({
+      payload: {
+        filter_conditions: channelFilters,
+        message_filter_conditions: messageFilters,
+        limit: 10,
+        next: page2.previous,
+      },
     });
     // #endregion snippet
 
-    const idsOf = (page: typeof page1) => page.results.map((r) => r.message.id);
+    const idsOf = (page: typeof page1) => page.results.map((r) => r.message?.id);
     expect(idsOf(page1)).toEqual(pagingIds.slice(0, 10));
     expect(idsOf(page2)).toEqual(pagingIds.slice(10));
     expect(page2.next).toBeUndefined();

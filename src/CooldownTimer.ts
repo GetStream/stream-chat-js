@@ -1,34 +1,19 @@
-import { StateStore } from './store';
-import type { ChannelResponse, LocalMessage } from './types';
+import { StateStore } from '@stream-io/state-store';
+import { getMessageCreatedAtTimestamp } from './pagination/paginators/MessageIntervalPaginator';
+import { nowNs, nsToMs } from './utils/time';
+import type { ChannelResponse, LocalMessage, TimestampNS } from './types';
 import { WithSubscriptions } from './utils/WithSubscriptions';
 import type { Channel } from './channel';
 
 export type CooldownTimerState = {
-  /**
-   * Slow mode cooldown interval in seconds. Change reported via channel.updated WS event.
-   */
+  /** Slow mode cooldown interval in seconds. Change reported via channel.updated WS event. */
   cooldownConfigSeconds: number;
-  /**
-   * Whether the current user can skip slow mode. Change is not reported via WS.
-   */
+  /** Whether the current user can skip slow mode. Change is not reported via WS. */
   canSkipCooldown: boolean;
-  /**
-   * Latest message creation date authored by the current user in this channel. Change reported via message.new WS event.
-   */
-  ownLatestMessageDate?: Date;
-  /**
-   * Remaining cooldown in whole seconds (rounded).
-   */
+  /** Creation time of the current user's latest message in this channel, in unix nanoseconds. */
+  ownLatestMessageTimestamp?: TimestampNS;
+  /** Remaining cooldown in whole seconds (rounded). */
   cooldownRemaining: number;
-};
-
-const toDateOrUndefined = (value: unknown): Date | undefined => {
-  if (value instanceof Date) return value;
-  if (typeof value === 'string' || typeof value === 'number') {
-    const parsed = new Date(value);
-    if (!Number.isNaN(parsed.getTime())) return parsed;
-  }
-  return undefined;
 };
 
 export class CooldownTimer extends WithSubscriptions {
@@ -42,7 +27,7 @@ export class CooldownTimer extends WithSubscriptions {
     this.state = new StateStore<CooldownTimerState>({
       cooldownConfigSeconds: 0,
       cooldownRemaining: 0,
-      ownLatestMessageDate: undefined,
+      ownLatestMessageTimestamp: undefined,
       canSkipCooldown: false,
     });
     this.refresh();
@@ -60,30 +45,36 @@ export class CooldownTimer extends WithSubscriptions {
     return this.state.getLatestValue().canSkipCooldown;
   }
 
-  get ownLatestMessageDate() {
-    return this.state.getLatestValue().ownLatestMessageDate;
+  get ownLatestMessageTimestamp() {
+    return this.state.getLatestValue().ownLatestMessageTimestamp;
   }
 
+  /**
+   * Derives the timer from `channel.state` (`cooldown`, `ownCapabilities`) and the message
+   * paginator's store (the current user's latest message). `Channel` registers it on construction
+   * and unregisters it in `disconnect`.
+   */
   public registerSubscriptions = () => {
     this.incrementRefCount();
     if (this.hasSubscriptions) return;
 
     this.addUnsubscribeFunction(
-      this.channel.on('message.new', (event) => {
-        const isOwnMessage =
-          event.message?.user?.id && event.message.user.id === this.getOwnUserId();
-        if (!isOwnMessage) return;
-        this.setOwnLatestMessageDate(toDateOrUndefined(event.message?.created_at));
-      }).unsubscribe,
+      this.channel.state.subscribeWithSelector(
+        ({ data, ownCapabilities }) => ({ cooldown: data?.cooldown, ownCapabilities }),
+        () => this.refresh(),
+      ),
     );
 
+    // Selects `items`, not the derived timestamp: any ingest can change the own-latest message, and
+    // `refresh` publishes only when an input moved.
     this.addUnsubscribeFunction(
-      this.channel.on('channel.updated', (event) => {
-        const cooldownChanged = event.channel?.cooldown !== this.cooldownConfigSeconds;
-        if (!cooldownChanged) return;
-        this.refresh();
-      }).unsubscribe,
+      this.channel.messagePaginator.state.subscribeWithSelector(
+        ({ items }) => ({ items }),
+        () => this.refresh(),
+      ),
     );
+
+    this.addUnsubscribeFunction(() => this.clearTimeout());
   };
 
   public setCooldownRemaining = (cooldownRemaining: number) => {
@@ -101,18 +92,26 @@ export class CooldownTimer extends WithSubscriptions {
       .data ?? {}) as Partial<ChannelResponse>;
     const canSkipCooldown = (own_capabilities ?? []).includes('skip-slow-mode');
 
-    const ownLatestMessageDate = this.findOwnLatestMessageDate({
-      messages: this.channel.state.latestMessages,
-    });
+    const paginator = this.channel.messagePaginator;
+    // The newest messages: the interval that reaches the newest message, and the live messages
+    // received while it was not loaded. Without that interval an own message may sit in the part
+    // not loaded, so the timestamp already known is kept rather than cleared.
+    const ownLatestMessageTimestamp =
+      this.findOwnLatestMessageTimestamp({
+        messages: [...paginator.anchoredHeadItems, ...paginator.logicalHeadItems],
+      }) ??
+      (paginator.anchoredHeadItem !== undefined
+        ? undefined
+        : this.ownLatestMessageTimestamp);
 
     if (
       cooldownConfigSeconds !== this.cooldownConfigSeconds ||
-      ownLatestMessageDate?.getTime() !== this.ownLatestMessageDate?.getTime() ||
+      ownLatestMessageTimestamp !== this.ownLatestMessageTimestamp ||
       canSkipCooldown !== this.canSkipCooldown
     ) {
       this.state.partialNext({
         cooldownConfigSeconds,
-        ownLatestMessageDate,
+        ownLatestMessageTimestamp,
         canSkipCooldown,
       });
     }
@@ -129,37 +128,38 @@ export class CooldownTimer extends WithSubscriptions {
   };
 
   /**
-   * Updates the known latest own message date and recomputes remaining time.
-   * Prefer calling this when you already know the message date (e.g. from an event).
+   * Sets the own latest message timestamp and recomputes the remaining time.
+   *
+   * @param timestamp - Unix nanoseconds, as the API sends it.
    */
-  public setOwnLatestMessageDate = (date: Date | undefined) => {
-    this.state.partialNext({ ownLatestMessageDate: date });
+  public setOwnLatestMessageTimestamp = (timestamp: TimestampNS | undefined) => {
+    this.state.partialNext({ ownLatestMessageTimestamp: timestamp });
     this.recalculate();
   };
 
   private getOwnUserId() {
     const client = this.channel.getClient();
-    return client.userID ?? client.user?.id;
+    return client.userId ?? client.user?.id;
   }
 
-  private findOwnLatestMessageDate({
+  private findOwnLatestMessageTimestamp({
     messages,
   }: {
     messages: LocalMessage[];
-  }): Date | undefined {
+  }): TimestampNS | undefined {
     const ownUserId = this.getOwnUserId();
     if (!ownUserId) return undefined;
 
-    let latest: Date | undefined;
+    let latest: TimestampNS | undefined;
     for (let i = messages.length - 1; i >= 0; i -= 1) {
       const message = messages[i];
       if (message.user?.id !== ownUserId) continue;
-      const createdAt = toDateOrUndefined(message.created_at);
-      if (!createdAt) continue;
-      if (!latest || createdAt.getTime() > latest.getTime()) {
+      const createdAt = getMessageCreatedAtTimestamp(message);
+      if (createdAt === null) continue;
+      if (latest === undefined || createdAt > latest) {
         latest = createdAt;
       }
-      if (latest.getTime() > createdAt.getTime()) break;
+      if (latest > createdAt) break;
     }
     return latest;
   }
@@ -167,13 +167,13 @@ export class CooldownTimer extends WithSubscriptions {
   private recalculate = () => {
     this.clearTimeout();
 
-    const { cooldownConfigSeconds, ownLatestMessageDate, canSkipCooldown } =
+    const { cooldownConfigSeconds, ownLatestMessageTimestamp, canSkipCooldown } =
       this.state.getLatestValue();
 
     const timeSinceOwnLastMessage =
-      ownLatestMessageDate != null
-        ? // prevent negative values
-          Math.max(0, (Date.now() - ownLatestMessageDate.getTime()) / 1000)
+      ownLatestMessageTimestamp != null
+        ? // Clamped at 0. The timestamps are in nanoseconds, the cooldown config in seconds.
+          Math.max(0, nsToMs(nowNs() - ownLatestMessageTimestamp) / 1000)
         : undefined;
 
     const remaining =
