@@ -11,27 +11,27 @@ const getCarriedActiveMemberCount = ({
   next,
   previous,
 }: CarryActiveMemberCountParams<MemberCounts>) => {
-  if (typeof next.active_member_count === 'number') return undefined;
-  if (typeof previous?.active_member_count !== 'number') return undefined;
-
+  const { active_member_count: nextActiveMemberCount, member_count: memberCount } = next;
   const {
     active_member_count: previousActiveMemberCount,
     member_count: previousMemberCount,
-  } = previous;
-  const { member_count: memberCount } = next;
-  const memberCountChange =
-    typeof memberCount === 'number' && typeof previousMemberCount === 'number'
-      ? memberCount - previousMemberCount
-      : 0;
+  } = previous ?? {};
+  const hasOwnActiveMemberCount = typeof nextActiveMemberCount === 'number';
+  const hasPreviousActiveMemberCount = typeof previousActiveMemberCount === 'number';
+  if (hasOwnActiveMemberCount || !hasPreviousActiveMemberCount) return undefined;
+
+  const knowsMemberCount = typeof memberCount === 'number';
+  const knowsBothMemberCounts =
+    knowsMemberCount && typeof previousMemberCount === 'number';
+  const memberCountChange = knowsBothMemberCounts ? memberCount - previousMemberCount : 0;
   const shiftedActiveMemberCount = Math.max(
     0,
     previousActiveMemberCount + memberCountChange,
   );
-  const carriedActiveMemberCount =
-    typeof memberCount === 'number'
-      ? Math.min(shiftedActiveMemberCount, memberCount)
-      : shiftedActiveMemberCount;
 
+  const carriedActiveMemberCount = knowsMemberCount
+    ? Math.min(shiftedActiveMemberCount, memberCount)
+    : shiftedActiveMemberCount;
   return carriedActiveMemberCount;
 };
 
@@ -40,7 +40,8 @@ export const withCarriedActiveMemberCount = <TData extends MemberCounts>({
   previous,
 }: CarryActiveMemberCountParams<TData>) => {
   const activeMemberCount = getCarriedActiveMemberCount({ next, previous });
-  if (activeMemberCount === undefined) return next;
+  const carriesActiveMemberCount = activeMemberCount !== undefined;
+  if (!carriesActiveMemberCount) return next;
 
   const data = { ...next, active_member_count: activeMemberCount };
   return data;
