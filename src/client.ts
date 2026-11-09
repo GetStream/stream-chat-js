@@ -2547,17 +2547,21 @@ export class StreamChat {
       this.baseURL + '/push_preferences',
       { preferences },
     );
-    const { user, userID } = this;
-    if (!user || !userID) return result;
+    const { user, userID: userId } = this;
+    if (!user || !userId) return result;
 
     const previous = 'push_preferences' in user ? user.push_preferences : undefined;
+    const { user_preferences: userPreferences } = result;
+    const updated = userPreferences?.[userId];
     const pushPreferences = mergeOwnPushPreferences({
       preferences,
       previous,
-      updated: result.user_preferences?.[userID],
-      userId: userID,
+      updated,
+      userId,
     });
-    if (pushPreferences !== previous) {
+
+    const hasChanged = pushPreferences !== previous;
+    if (hasChanged) {
       this.user = { ...user, push_preferences: pushPreferences };
     }
     return result;

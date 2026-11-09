@@ -10,31 +10,38 @@ import type {
 
 const toMinutes = (wallClockTime: string) => {
   const [hours, minutes] = wallClockTime.split(':').map(Number);
+
   const totalMinutes = hours * MINUTES_PER_HOUR + minutes;
   return totalMinutes;
 };
 
 const getPreviousDay = (day: QuietHoursDay) => {
+  const { length: daysInWeek } = QUIET_HOURS_WEEK;
   const dayIndex = QUIET_HOURS_WEEK.indexOf(day);
-  const previousDay =
-    QUIET_HOURS_WEEK[(dayIndex + QUIET_HOURS_WEEK.length - 1) % QUIET_HOURS_WEEK.length];
+  const previousDayIndex = (dayIndex + daysInWeek - 1) % daysInWeek;
+
+  const previousDay = QUIET_HOURS_WEEK[previousDayIndex];
   return previousDay;
 };
 
 const getZonedWallClock = (date: Date, timeZone: string): ZonedWallClock => {
-  const parts = new Intl.DateTimeFormat('en-US', {
+  const formatter = new Intl.DateTimeFormat('en-US', {
     hour: '2-digit',
     hourCycle: 'h23',
     minute: '2-digit',
     timeZone,
     weekday: 'short',
-  }).formatToParts(date);
-  const getPart = (type: Intl.DateTimeFormatPartTypes) =>
-    parts.find((part) => part.type === type)?.value ?? '';
+  });
+  const parts = formatter.formatToParts(date);
+  const {
+    hour = '',
+    minute = '',
+    weekday = '',
+  } = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
 
   const wallClock = {
-    minutes: toMinutes(`${getPart('hour')}:${getPart('minute')}`),
-    weekday: getPart('weekday').toLowerCase() as QuietHoursDay,
+    minutes: toMinutes(`${hour}:${minute}`),
+    weekday: weekday.toLowerCase() as QuietHoursDay,
   };
   return wallClock;
 };
@@ -42,22 +49,34 @@ const getZonedWallClock = (date: Date, timeZone: string): ZonedWallClock => {
 const isQuietHoursRuleActive = ({ rule, wallClock }: IsQuietHoursRuleActiveParams) => {
   const { days = [], end, start } = rule;
   const { minutes, weekday } = wallClock;
-  const opensOn = (day: QuietHoursDay) => !days.length || days.includes(day);
   const startMinutes = toMinutes(start);
   const endMinutes = toMinutes(end);
+  const previousDay = getPreviousDay(weekday);
 
-  if (startMinutes < endMinutes) {
-    return opensOn(weekday) && minutes >= startMinutes && minutes < endMinutes;
-  }
+  const appliesEveryDay = !days.length;
+  const opensToday = appliesEveryDay || days.includes(weekday);
+  const openedYesterday = appliesEveryDay || days.includes(previousDay);
+  const runsPastMidnight = startMinutes >= endMinutes;
+  const isAfterStart = minutes >= startMinutes;
+  const isBeforeEnd = minutes < endMinutes;
+  const isActiveSinceToday =
+    opensToday && isAfterStart && (runsPastMidnight || isBeforeEnd);
+  const isActiveSinceYesterday = runsPastMidnight && openedYesterday && isBeforeEnd;
 
-  const isActive =
-    (opensOn(weekday) && minutes >= startMinutes) ||
-    (opensOn(getPreviousDay(weekday)) && minutes < endMinutes);
+  const isActive = isActiveSinceToday || isActiveSinceYesterday;
   return isActive;
 };
 
-const isOwnUserLevelPreference = (preference: PushPreference, userId: string) =>
-  !preference.channel_cid && (!preference.user_id || preference.user_id === userId);
+const isOwnUserLevelPreference = (
+  { channel_cid, user_id }: PushPreference,
+  userId: string,
+) => {
+  const isUserLevel = !channel_cid;
+  const isOwn = !user_id || user_id === userId;
+
+  const isOwnUserLevel = isUserLevel && isOwn;
+  return isOwnUserLevel;
+};
 
 export const getDeviceTimeZone = () => {
   const { timeZone } = Intl.DateTimeFormat().resolvedOptions();
@@ -65,9 +84,10 @@ export const getDeviceTimeZone = () => {
 };
 
 export const isInQuietHours = ({ date = new Date(), schedule }: IsInQuietHoursParams) => {
-  const wallClock = getZonedWallClock(date, schedule.timezone);
+  const { quiet_hours: quietHours, timezone } = schedule;
+  const wallClock = getZonedWallClock(date, timezone);
 
-  const inQuietHours = schedule.quiet_hours.some((rule) =>
+  const inQuietHours = quietHours.some((rule) =>
     isQuietHoursRuleActive({ rule, wallClock }),
   );
   return inQuietHours;
@@ -84,18 +104,23 @@ export const mergeOwnPushPreferences = ({
   );
   if (!ownPreferences.length) return previous;
 
+  const { disabled_until: updatedDisabledUntil, schedule: updatedSchedule } =
+    updated ?? {};
   const removesSchedule = ownPreferences.some(({ remove_schedule }) => remove_schedule);
   const removesDisabledUntil = ownPreferences.some(
     ({ remove_disable }) => remove_disable,
   );
-  const keepsSchedule = !removesSchedule || !!updated?.schedule;
-  const keepsDisabledUntil = !removesDisabledUntil || !!updated?.disabled_until;
+  const keepsSchedule = !removesSchedule || !!updatedSchedule;
+  const keepsDisabledUntil = !removesDisabledUntil || !!updatedDisabledUntil;
+
   const { disabled_until, schedule, ...otherPreferences } = { ...previous, ...updated };
+  const hasDisabledUntil = keepsDisabledUntil && disabled_until !== undefined;
+  const hasSchedule = keepsSchedule && !!schedule;
 
   const mergedPreferences: PushPreferencesResponse = {
     ...otherPreferences,
-    ...(keepsDisabledUntil && disabled_until !== undefined && { disabled_until }),
-    ...(keepsSchedule && schedule && { schedule }),
+    ...(hasDisabledUntil && { disabled_until }),
+    ...(hasSchedule && { schedule }),
   };
   return mergedPreferences;
 };
