@@ -1,3 +1,9 @@
+## [10.0.1](https://github.com/GetStream/stream-chat-js/compare/v10.0.0...v10.0.1) (2026-11-09)
+
+### Bug Fixes
+
+* start the newest interval with the first message in a channel loaded empty ([#2007](https://github.com/GetStream/stream-chat-js/issues/2007)) ([d31d789](https://github.com/GetStream/stream-chat-js/commit/d31d7891ac2aae919a1ee0de69e104f82a54f4c2))
+
 ## [10.0.0](https://github.com/GetStream/stream-chat-js/compare/v9.55.0...v10.0.0) (2026-11-06)
 
 ### ⚠ BREAKING CHANGES
