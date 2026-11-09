@@ -2499,6 +2499,21 @@ describe('MessagePaginator', () => {
           await paginator.toTail();
           expect(channel.query).not.toHaveBeenCalled();
         });
+
+        it("makes the first message the newest window, as the current user's first send", () => {
+          (channel as unknown as { userId: string }).userId = 'me';
+          const paginator = new MessagePaginator({ channel, itemIndex });
+          placeEmptyNewestPage(paginator, null);
+
+          paginator.ingestItem({
+            ...msg('m20', '20'),
+            status: 'sending',
+            user: { id: 'me' },
+          });
+
+          expect(headOf(paginator)).toEqual(['m20']);
+          expect(paginator.isActiveIntervalAtHead).toBe(true);
+        });
       });
 
       describe('has older messages to load when the newest window was not loaded empty', () => {
