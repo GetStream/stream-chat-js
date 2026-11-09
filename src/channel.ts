@@ -470,9 +470,8 @@ export class Channel extends ChannelApi {
 
   /**
    * Marks a message for the current user, for instance `played` when the user played a voice note.
-   * A mark is written once: a repeat returns `created: false` and nothing else happens, and the
-   * message author's own mark is a no-op. The server sends `message.mark_added` to the author and
-   * to the marker once per written mark (CHA-6554).
+   * A mark is written once: a repeat returns `created: false`, and the author's own mark is a no-op.
+   * Each written mark is announced with one `message.mark_added` event to the author and the marker.
    *
    * @param args - `({ id }, { type })`: the message ID and the mark type, for instance `'played'`.
    */
@@ -2887,7 +2886,7 @@ export class Channel extends ChannelApi {
     const message = this.messagePaginator.getItem(event.message.id);
     if (message) {
       event.message.own_reactions = message.own_reactions;
-      // Marks are derived per viewer and never sent on events that replace the message (CHA-6554).
+      // Marks are derived per viewer and never sent on events that replace the message.
       if (event.message.mark_groups === undefined && message.mark_groups !== undefined) {
         event.message.mark_groups = message.mark_groups;
       }

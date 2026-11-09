@@ -2,12 +2,11 @@ import type { StreamChat } from '../client';
 import type { MessageMarkResponse } from '../types';
 
 /**
- * Applies a `message.mark_added` event to the canonical copy of the message, by ID, as an idempotent
- * set-add keyed (message_id, user_id, type): every device of the message author and of the marker
- * receives the same event, so a repeat changes nothing and no counter is incremented blindly. On the
- * current user's own message the mark joins `mark_groups`; on another user's message the current
- * user's own mark joins `own_marks`. No-op when nothing holds the message; a reload repairs it
- * (CHA-6554).
+ * Applies a `message.mark_added` event to the canonical copy of the message, by ID, as an
+ * idempotent set-add keyed (message_id, user_id, type): every device of the author and of the
+ * marker receives the same event, so a repeat changes nothing. The mark joins `mark_groups` on the
+ * current user's own message, or `own_marks` when the current user marked another user's message.
+ * No-op when nothing holds the message.
  */
 export const reflectMessageMarkEvent = (
   client: StreamChat,
