@@ -1,7 +1,6 @@
-type MemberCounts = {
-  active_member_count?: number;
-  member_count?: number;
-};
+import type { ChannelResponse } from '../types';
+
+type MemberCounts = Pick<ChannelResponse, 'active_member_count' | 'member_count'>;
 
 export type CarryActiveMemberCountParams<TData extends MemberCounts> = {
   next: TData;

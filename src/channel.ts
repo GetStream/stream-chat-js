@@ -3,6 +3,7 @@ import { ChannelState } from './channel_state';
 import { CooldownTimer } from './CooldownTimer';
 import { MessageComposer } from './messageComposer';
 import { MessageReceiptsTracker } from './messageDelivery';
+import { withCarriedActiveMemberCount } from './utils/activeMemberCount';
 import {
   channelHasReadEvents,
   generateChannelTempCid,
@@ -13,7 +14,6 @@ import {
   normalizeQuerySort,
   sanitizeOutgoingAttachments,
 } from './utils';
-import { withCarriedActiveMemberCount } from './utils/activeMemberCount';
 import type { StreamChat } from './client';
 import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from './constants';
 import type {
@@ -93,7 +93,7 @@ export class Channel {
   _client: StreamChat;
   type: string;
   id: string | undefined;
-  data: Partial<ChannelData & ChannelResponse> | undefined;
+  private _channelData: Partial<ChannelData & ChannelResponse> | undefined;
   _data: Partial<ChannelData & ChannelResponse>;
   cid: string;
   /**  */
@@ -179,6 +179,18 @@ export class Channel {
     });
 
     this.cooldownTimer = new CooldownTimer({ channel: this });
+  }
+
+  public get data(): Partial<ChannelData & ChannelResponse> | undefined {
+    return this._channelData;
+  }
+
+  public set data(next: Partial<ChannelData & ChannelResponse> | undefined) {
+    const previous = this._channelData;
+
+    const data = next && withCarriedActiveMemberCount({ next, previous });
+
+    this._channelData = data;
   }
 
   /**
@@ -678,7 +690,7 @@ export class Channel {
       ]
         .sort()
         .join();
-    this.data = withCarriedActiveMemberCount({ next: data.channel, previous: this.data });
+    this.data = data.channel;
     // If the capabiltities are changed, we trigger the `capabilities.changed` event.
     if (areCapabilitiesChanged) {
       this.getClient().dispatchEvent({
@@ -703,7 +715,7 @@ export class Channel {
         cooldown: coolDownInterval,
       },
     );
-    this.data = withCarriedActiveMemberCount({ next: data.channel, previous: this.data });
+    this.data = data.channel;
     return data;
   }
 
@@ -719,7 +731,7 @@ export class Channel {
         cooldown: 0,
       },
     );
-    this.data = withCarriedActiveMemberCount({ next: data.channel, previous: this.data });
+    this.data = data.channel;
     return data;
   }
 
@@ -940,7 +952,7 @@ export class Channel {
       this._channelURL(),
       payload,
     );
-    this.data = withCarriedActiveMemberCount({ next: data.channel, previous: this.data });
+    this.data = data.channel;
     return data;
   }
 
@@ -1340,10 +1352,7 @@ export class Channel {
     const combined = { ...defaultOptions, ...options };
     const state = await this.query(combined, 'latest');
     this.initialized = true;
-    this.data = withCarriedActiveMemberCount({
-      next: state.channel,
-      previous: this.data,
-    });
+    this.data = state.channel;
 
     this._client.logger(
       'info',
@@ -1675,10 +1684,7 @@ export class Channel {
       ]
         .sort()
         .join();
-    this.data = withCarriedActiveMemberCount({
-      next: state.channel,
-      previous: this.data,
-    });
+    this.data = state.channel;
     this.offlineMode = false;
     this.cooldownTimer.refresh();
 
@@ -2303,10 +2309,7 @@ export class Channel {
             own_capabilities:
               event.channel?.own_capabilities ?? channel.data?.own_capabilities,
           };
-          channel.data = withCarriedActiveMemberCount({
-            next: newChannelData,
-            previous: channel.data,
-          });
+          channel.data = newChannelData;
           this.cooldownTimer.refresh();
         }
         break;

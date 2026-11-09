@@ -299,7 +299,6 @@ import type { MessageComposer } from './messageComposer';
 import type { AbstractOfflineDB } from './offline-support';
 import { getPendingTaskChannelData } from './offline-support/util';
 import { FixedSizeQueueCache } from './utils/FixedSizeQueueCache';
-import { withCarriedActiveMemberCount } from './utils/activeMemberCount';
 
 function isString(x: unknown): x is string {
   return typeof x === 'string' || x instanceof String;
@@ -2359,10 +2358,7 @@ export class StreamChat {
     for (const channelState of channelsFromApi) {
       this._addChannelConfig(channelState.channel);
       const c = this.channel(channelState.channel.type, channelState.channel.id);
-      c.data = withCarriedActiveMemberCount({
-        next: channelState.channel,
-        previous: c.data,
-      });
+      c.data = channelState.channel;
       c.offlineMode = offlineMode;
       c.initialized = !offlineMode;
       c.push_preferences = channelState.push_preferences;
