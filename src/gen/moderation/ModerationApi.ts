@@ -18,10 +18,14 @@ import type {
   GetActionConfigResponse,
   GetAppealResponse,
   GetConfigResponse,
+  GetConfigVersionResponse,
+  ListConfigVersionsResponse,
   ListQueuesResponse,
   ModerationBanResponse,
   MuteRequest,
   MuteResponse,
+  PublishConfigVersionRequest,
+  PublishConfigVersionResponse,
   QueryAppealsRequest,
   QueryAppealsResponse,
   QueryModerationConfigsRequest,
@@ -31,6 +35,8 @@ import type {
   QueueResponse,
   RevealMediaRequest,
   RevealMediaResponse,
+  SaveConfigVersionRequest,
+  SaveConfigVersionResponse,
   SubmitActionRequest,
   SubmitActionResponse,
   UnbanRequest,
@@ -219,6 +225,21 @@ export class ModerationApi {
     );
   }
 
+  saveConfigVersion(
+    request: SaveConfigVersionRequest,
+    requestOptions?: StreamRequestOptions,
+  ): Promise<StreamResponse<SaveConfigVersionResponse>> {
+    return this.apiClient.sendRequest<SaveConfigVersionResponse>(
+      'POST',
+      '/api/v2/moderation/config/versions',
+      undefined,
+      undefined,
+      request,
+      'application/json',
+      requestOptions,
+    );
+  }
+
   deleteConfig(
     pathParams: { key: string },
     request?: { team?: string },
@@ -247,6 +268,54 @@ export class ModerationApi {
       request,
       undefined,
       undefined,
+      requestOptions,
+    );
+  }
+
+  listConfigVersions(
+    pathParams: { key: string },
+    request?: { team?: string },
+    requestOptions?: StreamRequestOptions,
+  ): Promise<StreamResponse<ListConfigVersionsResponse>> {
+    return this.apiClient.sendRequest<ListConfigVersionsResponse>(
+      'GET',
+      '/api/v2/moderation/config/{key}/versions',
+      pathParams,
+      request,
+      undefined,
+      undefined,
+      requestOptions,
+    );
+  }
+
+  getConfigVersion(
+    pathParams: { key: string; version: number },
+    request?: { team?: string },
+    requestOptions?: StreamRequestOptions,
+  ): Promise<StreamResponse<GetConfigVersionResponse>> {
+    return this.apiClient.sendRequest<GetConfigVersionResponse>(
+      'GET',
+      '/api/v2/moderation/config/{key}/versions/{version}',
+      pathParams,
+      request,
+      undefined,
+      undefined,
+      requestOptions,
+    );
+  }
+
+  publishConfigVersion(
+    pathParams: { key: string; version: number },
+    request?: PublishConfigVersionRequest,
+    requestOptions?: StreamRequestOptions,
+  ): Promise<StreamResponse<PublishConfigVersionResponse>> {
+    return this.apiClient.sendRequest<PublishConfigVersionResponse>(
+      'POST',
+      '/api/v2/moderation/config/{key}/versions/{version}/publish',
+      pathParams,
+      undefined,
+      request ?? {},
+      'application/json',
       requestOptions,
     );
   }
