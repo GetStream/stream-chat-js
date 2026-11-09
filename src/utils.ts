@@ -1164,7 +1164,27 @@ const messagePaginationLinear = ({
   return newPagination;
 };
 
+export const hasMessagePaginationCursor = (options?: MessagePaginationOptions) =>
+  !!(
+    options?.id_lt ||
+    options?.id_lte ||
+    options?.id_gt ||
+    options?.id_gte ||
+    options?.id_around ||
+    options?.created_at_before ||
+    options?.created_at_before_or_equal ||
+    options?.created_at_after ||
+    options?.created_at_after_or_equal ||
+    options?.created_at_around ||
+    options?.offset
+  );
+
 export const messageSetPagination = (params: MessagePaginationUpdatedParams) => {
+  // an empty page asked for says nothing about what else exists
+  if (params.requestedPageSize === 0 && params.parentSet.messages.length > 0) {
+    return params.parentSet.pagination;
+  }
+
   if (
     params.parentSet.messages.length +
       (params.returnedPage.length - params.filteredReturnedPage.length) <

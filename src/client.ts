@@ -2403,7 +2403,7 @@ export class StreamChat {
           ...messageSetPagination({
             parentSet: updatedMessagesSet,
             requestedPageSize:
-              queryChannelsOptions?.message_limit ||
+              queryChannelsOptions?.message_limit ??
               DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE,
             returnedPage: channelState.messages,
             filteredReturnedPage: channelState.messages.filter(
@@ -4675,10 +4675,10 @@ export class StreamChat {
     }
     if (
       typeof options.conversations !== 'undefined' &&
-      !['soft', 'hard'].includes(options.conversations)
+      !['soft', 'hard', 'keep'].includes(options.conversations)
     ) {
       throw new Error(
-        'Invalid delete user options. conversations must be one of [soft hard]',
+        'Invalid delete user options. conversations must be one of [soft hard keep]',
       );
     }
     if (

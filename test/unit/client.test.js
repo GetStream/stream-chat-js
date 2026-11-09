@@ -1172,6 +1172,16 @@ describe('Client WSFallback', () => {
 	});
 });
 
+// deterministic ids and timestamps, so the same message N is identical across pages
+const numberedMessages = (from, to) =>
+	Array.from({ length: to - from + 1 }, (_, i) =>
+		generateMsg({
+			id: `message-${from + i}`,
+			text: `Message ${from + i}`,
+			date: new Date(Date.UTC(2026, 0, 1, 0, from + i)).toISOString(),
+		}),
+	);
+
 describe('StreamChat.queryChannels', async () => {
 	it('should not hydrate activeChannels and channel configs when disableCache is true', async () => {
 		const client = await getClientWithUser();
@@ -1271,6 +1281,276 @@ describe('StreamChat.queryChannels', async () => {
 			});
 		});
 		mock.restore();
+	});
+
+	describe('message_limit: 0', () => {
+		it('keeps hasPrev of a channel that already has messages loaded', async () => {
+			const client = await getClientWithUser();
+			const postStub = sinon.stub(client, 'post');
+			postStub.resolves({
+				channels: [{ ...mockChannelQueryResponse, messages: numberedMessages(36, 60) }],
+			});
+			const [channel] = await client.queryChannels({}, {}, { message_limit: 25 });
+			expect(channel.state.messagePagination.hasPrev).toBe(true);
+
+			postStub.resolves({ channels: [{ ...mockChannelQueryResponse, messages: [] }] });
+			await client.queryChannels({}, {}, { message_limit: 0 });
+
+			expect(channel.state.messages.map((m) => m.text)).toEqual(
+				numberedMessages(36, 60).map((m) => m.text),
+			);
+			expect(channel.state.messagePagination.hasPrev).toBe(true);
+		});
+
+		it('keeps hasPrev false of a channel that is fully loaded', async () => {
+			const client = await getClientWithUser();
+			const postStub = sinon.stub(client, 'post');
+			postStub.resolves({
+				channels: [{ ...mockChannelQueryResponse, messages: numberedMessages(1, 10) }],
+			});
+			const [channel] = await client.queryChannels({}, {}, { message_limit: 25 });
+			expect(channel.state.messagePagination.hasPrev).toBe(false);
+
+			postStub.resolves({ channels: [{ ...mockChannelQueryResponse, messages: [] }] });
+			await client.queryChannels({}, {}, { message_limit: 0 });
+
+			expect(channel.state.messagePagination.hasPrev).toBe(false);
+		});
+
+		it('allows loading messages of a channel that has none loaded yet', async () => {
+			const client = await getClientWithUser();
+			sinon
+				.stub(client, 'post')
+				.resolves({ channels: [{ ...mockChannelQueryResponse, messages: [] }] });
+
+			const [channel] = await client.queryChannels({}, {}, { message_limit: 0 });
+
+			expect(channel.state.messagePagination.hasPrev).toBe(true);
+		});
+	});
+
+	describe('latest page that does not connect to the loaded messages', () => {
+		it('does not merge the page with the loaded messages, so the gap can be paginated', async () => {
+			const client = await getClientWithUser();
+			const postStub = sinon.stub(client, 'post');
+			postStub.resolves({
+				channels: [{ ...mockChannelQueryResponse, messages: numberedMessages(1, 25) }],
+			});
+			const [channel] = await client.queryChannels({}, {}, { message_limit: 25 });
+
+			// e.g. recoverState after Message 26..125 arrived while disconnected
+			postStub.resolves({
+				channels: [{ ...mockChannelQueryResponse, messages: numberedMessages(101, 125) }],
+			});
+			await client.queryChannels({}, {}, { message_limit: 25 });
+
+			expect(channel.state.messages.map((m) => m.text)).toEqual(
+				numberedMessages(101, 125).map((m) => m.text),
+			);
+			expect(channel.state.messagePagination).toEqual({ hasNext: false, hasPrev: true });
+
+			// paginate back through the gap
+			for (const [from, to] of [
+				[76, 100],
+				[51, 75],
+				[26, 50],
+				[1, 25],
+			]) {
+				const page = numberedMessages(from, to);
+				postStub.resolves({ ...mockChannelQueryResponse, messages: page });
+				await channel.query({
+					messages: { limit: 25, id_lt: channel.state.messages[0].id },
+				});
+			}
+			postStub.resolves({ ...mockChannelQueryResponse, messages: [] });
+			await channel.query({
+				messages: { limit: 25, id_lt: channel.state.messages[0].id },
+			});
+
+			expect(channel.state.messageSets.length).toBe(1);
+			expect(channel.state.messages.map((m) => m.text)).toEqual(
+				numberedMessages(1, 125).map((m) => m.text),
+			);
+			expect(channel.state.messagePagination.hasPrev).toBe(false);
+		});
+
+		it('still merges a latest page that overlaps the loaded messages', async () => {
+			const client = await getClientWithUser();
+			const postStub = sinon.stub(client, 'post');
+			postStub.resolves({
+				channels: [{ ...mockChannelQueryResponse, messages: numberedMessages(1, 25) }],
+			});
+			const [channel] = await client.queryChannels({}, {}, { message_limit: 25 });
+
+			postStub.resolves({
+				channels: [{ ...mockChannelQueryResponse, messages: numberedMessages(11, 35) }],
+			});
+			await client.queryChannels({}, {}, { message_limit: 25 });
+
+			expect(channel.state.messageSets.length).toBe(1);
+			expect(channel.state.messages.map((m) => m.text)).toEqual(
+				numberedMessages(1, 35).map((m) => m.text),
+			);
+		});
+
+		it('keeps the loaded messages when a disjoint newer message arrives over WS', async () => {
+			const client = await getClientWithUser();
+			sinon.stub(client, 'post').resolves({
+				channels: [{ ...mockChannelQueryResponse, messages: numberedMessages(1, 25) }],
+			});
+			const [channel] = await client.queryChannels({}, {}, { message_limit: 25 });
+
+			channel._handleChannelEvent({
+				type: 'message.new',
+				message: numberedMessages(101, 101)[0],
+			});
+
+			expect(channel.state.messages.length).toBe(26);
+		});
+
+		it('drops the stale messages when watch returns a disjoint newer page', async () => {
+			const client = await getClientWithUser();
+			const postStub = sinon.stub(client, 'post');
+			postStub.resolves({
+				channels: [{ ...mockChannelQueryResponse, messages: numberedMessages(1, 25) }],
+			});
+			const [channel] = await client.queryChannels({}, {}, { message_limit: 25 });
+
+			postStub.resolves({
+				...mockChannelQueryResponse,
+				messages: numberedMessages(101, 125),
+			});
+			await channel.watch({ messages: { limit: 25 } });
+
+			expect(channel.state.messages.map((m) => m.text)).toEqual(
+				numberedMessages(101, 125).map((m) => m.text),
+			);
+			expect(channel.state.messagePagination.hasPrev).toBe(true);
+		});
+
+		it('extends the latest messages with a page loaded by a forward cursor', async () => {
+			const client = await getClientWithUser();
+			const postStub = sinon.stub(client, 'post');
+			postStub.resolves({
+				channels: [{ ...mockChannelQueryResponse, messages: numberedMessages(1, 25) }],
+			});
+			const [channel] = await client.queryChannels({}, {}, { message_limit: 25 });
+
+			postStub.resolves({
+				...mockChannelQueryResponse,
+				messages: numberedMessages(26, 50),
+			});
+			await channel.query({ messages: { limit: 25, id_gt: 'message-25' } }, 'latest');
+
+			expect(channel.state.messageSets.length).toBe(1);
+			expect(channel.state.messages.map((m) => m.text)).toEqual(
+				numberedMessages(1, 50).map((m) => m.text),
+			);
+		});
+
+		it('replaces the stale latest messages without leaving a jumped-to message set', async () => {
+			const client = await getClientWithUser();
+			const postStub = sinon.stub(client, 'post');
+			postStub.resolves({
+				channels: [{ ...mockChannelQueryResponse, messages: numberedMessages(51, 75) }],
+			});
+			const [channel] = await client.queryChannels({}, {}, { message_limit: 25 });
+
+			postStub.resolves({
+				...mockChannelQueryResponse,
+				messages: numberedMessages(1, 20),
+			});
+			await channel.state.loadMessageIntoState('message-10');
+			expect(channel.state.messages.map((m) => m.text)).toEqual(
+				numberedMessages(1, 20).map((m) => m.text),
+			);
+
+			postStub.resolves({
+				channels: [{ ...mockChannelQueryResponse, messages: numberedMessages(101, 125) }],
+			});
+			await client.queryChannels({}, {}, { message_limit: 25 });
+
+			expect(channel.state.messageSets.length).toBe(2);
+			expect(channel.state.messages.map((m) => m.text)).toEqual(
+				numberedMessages(1, 20).map((m) => m.text),
+			);
+			expect(channel.state.latestMessages.map((m) => m.text)).toEqual(
+				numberedMessages(101, 125).map((m) => m.text),
+			);
+		});
+
+		it('keeps the latest messages while they include a failed local message', async () => {
+			const client = await getClientWithUser();
+			const postStub = sinon.stub(client, 'post');
+			postStub.resolves({
+				channels: [{ ...mockChannelQueryResponse, messages: numberedMessages(1, 25) }],
+			});
+			const [channel] = await client.queryChannels({}, {}, { message_limit: 25 });
+			channel.state.addMessageSorted({
+				...generateMsg({
+					id: 'failed-message',
+					date: new Date(Date.UTC(2026, 0, 1, 0, 25, 30)).toISOString(),
+				}),
+				status: 'failed',
+			});
+
+			postStub.resolves({
+				channels: [{ ...mockChannelQueryResponse, messages: numberedMessages(101, 125) }],
+			});
+			await client.queryChannels({}, {}, { message_limit: 25 });
+
+			expect(channel.state.messages.map((m) => m.id)).toContain('failed-message');
+		});
+	});
+});
+
+describe('StreamChat.hydrateActiveChannels from the offline DB', () => {
+	// as ChannelManager does: the DB returns the newest `message_limit` messages of each channel
+	const hydrateFromOfflineDb = (client, messages, options) =>
+		client.hydrateActiveChannels(
+			[{ ...mockChannelQueryResponse, messages }],
+			{ offlineMode: true, skipInitialization: [] },
+			options,
+		)[0];
+
+	it('reads a full cached page as having older messages', async () => {
+		const client = await getClientWithUser();
+		const channel = hydrateFromOfflineDb(client, numberedMessages(91, 100), {
+			message_limit: 10,
+		});
+
+		expect(channel.state.messagePagination.hasPrev).toBe(true);
+	});
+
+	it('reads a short cached page as the start of the channel', async () => {
+		const client = await getClientWithUser();
+		const channel = hydrateFromOfflineDb(client, numberedMessages(1, 8), {
+			message_limit: 10,
+		});
+
+		expect(channel.state.messagePagination.hasPrev).toBe(false);
+	});
+
+	it('keeps older messages loadable once the online page arrives', async () => {
+		const client = await getClientWithUser();
+		const channel = hydrateFromOfflineDb(client, numberedMessages(91, 100), {
+			message_limit: 10,
+		});
+
+		const postStub = sinon.stub(client, 'post');
+		postStub.resolves({
+			channels: [{ ...mockChannelQueryResponse, messages: numberedMessages(91, 100) }],
+		});
+		await client.queryChannels({}, {}, { message_limit: 10 });
+		expect(channel.state.messagePagination.hasPrev).toBe(true);
+
+		postStub.resolves({
+			...mockChannelQueryResponse,
+			messages: numberedMessages(66, 90),
+		});
+		await channel.query({ messages: { limit: 25, id_lt: channel.state.messages[0].id } });
+		expect(channel.state.messages.length).toBe(35);
+		expect(channel.state.messagePagination.hasPrev).toBe(true);
 	});
 });
 

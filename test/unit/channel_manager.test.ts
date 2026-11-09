@@ -581,10 +581,14 @@ describe('ChannelManager', () => {
           });
 
           expect(
-            hydrateActiveChannelsSpy.calledOnceWithExactly(mockChannelPages[0], {
-              offlineMode: true,
-              skipInitialization: [],
-            }),
+            hydrateActiveChannelsSpy.calledOnceWithExactly(
+              mockChannelPages[0],
+              {
+                offlineMode: true,
+                skipInitialization: [],
+              },
+              {},
+            ),
           ).toBe(true);
 
           expect(stateChangeSpy.calledOnceWithExactly(channels));

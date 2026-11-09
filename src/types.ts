@@ -75,6 +75,26 @@ export type APIResponse = {
   blocklist?: BlockListResponse;
 };
 
+export type PagerDefaults = {
+  limit: number;
+};
+
+/**
+ * Request limit defaults applied by the server when the corresponding field is omitted.
+ */
+export type AppDefaults = {
+  get_or_create_channel: {
+    members: PagerDefaults;
+    messages: PagerDefaults;
+  };
+  query_channels: {
+    limit: number;
+    max_limit: number;
+    member_limit: number;
+    message_limit: number;
+  };
+};
+
 export type TranslateResponse = {
   language: string;
   translated_text: string;
@@ -143,6 +163,7 @@ export type AppSettingsAPIResponse = APIResponse & {
     cdn_expiration_seconds?: number;
     chat_primary_use_case?: string;
     custom_action_handler_url?: string;
+    defaults?: AppDefaults;
     datadog_info?: {
       api_key: string;
       site: string;
@@ -2682,6 +2703,11 @@ export type ChannelConfigWithInfo = ChannelConfigFields &
   CreatedAtUpdatedAt &
   ScheduledMessagesChannelConfig & {
     commands?: CommandResponse[];
+    // scheduled message limits, present only when the app has scheduled messages enabled
+    scheduled_messages_max_lead_time_seconds?: number;
+    scheduled_messages_max_per_channel?: number;
+    scheduled_messages_max_per_user?: number;
+    scheduled_messages_min_lead_time_seconds?: number;
   };
 
 export type ChannelData = CustomChannelData &
@@ -3354,10 +3380,11 @@ export type DeleteType = 'soft' | 'hard' | 'pruning';
   `user`:
     - soft: marks user as deleted and retains all user data
     - pruning: marks user as deleted and nullifies user information
-    - hard: deletes user completely - this requires hard option for messages and conversation as well
+    - hard: deletes user completely - this requires hard option for messages, and hard or keep option for conversations
   `conversations`:
     - soft: marks all conversation channels as deleted (same effect as Delete Channels with 'hard' option disabled)
     - hard: deletes channel and all its data completely including messages (same effect as Delete Channels with 'hard' option enabled)
+    - keep: doesn't delete any conversation channels. Use it with user hard, where an unset value defaults to hard
   `messages`:
     - soft: marks all user messages as deleted without removing any related message data
     - pruning: marks all user messages as deleted, nullifies message information and removes some message data such as reactions and flags
@@ -3365,7 +3392,7 @@ export type DeleteType = 'soft' | 'hard' | 'pruning';
   `new_channel_owner_id`: any channels owned by the hard-deleted user will be transferred to this user ID
  */
 export type DeleteUserOptions = {
-  conversations?: Exclude<DeleteType, 'pruning'>;
+  conversations?: Exclude<DeleteType, 'pruning'> | 'keep';
   messages?: DeleteType;
   new_channel_owner_id?: string;
   user?: DeleteType;

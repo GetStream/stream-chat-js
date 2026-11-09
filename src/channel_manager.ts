@@ -460,10 +460,14 @@ export class ChannelManager extends WithSubscriptions {
           });
 
           if (channelsFromDB) {
-            const offlineChannels = this.client.hydrateActiveChannels(channelsFromDB, {
-              offlineMode: true,
-              skipInitialization: [], // passing empty array will clear out the existing messages from channel state, this removes the possibility of duplicate messages
-            });
+            const offlineChannels = this.client.hydrateActiveChannels(
+              channelsFromDB,
+              {
+                offlineMode: true,
+                skipInitialization: [], // passing empty array will clear out the existing messages from channel state, this removes the possibility of duplicate messages
+              },
+              options,
+            );
 
             this.state.partialNext({ channels: offlineChannels });
           }

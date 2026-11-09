@@ -4,7 +4,7 @@ Stream JS client supports uploading files in both browser and Node.js environmen
 
 ## Token
 
-You can get your API key and API secret in [Stream Dashboard](https://getsream.io/dashboard/).
+You can get your API key and API secret in [Stream Dashboard](https://getstream.io/dashboard/).
 User token can be generated using your API Secret and any random User ID using [Stream Token Generator](https://getstream.io/chat/docs/javascript/token_generator/).
 
 ```js
