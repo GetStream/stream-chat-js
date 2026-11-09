@@ -1724,13 +1724,18 @@ export class StreamChat extends ChatApi {
     const { user, userId } = this;
     if (!user || !userId) return result;
 
+    const { push_preferences: previous } = user;
+    const { user_preferences: userPreferences } = result;
+    const updated = userPreferences?.[userId];
     const pushPreferences = mergeOwnPushPreferences({
       preferences,
-      previous: user.push_preferences,
-      updated: result.user_preferences?.[userId],
+      previous,
+      updated,
       userId,
     });
-    if (pushPreferences !== user.push_preferences) {
+
+    const hasChanged = pushPreferences !== previous;
+    if (hasChanged) {
       this.user = { ...user, push_preferences: pushPreferences };
     }
     return result;
