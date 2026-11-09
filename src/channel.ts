@@ -195,26 +195,27 @@ const getCarriedActiveMemberCount = ({
   next,
   previous,
 }: CarriedActiveMemberCountParams) => {
-  if (typeof next.active_member_count === 'number') return undefined;
-  if (typeof previous?.active_member_count !== 'number') return undefined;
-
+  const { active_member_count: nextActiveMemberCount } = next;
   const {
     active_member_count: previousActiveMemberCount,
     member_count: previousMemberCount,
-  } = previous;
-  const memberCountChange =
-    typeof memberCount === 'number' && typeof previousMemberCount === 'number'
-      ? memberCount - previousMemberCount
-      : 0;
+  } = previous ?? {};
+  const hasOwnActiveMemberCount = typeof nextActiveMemberCount === 'number';
+  const hasPreviousActiveMemberCount = typeof previousActiveMemberCount === 'number';
+  if (hasOwnActiveMemberCount || !hasPreviousActiveMemberCount) return undefined;
+
+  const knowsMemberCount = typeof memberCount === 'number';
+  const knowsBothMemberCounts =
+    knowsMemberCount && typeof previousMemberCount === 'number';
+  const memberCountChange = knowsBothMemberCounts ? memberCount - previousMemberCount : 0;
   const shiftedActiveMemberCount = Math.max(
     0,
     previousActiveMemberCount + memberCountChange,
   );
-  const carriedActiveMemberCount =
-    typeof memberCount === 'number'
-      ? Math.min(shiftedActiveMemberCount, memberCount)
-      : shiftedActiveMemberCount;
 
+  const carriedActiveMemberCount = knowsMemberCount
+    ? Math.min(shiftedActiveMemberCount, memberCount)
+    : shiftedActiveMemberCount;
   return carriedActiveMemberCount;
 };
 
@@ -1242,9 +1243,10 @@ export class Channel extends ChannelApi {
       typeof next?.member_count !== 'number' && typeof previous?.member_count === 'number'
         ? previous.member_count
         : undefined;
+    const { member_count: nextMemberCount } = next ?? {};
     const carriedActiveMemberCount = next
       ? getCarriedActiveMemberCount({
-          memberCount: next.member_count ?? carriedMemberCount,
+          memberCount: nextMemberCount ?? carriedMemberCount,
           next,
           previous,
         })
@@ -1255,15 +1257,17 @@ export class Channel extends ChannelApi {
         ? [...previous.own_capabilities]
         : undefined;
 
+    const carriesMemberCount = carriedMemberCount !== undefined;
+    const carriesActiveMemberCount = carriedActiveMemberCount !== undefined;
+    const carriesValues =
+      carriesMemberCount || carriesActiveMemberCount || !!carriedCapabilities;
+
     const data =
-      next &&
-      (carriedMemberCount !== undefined ||
-        carriedActiveMemberCount !== undefined ||
-        carriedCapabilities)
+      next && carriesValues
         ? {
             ...next,
-            ...(carriedMemberCount !== undefined && { member_count: carriedMemberCount }),
-            ...(carriedActiveMemberCount !== undefined && {
+            ...(carriesMemberCount && { member_count: carriedMemberCount }),
+            ...(carriesActiveMemberCount && {
               active_member_count: carriedActiveMemberCount,
             }),
             ...(carriedCapabilities && { own_capabilities: carriedCapabilities }),
