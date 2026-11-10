@@ -17,6 +17,9 @@ jobs:
 
       - uses: ./.github/actions/setup-node
 
+      - name: Build
+        run: yarn build
+
       - name: Run API type definition tests
         run: yarn test-types
         env:
