@@ -101,6 +101,8 @@ import type {
   Response,
   RewindChannelRequest,
   RewindChannelResponse,
+  SearchAllRequest,
+  SearchAllResponse,
   SearchPayload,
   SearchResponse,
   SearchRolesResponse,
@@ -1265,6 +1267,24 @@ export class ChatApi {
       request,
       undefined,
       undefined,
+      requestOptions,
+    );
+  }
+
+  searchAll(
+    request?: SearchAllRequest & { connection_id?: string },
+    requestOptions?: StreamRequestOptions,
+  ): Promise<StreamResponse<SearchAllResponse>> {
+    const { connection_id, ...body } = request ?? {};
+    const queryParams = { connection_id };
+
+    return this.apiClient.sendRequest<SearchAllResponse>(
+      'POST',
+      '/api/v2/chat/search/all',
+      undefined,
+      queryParams,
+      body,
+      'application/json',
       requestOptions,
     );
   }

@@ -2573,6 +2573,7 @@ export interface ClosedCaptionRuleParameters {
   threshold?: number;
   time_window?: string;
   harm_labels?: Array<string>;
+  severities?: Array<string>;
   llm_harm_labels?: Record<string, string>;
 }
 
@@ -5878,11 +5879,15 @@ export interface ModerationEngineConfigRequest {
   /**
    * LLM model used when the provider resolves to llm. Not allowed with provider nlp. Empty uses the app's moderation settings
    */
-  model?: 'gpt-4o-mini' | 'gpt-4o';
+  model?: 'gpt-4o-mini' | 'gpt-4o' | 'gpt-6-luna';
   /**
    * llm or nlp. Empty follows the app's LLM moderation setting
    */
   provider?: 'llm' | 'nlp';
+  /**
+   * OpenAI reasoning effort for model. Requires model, and must be one the model accepts. Empty uses the model's default
+   */
+  reasoning_effort?: string;
 }
 
 export interface ModerationEngineConfigResponse {
@@ -5894,6 +5899,10 @@ export interface ModerationEngineConfigResponse {
    * llm or nlp. Empty follows the app's LLM moderation setting
    */
   provider?: 'llm' | 'nlp';
+  /**
+   * OpenAI reasoning effort for model. Requires model, and must be one the model accepts. Empty uses the model's default
+   */
+  reasoning_effort?: string;
 }
 
 export interface ModerationFlagResponse {
@@ -10071,6 +10080,93 @@ export interface ScheduledMessagesFilter {
    * Only these statuses, as reported in each scheduled message's status. One or more of: scheduled, sending, failed
    */
   status?: Array<ScheduledMessageQueryStatus>;
+}
+
+export interface SearchAllChannelsSection {
+  /**
+   * Opaque cursor for the next page of this section, present only when more results exist. Pass it back under next.channels with the same query
+   */
+  next?: string;
+  /**
+   * Channels the caller is a member of whose name starts with the query, in the same shape as the query channels endpoint's results but without messages or members
+   */
+  channels?: Array<ChannelStateResponseFields>;
+  error?: SearchAllSectionError;
+  warning?: SearchAllWarning;
+}
+
+export interface SearchAllMessagesSection {
+  /**
+   * Opaque cursor for the next page of this section, present only when more results exist. Pass it back under next.messages with the same query
+   */
+  next?: string;
+  /**
+   * Matching messages, newest first, in the same shape as the search endpoint's results
+   */
+  results?: Array<SearchResult>;
+  error?: SearchAllSectionError;
+  results_warning?: SearchWarning;
+  warning?: SearchAllWarning;
+}
+
+export interface SearchAllRequest {
+  /**
+   * Number of results per section, 1-30. Defaults to 10. Applies to every requested section; there is no per-section limit
+   */
+  limit?: number;
+  /**
+   * Free-text search phrase, 1-80 characters after trimming whitespace. Required. Matched as a prefix of a user's name or username and of a channel's name, and as full-text against message text
+   */
+  query?: string;
+  /**
+   * Which sections to search: any subset of messages, users and channels. Defaults to all three when omitted; must not be empty when provided. Response sections always appear in the order messages, users, channels
+   */
+  entities?: Array<string>;
+  /**
+   * Opaque pagination cursors from a previous response, keyed by entity. A cursor that fails to decode restarts that section from page 1 with a cursor_rejected warning; the request fails with 400 only when every cursor supplied for a requested entity is invalid. Cursors for entities not in entities are ignored
+   */
+  next?: Record<string, string>;
+}
+
+export interface SearchAllResponse {
+  /**
+   * Duration of the request in milliseconds
+   */
+  duration: string;
+  channels?: SearchAllChannelsSection;
+  messages?: SearchAllMessagesSection;
+  users?: SearchAllUsersSection;
+}
+
+export interface SearchAllSectionError {
+  /**
+   * Error code. backend_timeout and backend_unavailable are retryable; unsupported (the app's configuration cannot serve this section) and internal_error are not
+   */
+  code: 'backend_unavailable' | 'backend_timeout' | 'unsupported' | 'internal_error';
+  /**
+   * Human-readable description of the failure
+   */
+  message: string;
+}
+
+export interface SearchAllUsersSection {
+  /**
+   * Opaque cursor for the next page of this section, present only when more results exist. Pass it back under next.users with the same query
+   */
+  next?: string;
+  /**
+   * Users whose name or username starts with the query, in the same shape as the query users endpoint's results
+   */
+  users?: Array<FullUserResponse>;
+  error?: SearchAllSectionError;
+  warning?: SearchAllWarning;
+}
+
+export interface SearchAllWarning {
+  /**
+   * Warning code. cursor_rejected: the cursor supplied for this section failed to decode, so the section restarted from page 1
+   */
+  code: 'cursor_rejected';
 }
 
 export interface SearchPayload {

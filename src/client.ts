@@ -1683,10 +1683,11 @@ export class StreamChat extends ChatApi {
   /**
    * Revokes a global ban, or a channel ban when `options.type` and `options.id` name a channel.
    *
-   * Goes through V2 `client.moderation.unban()`. The one exception is
-   * `remove_future_channels_ban`, which that endpoint does not accept, so a call with it set still
-   * goes to v1 `DELETE /moderation/ban`. `shadow` is accepted for compatibility but ignored: the
-   * server lifts whichever ban is in place, shadow or not, on both endpoints.
+   * Goes through V2 `client.moderation.unban()`. `shadow` is accepted for compatibility but ignored:
+   * the server lifts whichever ban is in place, shadow or not. With `remove_future_channels_ban`,
+   * the future channels ban is removed too: the channel creator's when a channel is named (where
+   * `channel.banUser` with `ban_from_future_channels` keys it), otherwise the caller's, and then
+   * only the future channels ban is removed.
    *
    * @param targetUserId - The user to unban.
    * @param options - Unban options (optional).
@@ -1697,18 +1698,11 @@ export class StreamChat extends ChatApi {
     options?: UnBanUserOptions,
   ): Promise<APIResponse> {
     const { id, remove_future_channels_ban, type } = options ?? {};
-    const target_user_id = options?.target_user_id ?? targetUserId;
-
-    if (remove_future_channels_ban) {
-      return await this.api.delete<APIResponse>(this.baseURL + '/moderation/ban', {
-        ...options,
-        target_user_id,
-      });
-    }
 
     return await this.moderation.unban({
-      target_user_id,
+      target_user_id: options?.target_user_id ?? targetUserId,
       channel_cid: type && id ? `${type}:${id}` : undefined,
+      remove_future_channels_ban,
     });
   }
 
