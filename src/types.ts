@@ -232,6 +232,7 @@ export type AppSettingsAPIResponse = APIResponse & {
     sqs_url?: string;
     suspended?: boolean;
     suspended_explanation?: string;
+    two_way_block_effect_enabled?: boolean;
     use_hook_v2?: boolean;
     user_response_time_enabled?: boolean;
     user_search_disallowed_roles?: string[] | null;
