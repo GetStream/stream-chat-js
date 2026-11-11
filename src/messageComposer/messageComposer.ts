@@ -144,14 +144,13 @@ export type MessageComposerState = {
   showReplyInChannel: boolean;
   /** Baseline of the message being edited, unchanged during the session (for restore or cancel). */
   editedMessage: LocalMessage | null;
+  /**
+   * The scheduled message open in the composer. A pending one is edited and saved with
+   * `updateScheduledMessage()`; a failed one is scheduled or sent again as a new message, and
+   * deleted once that goes out.
+   */
   editedScheduledMessage: ScheduledMessageResponse | null;
-  failedScheduledMessage: ScheduledMessageResponse | null;
 };
-
-type ScheduledMessageCompositionState = Pick<
-  MessageComposerState,
-  'editedScheduledMessage' | 'failedScheduledMessage'
->;
 
 export type MessageComposerInitStateOptions = {
   composition?: DraftResponse | MessageResponse | LocalMessage;
@@ -210,7 +209,6 @@ const initState = (
       showReplyInChannel: false,
       editedMessage: null,
       editedScheduledMessage: null,
-      failedScheduledMessage: null,
     };
   }
 
@@ -237,7 +235,6 @@ const initState = (
     showReplyInChannel: false,
     editedMessage,
     editedScheduledMessage: null,
-    failedScheduledMessage: null,
   };
 };
 
@@ -386,8 +383,13 @@ export class MessageComposer extends WithSubscriptions {
     return this.state.getLatestValue().editedScheduledMessage ?? undefined;
   }
 
-  get failedScheduledMessage(): ScheduledMessageResponse | undefined {
-    return this.state.getLatestValue().failedScheduledMessage ?? undefined;
+  /** The open scheduled message when it failed: it is sent or scheduled again, not edited. */
+  private get failedScheduledMessage(): ScheduledMessageResponse | undefined {
+    const { editedScheduledMessage } = this;
+
+    return editedScheduledMessage?.status === SCHEDULED_MESSAGE_STATUS.Failed
+      ? editedScheduledMessage
+      : undefined;
   }
 
   get scheduleBlockReason(): ScheduledMessageBlockReason | undefined {
@@ -397,15 +399,14 @@ export class MessageComposer extends WithSubscriptions {
   }
 
   private get hasEditInProgress() {
-    return !!this.editedMessage || !!this.editedScheduledMessage;
-  }
-
-  private get scheduledMessageInComposer() {
-    return this.editedScheduledMessage ?? this.failedScheduledMessage;
+    return (
+      !!this.editedMessage ||
+      (!!this.editedScheduledMessage && !this.failedScheduledMessage)
+    );
   }
 
   private get pausesDrafts() {
-    return this.hasEditInProgress || !!this.failedScheduledMessage;
+    return !!this.editedMessage || !!this.editedScheduledMessage;
   }
 
   get contextType() {
@@ -697,7 +698,7 @@ export class MessageComposer extends WithSubscriptions {
       return;
     }
     const { draft } = channelApiResponse;
-    if (this.scheduledMessageInComposer) {
+    if (this.editedScheduledMessage) {
       if (draft) {
         this.restoreAfterScheduledMessageEdit = () =>
           this.initState({ composition: draft });
@@ -874,10 +875,10 @@ export class MessageComposer extends WithSubscriptions {
     scheduled_message?: ScheduledMessageResponse;
     type: ScheduledMessageEndEventType;
   }) => {
-    const { failedScheduledMessage, scheduledMessageInComposer } = this;
+    const { editedScheduledMessage, failedScheduledMessage } = this;
     const reason = END_REASON_BY_SCHEDULED_MESSAGE_EVENT[type];
 
-    if (!incoming || incoming.id !== scheduledMessageInComposer?.id) return;
+    if (!incoming || incoming.id !== editedScheduledMessage?.id) return;
 
     const isFailedMessageStillThere =
       !!failedScheduledMessage && reason !== ScheduledMessageCompositionEndReason.Deleted;
@@ -953,7 +954,7 @@ export class MessageComposer extends WithSubscriptions {
         draft.channel_cid !== this.channel.cid
       )
         return;
-      if (this.scheduledMessageInComposer) {
+      if (this.editedScheduledMessage) {
         this.restoreAfterScheduledMessageEdit = () =>
           this.initState({ composition: draft });
         return;
@@ -972,7 +973,7 @@ export class MessageComposer extends WithSubscriptions {
       ) {
         return;
       }
-      if (this.scheduledMessageInComposer) {
+      if (this.editedScheduledMessage) {
         this.restoreAfterScheduledMessageEdit = this.clear;
         return;
       }
@@ -1459,33 +1460,25 @@ export class MessageComposer extends WithSubscriptions {
     const restore = this.restoreAfterScheduledMessageEdit ?? this.clear;
 
     this.restoreAfterScheduledMessageEdit = null;
-    this.state.partialNext({
-      editedScheduledMessage: null,
-      failedScheduledMessage: null,
-    });
+    this.state.partialNext({ editedScheduledMessage: null });
 
     restore();
   };
 
   private saveCompositionBeforeScheduledMessage = () => {
-    if (this.scheduledMessageInComposer) return;
+    if (this.editedScheduledMessage) return;
 
     const snapshot = this.getSnapshot();
     const state = this.state.getLatestValue();
 
     this.restoreAfterScheduledMessageEdit = () => {
       this.restoreSnapshot(snapshot);
-      this.state.next({
-        ...state,
-        editedScheduledMessage: null,
-        failedScheduledMessage: null,
-      });
+      this.state.next({ ...state, editedScheduledMessage: null });
     };
   };
 
   private fillFromScheduledMessage = async (
     scheduledMessage: ScheduledMessageResponse,
-    scheduledMessageState: ScheduledMessageCompositionState,
   ) => {
     const { message } = scheduledMessage;
     const {
@@ -1504,8 +1497,8 @@ export class MessageComposer extends WithSubscriptions {
     this.initState({
       composition: toScheduledMessageComposition(scheduledMessage),
       stateOverrides: {
-        ...scheduledMessageState,
         draftId: null,
+        editedScheduledMessage: scheduledMessage,
         quotedMessage,
         showReplyInChannel,
       },
@@ -1516,7 +1509,7 @@ export class MessageComposer extends WithSubscriptions {
   private removeFailedScheduledMessage = (
     failedScheduledMessage: ScheduledMessageResponse,
   ) => {
-    this.client.scheduledMessages
+    this.channel
       .deleteScheduledMessage(failedScheduledMessage.id)
       .catch((error) =>
         logger
@@ -1561,17 +1554,17 @@ export class MessageComposer extends WithSubscriptions {
     const { message, sendOptions } = composition;
 
     try {
-      const { scheduled_message: scheduledMessage } =
-        await this.client.scheduledMessages.scheduleMessage(this.channel, {
-          ...sendOptions,
-          message,
-        });
+      const { scheduled_message: scheduledMessage } = await this.channel.scheduleMessage({
+        ...sendOptions,
+        message,
+      });
 
       if (failedScheduledMessage) {
         this.endScheduledMessageComposition();
         this.removeFailedScheduledMessage(failedScheduledMessage);
       } else {
-        this.clear();
+        // as `send()` does: a retained composition only detaches the poll that just went out
+        this.releaseSubmittedComposition();
       }
 
       return scheduledMessage
@@ -1587,31 +1580,20 @@ export class MessageComposer extends WithSubscriptions {
     }
   };
 
+  /**
+   * Loads a scheduled message into the composer. A pending one is edited and saved with
+   * `updateScheduledMessage()`. A failed one cannot be edited on the server, so it is scheduled
+   * (`schedule()`) or sent (`send()`) again as a new message, and deleted once that goes out.
+   */
   editScheduledMessage = (scheduledMessage: ScheduledMessageResponse) =>
-    this.fillFromScheduledMessage(scheduledMessage, {
-      editedScheduledMessage: scheduledMessage,
-      failedScheduledMessage: null,
-    });
-
-  rescheduleFailedMessage = async (failedMessage: ScheduledMessageResponse) => {
-    if (failedMessage.status !== SCHEDULED_MESSAGE_STATUS.Failed) return;
-
-    await this.fillFromScheduledMessage(failedMessage, {
-      editedScheduledMessage: null,
-      failedScheduledMessage: failedMessage,
-    });
-  };
-
-  cancelRescheduleFailedMessage = () => {
-    if (!this.failedScheduledMessage) return;
-
-    this.endScheduledMessageComposition();
-  };
+    this.fillFromScheduledMessage(scheduledMessage);
 
   updateScheduledMessage = async (): Promise<ScheduledMessageSubmitResult> => {
     const { editedScheduledMessage } = this;
 
-    if (!editedScheduledMessage) return { status: 'nothing-to-send' };
+    if (!editedScheduledMessage || this.failedScheduledMessage) {
+      return { status: 'nothing-to-send' };
+    }
 
     if (this.scheduleBlockReason) {
       await this.compose();
@@ -1628,7 +1610,7 @@ export class MessageComposer extends WithSubscriptions {
     );
 
     try {
-      const scheduledMessage = await this.client.scheduledMessages.updateScheduledMessage(
+      const scheduledMessage = await this.channel.updateScheduledMessage(
         editedScheduledMessage.id,
         { message },
       );

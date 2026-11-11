@@ -155,12 +155,10 @@ describe('every configurable object has a path in the configuration tree', () =>
     },
     {
       apply: () =>
-        client.config.set({
-          client: { scheduledMessages: { paginator: { pageSize: 25 } } },
-        }),
+        client.config.set({ channel: { scheduledMessagesPaginator: { pageSize: 25 } } }),
       expected: 25,
-      name: 'client.scheduledMessages.paginator',
-      read: () => client.scheduledMessages.paginator.pageSize,
+      name: 'channel.scheduledMessagesPaginator',
+      read: () => openChannel().scheduledMessagesPaginator.pageSize,
     },
     {
       apply: () =>

@@ -111,6 +111,8 @@ const setup = ({
     duration: '',
   } as never);
   const channel = client.channelManager.ensure({ type: channelType, id: channelId });
+  // Loaded and empty, so the scheduled messages the composer's actions return are listed.
+  channel.scheduledMessagesPaginator.hydrate([]);
   const compositionContext = threadId ? getThread(client, threadId) : channel;
   const composer = new MessageComposer({
     client,
@@ -188,9 +190,7 @@ describe('MessageComposer scheduled messages', () => {
         undefined,
       );
       expect(result).toEqual({ scheduledMessage, status: 'scheduled' });
-      expect(client.scheduledMessages.getFromState(scheduledMessage.id)).toEqual(
-        scheduledMessage,
-      );
+      expect(channel.scheduledMessagesPaginator.items).toEqual([scheduledMessage]);
       expect(channel.messagePaginator.getItem(composerId)).toBeUndefined();
     });
 
@@ -274,7 +274,7 @@ describe('MessageComposer scheduled messages', () => {
       const result = await composer.schedule(scheduledAt);
 
       expect(result).toEqual({ status: 'sent' });
-      expect(client.scheduledMessages.store.values()).toEqual([]);
+      expect(client.scheduledMessageStore.values()).toEqual([]);
       expect(composer.textComposer.text).toBe('');
     });
 
@@ -344,19 +344,23 @@ describe('MessageComposer scheduled messages', () => {
       );
     });
 
-    it('blocks a poll', async () => {
+    it('schedules a poll as a message of its own', async () => {
       const { client, composer } = setup();
-      const sendSpy = vi.spyOn(client, 'sendMessage');
+      const sendSpy = mockScheduledSend(client, generateScheduledMessage());
       const addWarningSpy = vi.spyOn(client.notifications, 'addWarning');
       composer.state.partialNext({ pollId: 'poll-1' });
 
       const result = await composer.schedule(scheduledAt);
 
-      expect(result).toEqual({ status: 'blocked' });
-      expect(sendSpy).not.toHaveBeenCalled();
-      expect(addWarningSpy).toHaveBeenCalledWith(
-        blockedWarning(ScheduledMessageBlockReason.Poll),
+      expect(result.status).toBe('scheduled');
+      expect(sentRequest(sendSpy)).toEqual(
+        expect.objectContaining({
+          message: { id: expect.any(String), poll_id: 'poll-1' },
+          scheduled_at: scheduledAt,
+        }),
       );
+      expect(addWarningSpy).not.toHaveBeenCalled();
+      expect(composer.pollId).toBeNull();
     });
 
     it('blocks a shared location', async () => {
@@ -379,9 +383,8 @@ describe('MessageComposer scheduled messages', () => {
       );
     });
 
-    it('blocks a poll in compose() when scheduled_at is passed', async () => {
+    it('composes a poll when scheduled_at is passed', async () => {
       const { client, composer } = setup();
-      const sendSpy = vi.spyOn(client, 'sendMessage');
       const addWarningSpy = vi.spyOn(client.notifications, 'addWarning');
       composer.state.partialNext({ pollId: 'poll-1' });
 
@@ -389,11 +392,11 @@ describe('MessageComposer scheduled messages', () => {
         sendOptions: { scheduled_at: scheduledAt },
       });
 
-      expect(composition).toBeUndefined();
-      expect(sendSpy).not.toHaveBeenCalled();
-      expect(addWarningSpy).toHaveBeenCalledWith(
-        blockedWarning(ScheduledMessageBlockReason.Poll),
+      expect(composition?.message).toEqual(
+        expect.objectContaining({ poll_id: 'poll-1' }),
       );
+      expect(composition?.sendOptions).toEqual({ scheduled_at: scheduledAt });
+      expect(addWarningSpy).not.toHaveBeenCalled();
     });
 
     it('leaves polls, commands and locations alone in a normal composition', async () => {
@@ -600,11 +603,11 @@ describe('MessageComposer scheduled messages', () => {
       expect(composer.scheduleBlockReason).toBeUndefined();
     });
 
-    it('is poll for a poll', () => {
+    it('is nothing for a poll', () => {
       const { composer } = setup();
       composer.state.partialNext({ pollId: 'poll-1' });
 
-      expect(composer.scheduleBlockReason).toBe(ScheduledMessageBlockReason.Poll);
+      expect(composer.scheduleBlockReason).toBeUndefined();
     });
 
     it('is shared_location for a shared location', () => {
@@ -764,7 +767,7 @@ describe('MessageComposer scheduled messages', () => {
       expect(message).not.toHaveProperty('user');
       expect(message).not.toHaveProperty('shared_location');
       expect(result).toEqual({ scheduledMessage: updated, status: 'scheduled' });
-      expect(client.scheduledMessages.getFromState('sm-1')).toEqual(updated);
+      expect(client.scheduledMessageStore.get('sm-1')).toEqual(updated);
     });
 
     it('drops content removed in the composer from the update', async () => {
@@ -877,7 +880,6 @@ describe('MessageComposer scheduled messages', () => {
         stateOverrides: expect.objectContaining({
           draftId: null,
           editedScheduledMessage: scheduledMessage,
-          failedScheduledMessage: null,
           showReplyInChannel: true,
         }),
       });
@@ -1016,33 +1018,34 @@ describe('MessageComposer scheduled messages', () => {
       const { composer } = setup();
       const failedMessage = generateFailedMessage();
 
-      await composer.rescheduleFailedMessage(failedMessage);
+      await composer.editScheduledMessage(failedMessage);
 
       expect(composer.textComposer.text).toBe('see you tomorrow');
-      expect(composer.failedScheduledMessage).toBe(failedMessage);
-      expect(composer.editedScheduledMessage).toBeUndefined();
+      expect(composer.editedScheduledMessage).toBe(failedMessage);
       expect(composer.draftId).toBeNull();
     });
 
-    it('ignores a message that has not failed', async () => {
-      const { composer } = setup();
-      composer.textComposer.setText('my draft');
+    // the server refuses to edit a failed message; it is scheduled or sent again instead
+    it('does not save a failed message as an edit', async () => {
+      const { client, composer } = setup();
+      const updateSpy = vi.spyOn(client, 'updateScheduledMessage');
 
-      await composer.rescheduleFailedMessage(generateScheduledMessage());
+      await composer.editScheduledMessage(generateFailedMessage());
+      const result = await composer.updateScheduledMessage();
 
-      expect(composer.failedScheduledMessage).toBeUndefined();
-      expect(composer.textComposer.text).toBe('my draft');
+      expect(result).toEqual({ status: 'nothing-to-send' });
+      expect(updateSpy).not.toHaveBeenCalled();
     });
 
     it('schedules a new message and deletes the failed one', async () => {
-      const { client, composer } = setup();
+      const { channel, client, composer } = setup();
       const failedMessage = generateFailedMessage();
       const newScheduledMessage = generateScheduledMessage({ id: 'sm-2' });
       const sendSpy = mockScheduledSend(client, newScheduledMessage);
       const deleteSpy = vi
-        .spyOn(client.scheduledMessages, 'deleteScheduledMessage')
+        .spyOn(channel, 'deleteScheduledMessage')
         .mockResolvedValue(failedMessage);
-      await composer.rescheduleFailedMessage(failedMessage);
+      await composer.editScheduledMessage(failedMessage);
       const composerId = composer.id;
 
       const result = await composer.schedule(scheduledAt);
@@ -1058,17 +1061,17 @@ describe('MessageComposer scheduled messages', () => {
         status: 'scheduled',
       });
       expect(deleteSpy).toHaveBeenCalledWith(failedMessage.id);
-      expect(composer.failedScheduledMessage).toBeUndefined();
+      expect(composer.editedScheduledMessage).toBeUndefined();
     });
 
     it('restores the earlier composition after scheduling', async () => {
-      const { client, composer } = setup();
+      const { channel, client, composer } = setup();
       mockScheduledSend(client, generateScheduledMessage({ id: 'sm-2' }));
-      vi.spyOn(client.scheduledMessages, 'deleteScheduledMessage').mockResolvedValue(
+      vi.spyOn(channel, 'deleteScheduledMessage').mockResolvedValue(
         generateFailedMessage(),
       );
       composer.textComposer.setText('my draft');
-      await composer.rescheduleFailedMessage(generateFailedMessage());
+      await composer.editScheduledMessage(generateFailedMessage());
 
       await composer.schedule(scheduledAt);
 
@@ -1076,33 +1079,31 @@ describe('MessageComposer scheduled messages', () => {
     });
 
     it('keeps the failed message and the composition when scheduling fails', async () => {
-      const { client, composer } = setup();
+      const { channel, client, composer } = setup();
       const failedMessage = generateFailedMessage();
       const error = generateAPIError(4, 'boom');
       vi.spyOn(client, 'sendMessage').mockRejectedValue(error);
-      const deleteSpy = vi.spyOn(client.scheduledMessages, 'deleteScheduledMessage');
-      await composer.rescheduleFailedMessage(failedMessage);
+      const deleteSpy = vi.spyOn(channel, 'deleteScheduledMessage');
+      await composer.editScheduledMessage(failedMessage);
 
       const result = await composer.schedule(scheduledAt);
 
       expect(result).toEqual({ error, status: 'failed' });
       expect(deleteSpy).not.toHaveBeenCalled();
-      expect(composer.failedScheduledMessage).toBe(failedMessage);
+      expect(composer.editedScheduledMessage).toBe(failedMessage);
       expect(composer.textComposer.text).toBe('see you tomorrow');
     });
 
     it('logs instead of failing when deleting the failed message fails', async () => {
-      const { client, composer } = setup();
+      const { channel, client, composer } = setup();
       const sink = vi.fn();
       chatLoggerSystem.configureLoggers({
         'message-composer': { sink, level: 'trace' },
       } as never);
       const newScheduledMessage = generateScheduledMessage({ id: 'sm-2' });
       mockScheduledSend(client, newScheduledMessage);
-      vi.spyOn(client.scheduledMessages, 'deleteScheduledMessage').mockRejectedValue(
-        new Error('gone'),
-      );
-      await composer.rescheduleFailedMessage(generateFailedMessage());
+      vi.spyOn(channel, 'deleteScheduledMessage').mockRejectedValue(new Error('gone'));
+      await composer.editScheduledMessage(generateFailedMessage());
 
       await expect(composer.schedule(scheduledAt)).resolves.toEqual({
         scheduledMessage: newScheduledMessage,
@@ -1118,17 +1119,17 @@ describe('MessageComposer scheduled messages', () => {
     });
 
     it('does not schedule when cancelled while uploads finish', async () => {
-      const { client, composer } = setup({ pendingUploadsEnabled: true });
+      const { channel, client, composer } = setup({ pendingUploadsEnabled: true });
       const sendSpy = mockScheduledSend(client, generateScheduledMessage({ id: 'sm-2' }));
-      const deleteSpy = vi.spyOn(client.scheduledMessages, 'deleteScheduledMessage');
+      const deleteSpy = vi.spyOn(channel, 'deleteScheduledMessage');
       composer.textComposer.setText('my draft');
-      await composer.rescheduleFailedMessage(generateFailedMessage());
+      await composer.editScheduledMessage(generateFailedMessage());
       composer.attachmentManager.state.partialNext({
         attachments: [uploadAttachment('uploading')],
       });
 
       const scheduling = composer.schedule(scheduledAt);
-      composer.cancelRescheduleFailedMessage();
+      composer.cancelEditScheduledMessage();
       composer.attachmentManager.state.partialNext({ attachments: [] });
 
       await expect(scheduling).resolves.toEqual({ status: 'nothing-to-send' });
@@ -1141,11 +1142,11 @@ describe('MessageComposer scheduled messages', () => {
       const { composer } = setup();
       composer.textComposer.setText('my draft');
       composer.state.partialNext({ draftId: 'draft-1' });
-      await composer.rescheduleFailedMessage(generateFailedMessage());
+      await composer.editScheduledMessage(generateFailedMessage());
 
-      composer.cancelRescheduleFailedMessage();
+      composer.cancelEditScheduledMessage();
 
-      expect(composer.failedScheduledMessage).toBeUndefined();
+      expect(composer.editedScheduledMessage).toBeUndefined();
       expect(composer.textComposer.text).toBe('my draft');
       expect(composer.draftId).toBe('draft-1');
     });
@@ -1155,7 +1156,7 @@ describe('MessageComposer scheduled messages', () => {
       const createDraftSpy = vi.spyOn(channel, 'createDraft');
       const deleteDraftSpy = vi.spyOn(channel, 'deleteDraft');
       composer.state.partialNext({ draftId: 'draft-1' });
-      await composer.rescheduleFailedMessage(generateFailedMessage());
+      await composer.editScheduledMessage(generateFailedMessage());
 
       await composer.createDraft();
       await composer.deleteDraft();
@@ -1182,16 +1183,16 @@ describe('MessageComposer scheduled messages', () => {
         );
         stubSendRequest(channel, sendRequest);
         const deleteSpy = vi
-          .spyOn(client.scheduledMessages, 'deleteScheduledMessage')
+          .spyOn(channel, 'deleteScheduledMessage')
           .mockResolvedValue(failedMessage);
         composer.textComposer.setText('my draft');
-        await composer.rescheduleFailedMessage(failedMessage);
+        await composer.editScheduledMessage(failedMessage);
         const composerId = composer.id;
 
         const sending = composer.send();
         await vi.waitFor(() => expect(sendRequest).toHaveBeenCalled());
 
-        expect(composer.failedScheduledMessage).toBeUndefined();
+        expect(composer.editedScheduledMessage).toBeUndefined();
         expect(composer.textComposer.text).toBe('my draft');
         expect(deleteSpy).not.toHaveBeenCalled();
 
@@ -1213,8 +1214,8 @@ describe('MessageComposer scheduled messages', () => {
       it('keeps the failed message when the send fails', async () => {
         const { channel, client, composer } = setup();
         stubSendRequest(channel, () => Promise.reject(new Error('boom')));
-        const deleteSpy = vi.spyOn(client.scheduledMessages, 'deleteScheduledMessage');
-        await composer.rescheduleFailedMessage(generateFailedMessage());
+        const deleteSpy = vi.spyOn(channel, 'deleteScheduledMessage');
+        await composer.editScheduledMessage(generateFailedMessage());
 
         const result = await composer.send();
 
@@ -1290,19 +1291,19 @@ describe('MessageComposer scheduled messages', () => {
       const { client, composer } = setup();
       composer.registerSubscriptions();
       const failedMessage = generateFailedMessage();
-      await composer.rescheduleFailedMessage(failedMessage);
+      await composer.editScheduledMessage(failedMessage);
 
       client.dispatchEvent(
         scheduledEvent(ScheduledMessageEventType.Failed, failedMessage),
       );
 
-      expect(composer.failedScheduledMessage).toBe(failedMessage);
+      expect(composer.editedScheduledMessage).toBe(failedMessage);
 
       client.dispatchEvent(
         scheduledEvent(ScheduledMessageEventType.Deleted, failedMessage),
       );
 
-      expect(composer.failedScheduledMessage).toBeUndefined();
+      expect(composer.editedScheduledMessage).toBeUndefined();
     });
   });
 
@@ -1335,11 +1336,11 @@ describe('MessageComposer scheduled messages', () => {
     it('keeps a failed message being scheduled again', async () => {
       const { composer } = setup();
       const failedMessage = generateFailedMessage();
-      await composer.rescheduleFailedMessage(failedMessage);
+      await composer.editScheduledMessage(failedMessage);
 
       composer.initStateFromChannelResponse(channelResponseWithDraft('newer draft'));
 
-      expect(composer.failedScheduledMessage).toBe(failedMessage);
+      expect(composer.editedScheduledMessage).toBe(failedMessage);
       expect(composer.textComposer.text).toBe('see you tomorrow');
     });
   });

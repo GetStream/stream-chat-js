@@ -1,5 +1,4 @@
 import type { StreamChat } from '../client';
-import type { DeclarativePaginatorConfig } from '../pagination/paginators/BasePaginator';
 import type {
   FindEventHandlerParams,
   InsertEventHandlerPayload,
@@ -14,37 +13,40 @@ import type {
   UpdateScheduledMessageResponse,
 } from '../gen/models';
 import type { EventPayload, EventType, StreamResponse } from '../types';
-import type { ScheduledMessageManager } from './ScheduledMessageManager';
+import type { ScheduledMessagePaginator } from '../pagination/paginators/ScheduledMessagePaginator';
+import type { ScheduledMessagePaginatorsManager } from './ScheduledMessagePaginatorsManager';
 
-export type ScheduledMessageManagerState = {
+export type ScheduledMessagePaginatorsManagerState = {
+  /** A registered list's last query failed with error 114 (feature off). */
   isDisabled: boolean;
+  paginators: ScheduledMessagePaginator[];
 };
 
-export type ScheduledMessageManagerEventHandlerContext = {
-  scheduledMessageManager: ScheduledMessageManager;
+export type ScheduledMessagePaginatorsManagerEventHandlerContext = {
+  scheduledMessagePaginators: ScheduledMessagePaginatorsManager;
 };
 
-export type ScheduledMessageManagerEventType = EventType | (string & {});
+export type ScheduledMessagePaginatorsManagerEventType = EventType | (string & {});
 
-export type ScheduledMessageManagerEventHandlers = Partial<
+export type ScheduledMessagePaginatorsManagerEventHandlers = Partial<
   Record<
-    ScheduledMessageManagerEventType,
-    LabeledEventHandler<ScheduledMessageManagerEventHandlerContext>[]
+    ScheduledMessagePaginatorsManagerEventType,
+    LabeledEventHandler<ScheduledMessagePaginatorsManagerEventHandlerContext>[]
   >
 >;
 
 export type AddScheduledMessageEventHandlerParams = {
-  eventType: ScheduledMessageManagerEventType;
-} & InsertEventHandlerPayload<ScheduledMessageManagerEventHandlerContext>;
+  eventType: ScheduledMessagePaginatorsManagerEventType;
+} & InsertEventHandlerPayload<ScheduledMessagePaginatorsManagerEventHandlerContext>;
 
 export type SetScheduledMessageEventHandlersParams = {
-  eventType: ScheduledMessageManagerEventType;
-  handlers: LabeledEventHandler<ScheduledMessageManagerEventHandlerContext>[];
+  eventType: ScheduledMessagePaginatorsManagerEventType;
+  handlers: LabeledEventHandler<ScheduledMessagePaginatorsManagerEventHandlerContext>[];
 };
 
 export type RemoveScheduledMessageEventHandlersParams = {
-  eventType: ScheduledMessageManagerEventType;
-  handlers: FindEventHandlerParams<ScheduledMessageManagerEventHandlerContext>[];
+  eventType: ScheduledMessagePaginatorsManagerEventType;
+  handlers: FindEventHandlerParams<ScheduledMessagePaginatorsManagerEventHandlerContext>[];
 };
 
 export type DefaultScheduledMessageRequest<TParams, TResponse> = (
@@ -92,13 +94,9 @@ export type ScheduledMessageRequestHandlers = {
   updateScheduledMessageRequest?: UpdateScheduledMessageRequestFn;
 };
 
-export type ScheduledMessageManagerConfig = {
-  paginator?: DeclarativePaginatorConfig;
-};
-
-export type ScheduledMessageManagerOptions = {
+export type ScheduledMessagePaginatorsManagerOptions = {
   client: StreamChat;
-  eventHandlers?: ScheduledMessageManagerEventHandlers;
+  eventHandlers?: ScheduledMessagePaginatorsManagerEventHandlers;
 };
 
 export type ScheduledMessageEvent = EventPayload<`scheduled_message.${string}`>;

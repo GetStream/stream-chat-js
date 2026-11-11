@@ -63,6 +63,8 @@ export class StoreBackedItemIndex<T> implements ItemIndexApi<T> {
 
   setOne(item: T) {
     const id = this.getEntityId(item);
+    // a stale copy of a removed entity resolves to its tombstone
+    if (this.store.resolveCanonicalEntity(item) !== item && !this.store.has(id)) return;
     this.store.link(id, this.holder);
     this.memberIds.add(id);
     this.store.upsert(item, this.holder);

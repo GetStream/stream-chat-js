@@ -58,6 +58,8 @@ export const CONSTRUCTION_ONLY_CONFIG_PATHS: Readonly<Record<string, readonly st
       'messagePaginator.unreadReferencePolicy',
       'pinnedMessagesPaginator.initialCursor',
       'pinnedMessagesPaginator.initialOffset',
+      'scheduledMessagesPaginator.initialCursor',
+      'scheduledMessagesPaginator.initialOffset',
     ],
     thread: [
       'messagePaginator.initialCursor',

@@ -1,4 +1,5 @@
-export * from './ScheduledMessageManager';
+export * from './ScheduledMessagePaginatorsManager';
+export * from './store';
 export * from './constants';
 export * from './errors';
 export * from './limits';

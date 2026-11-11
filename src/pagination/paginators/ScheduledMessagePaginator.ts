@@ -1,10 +1,9 @@
-import { BasePaginator, ZERO_PAGE_CURSOR } from './BasePaginator';
 import type {
   PaginationQueryParams,
   PaginationQueryReturnValue,
-  PaginatorCursor,
   PaginatorOptions,
 } from './BasePaginator';
+import { BasePaginator, EXHAUSTED_CURSOR, ZERO_PAGE_CURSOR } from './BasePaginator';
 import { StoreBackedItemIndex } from '../../entityStore/StoreBackedItemIndex';
 import type { EntityStore, EntityStoreChangeBatch } from '../../entityStore/EntityStore';
 import type { StreamChat } from '../../client';
@@ -17,25 +16,28 @@ import {
   SCHEDULED_MESSAGE_ACTIVE_STATUSES,
   SCHEDULED_MESSAGE_STATUS,
 } from '../../scheduledMessages/constants';
+import { generateUUIDv4 } from '../../utils';
 
 export type ScheduledMessagePaginatorOptions = {
   client: StreamChat;
-  cid?: string;
+  /**
+   * The query filter, also deciding which ingested messages the list takes. `status` defaults to all
+   * the query accepts. Changed later through the `filter` setter.
+   */
+  filter?: ScheduledMessagesFilter;
+  /** Generated when omitted. */
+  id?: string;
   paginatorOptions?: PaginatorOptions<
     ScheduledMessageResponse,
     QueryScheduledMessagesRequest
   >;
-  resolveLatest?: (incoming: ScheduledMessageResponse) => ScheduledMessageResponse;
+  /** Defaults to `client.scheduledMessageStore`. */
   store?: EntityStore<ScheduledMessageResponse>;
 };
 
 const SCHEDULED_MESSAGES_PAGE_SIZE = 100;
 
-const EXHAUSTED_CURSOR: PaginatorCursor = { headward: null, tailward: null };
-
 const getScheduledMessageId = ({ id }: ScheduledMessageResponse) => id;
-
-const keepIncoming = (incoming: ScheduledMessageResponse) => incoming;
 
 const isFailed = ({ status }: ScheduledMessageResponse) =>
   status === SCHEDULED_MESSAGE_STATUS.Failed;
@@ -43,7 +45,7 @@ const isFailed = ({ status }: ScheduledMessageResponse) =>
 const compareValues = <TValue extends number | string>(first: TValue, second: TValue) =>
   first < second ? -1 : first > second ? 1 : 0;
 
-export const compareScheduledMessages = (
+const defaultScheduledMessagesComparator = (
   first: ScheduledMessageResponse,
   second: ScheduledMessageResponse,
 ) =>
@@ -51,22 +53,27 @@ export const compareScheduledMessages = (
   compareValues<number>(first.scheduled_at, second.scheduled_at) ||
   compareValues(first.id, second.id);
 
+/**
+ * The current user's scheduled messages, pending before failed, each by `scheduled_at`. Every copy it
+ * takes is resolved against the shared store first (see `shouldReplaceScheduledMessage`).
+ */
 export class ScheduledMessagePaginator extends BasePaginator<
   ScheduledMessageResponse,
   QueryScheduledMessagesRequest
 > {
-  private client: StreamChat;
-  private resolveLatest: (incoming: ScheduledMessageResponse) => ScheduledMessageResponse;
-
-  public readonly cid: string | undefined;
+  private readonly client: StreamChat;
+  private readonly store: EntityStore<ScheduledMessageResponse>;
+  private readonly _id: string;
+  private _filter: ScheduledMessagesFilter;
 
   constructor({
-    cid,
     client,
+    filter = {},
+    id,
     paginatorOptions,
-    resolveLatest = keepIncoming,
     store,
   }: ScheduledMessagePaginatorOptions) {
+    const entityStore = store ?? client.scheduledMessageStore;
     super(
       {
         initialCursor: ZERO_PAGE_CURSOR,
@@ -75,42 +82,41 @@ export class ScheduledMessagePaginator extends BasePaginator<
             getEntityId: getScheduledMessageId,
             holderName: 'scheduled-message-paginator',
             owner: owner as ScheduledMessagePaginator,
-            store,
+            store: entityStore,
           }),
         ...paginatorOptions,
       },
       { pageSize: SCHEDULED_MESSAGES_PAGE_SIZE },
     );
 
-    this.cid = cid;
     this.client = client;
-    this.resolveLatest = resolveLatest;
-    this.sortComparator = compareScheduledMessages;
+    this.store = entityStore;
+    this._id = id ?? `scheduled-message-paginator-${generateUUIDv4()}`;
+    this._filter = filter;
+    this.sortComparator = defaultScheduledMessagesComparator;
   }
 
-  private get queryFilter(): ScheduledMessagesFilter {
-    const { cid } = this;
-    const status = SCHEDULED_MESSAGE_ACTIVE_STATUSES;
-
-    const queryFilter = cid ? { cid, status } : { status };
-
-    return queryFilter;
+  get id() {
+    return this._id;
   }
 
-  private get isEmptyCompleteList() {
-    const { hasMoreHead, hasMoreTail, items } = this.state.getLatestValue();
-
-    return !!items && !items.length && !hasMoreHead && !hasMoreTail;
+  /** The query filter, sent as given: without a `status` the server lists all it lists. */
+  get filter(): ScheduledMessagesFilter {
+    return this._filter;
   }
 
-  private markEmptyComplete() {
-    this._lastQueryShape = this.getNextQueryShape();
-    this.state.partialNext({
-      cursor: EXHAUSTED_CURSOR,
-      hasMoreHead: false,
-      hasMoreTail: false,
-      items: [],
-    });
+  /** Replaces the filter and resets the list; load it again with `reload()`. */
+  set filter(filter: ScheduledMessagesFilter) {
+    this._filter = filter;
+    this.resetState();
+  }
+
+  get cid() {
+    return this.filter.cid;
+  }
+
+  protected override get startsIntervalInEmptyCompleteList() {
+    return true;
   }
 
   public getItemId(item: ScheduledMessageResponse): string {
@@ -118,16 +124,20 @@ export class ScheduledMessagePaginator extends BasePaginator<
   }
 
   protected getNextQueryShape(): QueryScheduledMessagesRequest {
-    return { filter: this.queryFilter, limit: this.pageSize };
+    return { filter: this.filter, limit: this.pageSize };
   }
 
-  protected buildMatchFilters() {
-    const { cid } = this;
-    const status = { $in: SCHEDULED_MESSAGE_ACTIVE_STATUSES };
+  /**
+   * The query filter, with the server's default statuses when it names none: matching on `status`
+   * is what takes sent and canceled messages out of the list. The matcher reads the array as any of
+   * them.
+   */
+  protected buildMatchFilters(): ScheduledMessagesFilter {
+    const { cid, status } = this.filter;
+    const statuses = status?.length ? status : SCHEDULED_MESSAGE_ACTIVE_STATUSES;
 
-    const matchFilters = cid ? { cid, status } : { status };
-
-    return matchFilters;
+    // an undefined `cid` would match nothing
+    return cid ? { cid, status: statuses } : { status: statuses };
   }
 
   protected override fetchQueryResponse = async ({
@@ -145,9 +155,7 @@ export class ScheduledMessagePaginator extends BasePaginator<
     const { next, scheduled_messages: items } =
       await this.client.queryScheduledMessages(request);
 
-    const page = { headward: null, items, tailward: next || null };
-
-    return page;
+    return { headward: null, items, tailward: next || null };
   };
 
   protected override extractQueryPage(
@@ -156,51 +164,68 @@ export class ScheduledMessagePaginator extends BasePaginator<
     return response;
   }
 
-  protected override applyQueryResponseRest() {
-    if (!this.isEmptyCompleteList) return;
-
-    const liveItems = [...this.logicalHeadItems, ...this.logicalTailItems];
-
-    if (liveItems.length) this.setCompleteList(liveItems);
-  }
-
   public filterQueryResults(items: ScheduledMessageResponse[]) {
-    const latestItems = items.map(this.resolveLatest);
+    const latestItems = items.map((item) => this.store.resolveCanonicalEntity(item));
 
-    const matchingItems = latestItems.filter((item) => this.matchesFilter(item));
-
-    return matchingItems;
+    return latestItems.filter((item) => this.matchesFilter(item));
   }
 
   public ingestItem(item: ScheduledMessageResponse): boolean {
-    if (this.isEmptyCompleteList && this.matchesFilter(item)) {
-      this.setCompleteList([item]);
-      return true;
-    }
+    const latest = this.store.resolveCanonicalEntity(item);
 
-    const changed = super.ingestItem(item);
+    // the list already holds the copy that wins (e.g. `item` is stale): nothing to place
+    if (this.getItem(latest.id) === latest) return false;
 
-    if (!this.matchesFilter(item)) this._itemIndex.remove(item.id);
+    const changed = super.ingestItem(latest);
+
+    if (!this.matchesFilter(latest)) this._itemIndex.remove(latest.id);
 
     return changed;
   }
 
-  public setCompleteList(items: ScheduledMessageResponse[]) {
-    const sortedItems = items
-      .filter((item) => this.matchesFilter(item))
-      .sort(this.sortComparator);
+  /** The IDs the list holds. */
+  public getItemIds(): ReadonlySet<string> {
+    return new Set(this._itemIndex.values().map(getScheduledMessageId));
+  }
 
-    if (!sortedItems.length) {
-      this.markEmptyComplete();
-      return;
-    }
+  /**
+   * Applies a complete set (e.g. a channel query's `scheduled_messages`) through the paginator's own
+   * operations: removes what was held at `itemIdsAtRequest` and is missing, ingests the rest, or
+   * places it as the first, complete page. Messages taken since the snapshot stay. Publishes once.
+   */
+  public hydrate(
+    scheduledMessages: ScheduledMessageResponse[],
+    itemIdsAtRequest: ReadonlySet<string> = new Set(),
+  ) {
+    const snapshot = this.filterQueryResults(scheduledMessages);
+    const snapshotIds = new Set(snapshot.map(getScheduledMessageId));
 
-    this.setItems({
-      cursor: EXHAUSTED_CURSOR,
-      isFirstPage: true,
-      isLastPage: true,
-      valueOrFactory: sortedItems,
-    });
+    this.batch(
+      () => {
+        // held when the request went out and missing from the response: gone on the server
+        itemIdsAtRequest.forEach((id) => {
+          if (!snapshotIds.has(id)) this.removeItem({ id });
+        });
+
+        if (this.hasLoadedPage) {
+          snapshot.forEach((item) => this.ingestItem(item));
+          return;
+        }
+
+        // events that arrived before the first page wait in the logical intervals, which
+        // `setItems` folds into the page
+        const waitingItems = [...this.logicalHeadItems, ...this.logicalTailItems].filter(
+          ({ id }) => !snapshotIds.has(id),
+        );
+        this.setItems({
+          cursor: EXHAUSTED_CURSOR,
+          isFirstPage: true,
+          isLastPage: true,
+          valueOrFactory: [...snapshot, ...waitingItems].sort(this.sortComparator),
+        });
+      },
+      { coalesce: true },
+    );
   }
 
   public onEntitiesChanged({ changedIds }: EntityStoreChangeBatch) {
