@@ -1,5 +1,4 @@
 /* eslint no-unused-vars: "off" */
-/* global process */
 
 import type { AxiosInstance, AxiosRequestConfig } from 'axios';
 import axios from 'axios';
@@ -22,6 +21,7 @@ import {
   sanitizeOutgoingAttachments,
 } from './utils';
 import { nowNs } from './utils/time';
+import { readInjectedClientBundle, readInjectedVersion } from './version';
 import { normalizeUploadFile } from './upload-utils';
 
 import type {
@@ -1951,7 +1951,7 @@ export class StreamChat extends ChatApi {
 
     // Memoized on the first call: later changes to the identifiers are not picked up.
     if (!this.cachedUserAgent) {
-      const version = process.env.PKG_VERSION;
+      const version = readInjectedVersion();
       const { name: sdkName, version: sdkVersion } = this.sdkIdentifier ?? {};
       const { name: appName, version: appVersion } = this.appIdentifier ?? {};
       const { os, model: deviceModel } = this.deviceIdentifier ?? {};
@@ -1968,7 +1968,7 @@ export class StreamChat extends ChatApi {
           app_version: appVersion,
           os,
           device_model: deviceModel,
-          client_bundle: process.env.CLIENT_BUNDLE,
+          client_bundle: readInjectedClientBundle(),
         })
           .filter(([, value]) => value && value.length > 0)
           .map(([key, value]) => `${key}=${value}`),
