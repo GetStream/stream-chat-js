@@ -95,7 +95,6 @@ export type ChannelDeclarativeConfig = {
   replies?: Partial<ChannelConfig['replies']>;
   /** Message reminders, ANDed with the channel type's `user_message_reminders`. */
   userMessageReminders?: Partial<ChannelConfig['userMessageReminders']>;
-  /** Scheduled messages, ANDed with the app having the feature. */
   scheduledMessages?: Partial<ChannelConfig['scheduledMessages']>;
   /** Delivery receipts, ANDed with the channel type's `delivery_events`. */
   deliveryEvents?: Partial<ChannelConfig['deliveryEvents']>;

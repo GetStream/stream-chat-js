@@ -144,9 +144,7 @@ export type MessageComposerState = {
   showReplyInChannel: boolean;
   /** Baseline of the message being edited, unchanged during the session (for restore or cancel). */
   editedMessage: LocalMessage | null;
-  /** The scheduled message being edited; its edit is saved with `updateScheduledMessage()`. */
   editedScheduledMessage: ScheduledMessageResponse | null;
-  /** The failed scheduled message loaded to be scheduled or sent again. */
   failedScheduledMessage: ScheduledMessageResponse | null;
 };
 
@@ -164,16 +162,6 @@ export type MessageComposerComposeOptions = {
   sendOptions?: SendMessageOptions;
 };
 
-/**
- * Outcome of `schedule()` and `updateScheduledMessage()`. Unlike `send()`, a failure keeps the
- * composition: a scheduled message has no list item that could hold the content.
- * - `scheduled`: the server stored the scheduled message (in `scheduledMessage`).
- * - `sent`: the server judged the time past and sent the message right away.
- * - `nothing-to-send`: nothing to compose, a middleware discarded it, or the composition changed
- *   while uploads were settling.
- * - `blocked`: the composition holds a command, poll or location, which can't be scheduled.
- * - `failed`: the request failed (in `error`), reported through `client.notifications`.
- */
 export type ScheduledMessageSubmitResult = {
   status: 'scheduled' | 'sent' | 'nothing-to-send' | 'blocked' | 'failed';
   error?: unknown;
@@ -402,10 +390,6 @@ export class MessageComposer extends WithSubscriptions {
     return this.state.getLatestValue().failedScheduledMessage ?? undefined;
   }
 
-  /**
-   * Why the current composition can't be scheduled: an active command, a poll or a shared
-   * location. `undefined` when it can be.
-   */
   get scheduleBlockReason(): ScheduledMessageBlockReason | undefined {
     this.scheduleCommandSearchSource ??= new CommandSearchSource(this.channel);
 
@@ -1375,8 +1359,7 @@ export class MessageComposer extends WithSubscriptions {
     const { localMessage, message, sendOptions } = composition;
     const { failedScheduledMessage } = this;
 
-    // Released before the request, so the user's next keystrokes cannot race the clear. A failed
-    // scheduled message sent now brings back what the composer held before it was loaded.
+    // Released before the request, so the user's next keystrokes cannot race the clear.
     if (failedScheduledMessage) {
       this.endScheduledMessageComposition();
     } else {
@@ -1542,13 +1525,6 @@ export class MessageComposer extends WithSubscriptions {
       );
   };
 
-  /**
-   * Schedules the composition to be sent at `scheduledAt`. Never rejects: see
-   * {@link ScheduledMessageSubmitResult}. A scheduled message never enters the message list; the
-   * server returns it and `client.scheduledMessages` stores it.
-   *
-   * @param scheduledAt - When the server should send the message.
-   */
   schedule = async (scheduledAt: Date): Promise<ScheduledMessageSubmitResult> => {
     if (this.hasEditInProgress) return { status: 'nothing-to-send' };
 
@@ -1611,17 +1587,12 @@ export class MessageComposer extends WithSubscriptions {
     }
   };
 
-  /** Loads a scheduled message into the composer to edit it. Saved with `updateScheduledMessage()`. */
   editScheduledMessage = (scheduledMessage: ScheduledMessageResponse) =>
     this.fillFromScheduledMessage(scheduledMessage, {
       editedScheduledMessage: scheduledMessage,
       failedScheduledMessage: null,
     });
 
-  /**
-   * Loads a failed scheduled message into the composer so it can be scheduled or sent again. Either
-   * way the failed message is deleted once the new one goes out.
-   */
   rescheduleFailedMessage = async (failedMessage: ScheduledMessageResponse) => {
     if (failedMessage.status !== SCHEDULED_MESSAGE_STATUS.Failed) return;
 
@@ -1637,7 +1608,6 @@ export class MessageComposer extends WithSubscriptions {
     this.endScheduledMessageComposition();
   };
 
-  /** Saves the edit of the scheduled message, on the same terms as {@link schedule}. */
   updateScheduledMessage = async (): Promise<ScheduledMessageSubmitResult> => {
     const { editedScheduledMessage } = this;
 

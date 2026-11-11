@@ -149,11 +149,6 @@ export type ChannelConfig = {
    * Message reminders. Defaults to enabled. ANDed with the channel type's `user_message_reminders`.
    */
   userMessageReminders: { enabled: boolean };
-  /**
-   * Scheduled messages. Defaults to enabled. ANDed with the app's scheduled message limits in the
-   * channel's server config, which are present only when the app has the feature. Together with the
-   * own `schedule-message` capability it decides {@link Channel.scheduledMessagesEnabled}.
-   */
   scheduledMessages: { enabled: boolean };
   /** Delivery receipts. Defaults to enabled. ANDed with the channel type's `delivery_events`. */
   deliveryEvents: { enabled: boolean };
@@ -1136,10 +1131,6 @@ export class Channel extends ChannelApi {
     return this.config.readEvents.enabled && channelHasReadEvents(this);
   }
 
-  /**
-   * Whether the current user can schedule messages in this channel: {@link ChannelConfig.scheduledMessages}
-   * is on and the own `schedule-message` capability allows it.
-   */
   get scheduledMessagesEnabled(): boolean {
     return this.config.scheduledMessages.enabled && channelCanScheduleMessages(this);
   }
