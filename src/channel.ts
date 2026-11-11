@@ -24,6 +24,7 @@ import { getScheduledMessageLimitsFromServerConfig } from './scheduledMessages/l
 import { SCHEDULED_MESSAGE_STATUS } from './scheduledMessages/constants';
 import { isScheduledMessageNotFoundError } from './scheduledMessages/errors';
 import { getScheduledMessageFromEvent } from './scheduledMessages/eventHandlers';
+import { ScheduledMessagesView } from './scheduledMessages/ScheduledMessagesView';
 import {
   channelCanScheduleMessages,
   channelHasReadEvents,
@@ -252,6 +253,11 @@ export class Channel extends ChannelApi {
    * out. Events can define `items` before a page loads: check `hasLoadedPage`.
    */
   public readonly scheduledMessagesPaginator: ScheduledMessagePaginator;
+  /**
+   * The channel's own scheduled messages: a view of `scheduledMessagesPaginator` without the
+   * thread replies it holds too. A thread's are `thread.scheduledMessages`.
+   */
+  public readonly scheduledMessages: ScheduledMessagesView;
   public readonly cooldownTimer: CooldownTimer;
   private unsubscribeConfiguration?: Unsubscribe;
   private unsubscribeServerConfig?: Unsubscribe;
@@ -336,6 +342,12 @@ export class Channel extends ChannelApi {
         declarativeConfig: declarativeConfig?.scheduledMessagesPaginator,
       },
     });
+
+    this.scheduledMessages = new ScheduledMessagesView({
+      paginator: this.scheduledMessagesPaginator,
+      scope: { type: 'channel' },
+    });
+    this.scheduledMessages.registerSubscriptions();
 
     this.messageReceiptsTracker = new MessageReceiptsTracker({ channel: this });
     this.messageReceiptsTracker.registerSubscriptions();
@@ -3168,6 +3180,7 @@ export class Channel extends ChannelApi {
     this.unsubscribeServerConfig = undefined;
     this.messageReceiptsTracker.unregisterSubscriptions();
     this.cooldownTimer.unregisterSubscriptions();
+    this.scheduledMessages.unregisterSubscriptions();
     // Otherwise the message store keeps this channel and its messages alive through its subscribers.
     this.messagePaginator.dispose();
     this.pinnedMessagesPaginator.dispose();
