@@ -12,10 +12,7 @@ import type {
   ScheduledMessageResponse,
   ScheduledMessagesFilter,
 } from '../../gen/models';
-import {
-  SCHEDULED_MESSAGE_ACTIVE_STATUSES,
-  SCHEDULED_MESSAGE_STATUS,
-} from '../../scheduledMessages/constants';
+import { SCHEDULED_MESSAGE_ACTIVE_STATUSES } from '../../scheduledMessages/constants';
 import { generateUUIDv4 } from '../../utils';
 
 export type ScheduledMessagePaginatorOptions = {
