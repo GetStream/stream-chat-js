@@ -39,22 +39,21 @@ const SCHEDULED_MESSAGES_PAGE_SIZE = 100;
 
 const getScheduledMessageId = ({ id }: ScheduledMessageResponse) => id;
 
-const isFailed = ({ status }: ScheduledMessageResponse) =>
-  status === SCHEDULED_MESSAGE_STATUS.Failed;
-
 const compareValues = <TValue extends number | string>(first: TValue, second: TValue) =>
   first < second ? -1 : first > second ? 1 : 0;
 
+// Earliest first. Failed messages need no rule of their own: they failed at their send time, so they
+// precede the pending ones. Messages due at the same time sort by text.
 const defaultScheduledMessagesComparator = (
   first: ScheduledMessageResponse,
   second: ScheduledMessageResponse,
 ) =>
-  compareValues(Number(isFailed(first)), Number(isFailed(second))) ||
   compareValues<number>(first.scheduled_at, second.scheduled_at) ||
+  compareValues(first.message.text ?? '', second.message.text ?? '') ||
   compareValues(first.id, second.id);
 
 /**
- * The current user's scheduled messages, pending before failed, each by `scheduled_at`. Every copy it
+ * The current user's scheduled messages, earliest `scheduled_at` first. Every copy it
  * takes is resolved against the shared store first (see `shouldReplaceScheduledMessage`).
  */
 export class ScheduledMessagePaginator extends BasePaginator<

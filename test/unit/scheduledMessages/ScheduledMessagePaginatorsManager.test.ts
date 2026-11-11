@@ -295,7 +295,8 @@ describe('ScheduledMessagePaginatorsManager', () => {
   });
 
   describe('ordering', () => {
-    it('lists pending scheduled messages before failed ones, each by scheduled_at', async () => {
+    // a failed message failed at its send time, so it precedes the pending ones by time alone
+    it('lists scheduled messages earliest first, failed ones included', async () => {
       const { all, manager } = setup();
       await all.toTail();
       const failedSooner = generateScheduledMessage({
@@ -310,10 +311,27 @@ describe('ScheduledMessagePaginatorsManager', () => {
 
       [failedSooner, sending, scheduled].forEach(manager.ingest);
 
-      expect(itemsOf(all)).toEqual([scheduled, sending, failedSooner]);
+      expect(itemsOf(all)).toEqual([failedSooner, scheduled, sending]);
     });
 
-    it('breaks scheduled_at ties by id', async () => {
+    it('breaks scheduled_at ties by text', async () => {
+      const { all, manager } = setup();
+      await all.toTail();
+      const pizza = generateScheduledMessage({
+        message: { custom: {}, text: 'Pizza tonight?' },
+        scheduled_at: at(10),
+      });
+      const lunch = generateScheduledMessage({
+        message: { custom: {}, text: 'Lunch at noon' },
+        scheduled_at: at(10),
+      });
+
+      [pizza, lunch].forEach(manager.ingest);
+
+      expect(itemsOf(all)).toEqual([lunch, pizza]);
+    });
+
+    it('breaks scheduled_at and text ties by id', async () => {
       const { all, manager } = setup();
       await all.toTail();
       const b = generateScheduledMessage({ id: 'b', scheduled_at: at(10) });
@@ -333,7 +351,7 @@ describe('ScheduledMessagePaginatorsManager', () => {
 
       [sooner, later, failed].forEach(manager.ingest);
 
-      expect(itemsOf(all)).toEqual([sooner, later, failed]);
+      expect(itemsOf(all)).toEqual([failed, sooner, later]);
     });
 
     it('lists every scheduled message added to a list emptied by removals', async () => {

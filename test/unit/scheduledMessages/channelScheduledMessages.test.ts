@@ -583,7 +583,7 @@ describe("a channel's scheduled messages", () => {
       },
     );
 
-    it('keeps a failed message, behind the pending ones', () => {
+    it('keeps a failed message, in its place by time', () => {
       const { channel, client } = setupLoaded();
       const failing = generateScheduledMessage({
         scheduled_at: at(10),
@@ -604,8 +604,8 @@ describe("a channel's scheduled messages", () => {
       );
 
       expect(listed(channel)).toEqual([
-        pending,
         expect.objectContaining({ id: failing.id, status: 'failed' }),
+        pending,
       ]);
     });
 
