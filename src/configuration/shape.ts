@@ -19,7 +19,6 @@ import type { LiveLocationManagerConfig } from '../LiveLocationManager';
 import type { SearchControllerConfig } from '../search/SearchController';
 import type { NotificationManagerConfig } from '../notifications/types';
 import type { ReminderManagerConfig } from '../reminders/ReminderManager';
-import type { ScheduledMessageManagerConfig } from '../scheduledMessages/types';
 import type {
   AttachmentManagerConfig,
   CommandsConfig,
@@ -451,15 +450,6 @@ const REMINDER_FIELDS: Record<keyof ReminderManagerConfig, ConfigNode> = {
   },
 };
 
-const SCHEDULED_MESSAGE_MANAGER_FIELDS: Record<
-  keyof ScheduledMessageManagerConfig,
-  ConfigNode
-> = {
-  paginator: paginatorGroup(
-    "The scheduled message lists: all of the user's and each channel's. The server returns at most 100 per page.",
-  ),
-};
-
 const CONNECTION_RECOVERY_FIELDS: Record<
   keyof ConnectionRecoveryManagerConfig,
   ConfigNode
@@ -598,11 +588,6 @@ const CLIENT_FIELDS: Record<keyof ClientDeclarativeConfig, ConfigNode> = {
     fields: REMINDER_FIELDS,
     kind: 'group',
   },
-  scheduledMessages: {
-    description: 'Scheduled message lists and their paging.',
-    fields: SCHEDULED_MESSAGE_MANAGER_FIELDS,
-    kind: 'group',
-  },
   threads: {
     description: 'The thread list manager.',
     fields: THREAD_MANAGER_FIELDS,
@@ -627,6 +612,9 @@ const CHANNEL_FIELDS: Record<keyof ChannelDeclarativeConfig, ConfigNode> = {
     "The channel's pinned message list. Nested rather than top-level: a channel is its only parent.",
   ),
   requestHandlers: REQUEST_HANDLERS_NODE,
+  scheduledMessagesPaginator: paginatorGroup(
+    "The current user's scheduled messages in the channel. Filled by the channel query; it queries only when the channel query leaves them out, at most 100 per page.",
+  ),
   typingEvents: {
     description: 'Typing indicators for the channel.',
     fields: {

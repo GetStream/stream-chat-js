@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   CORE_NOTIFICATION_TYPE,
   ScheduledMessageBlockReason,
+  ScheduledMessagePaginator,
   StreamChat,
 } from '../../../src';
 import { getClientWithUser } from '../test-utils/getClient';
@@ -107,47 +108,44 @@ describe('scheduled message configuration', () => {
     });
   });
 
-  describe('client.scheduledMessages.paginator', () => {
+  describe('scheduled message lists', () => {
     it('loads 100 scheduled messages per page by default', () => {
       const { client } = setup();
 
-      expect(client.scheduledMessages.paginator.pageSize).toBe(100);
       expect(
-        client.scheduledMessages.getChannelPaginator('messaging:general').pageSize,
+        client.channel('messaging', 'general').scheduledMessagesPaginator.pageSize,
       ).toBe(100);
+      expect(new ScheduledMessagePaginator({ client }).pageSize).toBe(100);
     });
 
-    it('applies the paging settings to every scheduled message list', async () => {
+    it("applies channel.scheduledMessagesPaginator to every channel's list", async () => {
       const { client } = setup();
-      const channelPaginator =
-        client.scheduledMessages.getChannelPaginator('messaging:a');
+      const existing = client.channel('messaging', 'a').scheduledMessagesPaginator;
       const querySpy = vi
         .spyOn(client, 'queryScheduledMessages')
         .mockResolvedValue({ scheduled_messages: [], duration: '' } as never);
 
-      client.config.set({
-        client: { scheduledMessages: { paginator: { pageSize: 25 } } },
-      });
+      client.config.set({ channel: { scheduledMessagesPaginator: { pageSize: 25 } } });
 
-      expect(client.scheduledMessages.paginator.pageSize).toBe(25);
-      expect(channelPaginator.pageSize).toBe(25);
-      expect(client.scheduledMessages.getChannelPaginator('messaging:b').pageSize).toBe(
+      expect(existing.pageSize).toBe(25);
+      expect(client.channel('messaging', 'b').scheduledMessagesPaginator.pageSize).toBe(
         25,
       );
-      await client.scheduledMessages.paginator.toTail();
+      await existing.toTail();
       expect(querySpy).toHaveBeenCalledWith(expect.objectContaining({ limit: 25 }));
     });
 
-    it('keeps the paging settings after the user disconnects', async () => {
+    it('leaves the registered lists to their own options', () => {
       const { client } = setup();
-      client.config.set({
-        client: { scheduledMessages: { paginator: { pageSize: 25 } } },
+      const paginator = new ScheduledMessagePaginator({
+        client,
+        paginatorOptions: { pageSize: 10 },
       });
-      vi.spyOn(client, 'closeConnection').mockResolvedValue(undefined);
+      client.scheduledMessagePaginators.insertPaginator({ paginator });
 
-      await client.disconnectUser();
+      client.config.set({ channel: { scheduledMessagesPaginator: { pageSize: 25 } } });
 
-      expect(client.scheduledMessages.paginator.pageSize).toBe(25);
+      expect(paginator.pageSize).toBe(10);
     });
   });
 });

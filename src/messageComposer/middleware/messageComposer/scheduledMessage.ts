@@ -1,5 +1,8 @@
 import { CORE_NOTIFICATION_TYPE } from '../../../notifications';
-import { ScheduledMessageBlockReason } from '../../../scheduledMessages/constants';
+import {
+  SCHEDULED_MESSAGE_STATUS,
+  ScheduledMessageBlockReason,
+} from '../../../scheduledMessages/constants';
 import { CommandSearchSource } from '../textComposer/commands';
 import { getCurrentCommand } from '../textComposer/commandUtils';
 import type { MiddlewareHandlerParams } from '../../../middleware';
@@ -16,7 +19,7 @@ export const getScheduleBlockReason = (
   composer: MessageComposer,
   commandSearchSource: CommandSearchSource,
 ): ScheduledMessageBlockReason | undefined => {
-  const { channel, locationComposer, pollId } = composer;
+  const { channel, locationComposer } = composer;
 
   if (!channel.scheduledMessagesEnabled) return ScheduledMessageBlockReason.Unavailable;
 
@@ -24,8 +27,8 @@ export const getScheduleBlockReason = (
     return ScheduledMessageBlockReason.Command;
   }
 
-  if (pollId) return ScheduledMessageBlockReason.Poll;
-
+  // A poll can be scheduled. A location cannot: a static one would be stale by the time it is sent,
+  // and a live one would have its sharing window counted from now.
   if (locationComposer.validLocation) return ScheduledMessageBlockReason.SharedLocation;
 
   return undefined;
@@ -64,7 +67,12 @@ export const createScheduledMessageCompositionMiddleware = (
         forward,
       }: MiddlewareHandlerParams<MessageComposerMiddlewareState>) => {
         const { scheduled_at: scheduledAt } = state.sendOptions;
-        const isScheduling = !!scheduledAt || !!composer.editedScheduledMessage;
+        const { editedScheduledMessage } = composer;
+        // saving a pending one is scheduling; a failed one sent again now is not
+        const isScheduling =
+          !!scheduledAt ||
+          (!!editedScheduledMessage &&
+            editedScheduledMessage.status !== SCHEDULED_MESSAGE_STATUS.Failed);
 
         if (!isScheduling) return await forward();
 

@@ -13,7 +13,6 @@ import type { MessageComposerConfig } from '../messageComposer/configuration/typ
 import type { Channel, ChannelConfig } from '../channel';
 import type { Thread, ThreadConfig } from '../thread';
 import type { ReminderManagerConfig } from '../reminders/ReminderManager';
-import type { ScheduledMessageManagerConfig } from '../scheduledMessages/types';
 import type { NotificationManager } from '../notifications/NotificationManager';
 import type { NotificationManagerConfig } from '../notifications/types';
 import type { MessageDeliveryReporterConfig } from '../messageDelivery/MessageDeliveryReporter';
@@ -87,6 +86,7 @@ export type ChannelDeclarativeConfig = {
   messagePaginator?: DeclarativeMessagePaginatorConfig;
   pinnedMessagesPaginator?: ImportedDeclarativePaginatorConfig;
   requestHandlers?: ChannelConfig['requestHandlers'];
+  scheduledMessagesPaginator?: ImportedDeclarativePaginatorConfig;
   /** Typing indicators, ANDed with the channel type's `typing_events`. */
   typingEvents?: Partial<ChannelConfig['typingEvents']>;
   /** Read receipts, ANDed with the channel type's `read_events`. */
@@ -155,7 +155,6 @@ export type ClientDeclarativeConfig = {
    * its elements to `number | undefined`, which `ReminderManager.updateConfig` rejects.
    */
   reminders?: Partial<ReminderManagerConfig>;
-  scheduledMessages?: ScheduledMessageManagerConfig;
 };
 
 /**

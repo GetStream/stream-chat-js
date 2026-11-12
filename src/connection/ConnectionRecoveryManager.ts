@@ -141,6 +141,9 @@ export class ConnectionRecoveryManager extends WithSubscriptions {
   private handleReconnect() {
     if (this.config.enabled) {
       runDetached(this.recoverChannelLists(), { context: 'recoverChannelLists' });
+      runDetached(this.recoverScheduledMessageLists(), {
+        context: 'recoverScheduledMessageLists',
+      });
       runDetached(this.recoverActiveChannels(), { context: 'recoverActiveChannels' });
       return;
     }
@@ -189,6 +192,10 @@ export class ConnectionRecoveryManager extends WithSubscriptions {
 
   private recoverChannelLists = async () => {
     await this.client.channelManager.recover();
+  };
+
+  private recoverScheduledMessageLists = async () => {
+    await this.client.scheduledMessagePaginators.recover();
   };
 
   private recoverActiveChannels = async ({ isRetry = false } = {}): Promise<void> => {

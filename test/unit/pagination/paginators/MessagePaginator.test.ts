@@ -5142,6 +5142,7 @@ describe('MessagePaginator', () => {
         await flushProbe(paginator);
 
         expect(channel.query).toHaveBeenCalledWith({
+          include_scheduled_messages: false,
           messages: { limit: 1, id_lt: 'm2' },
         });
         expect(paginator.getItem('m1')).toBeUndefined(); // pruned by the probe
@@ -5169,6 +5170,7 @@ describe('MessagePaginator', () => {
         await flushProbe(paginator);
 
         expect(channel.query).toHaveBeenCalledWith({
+          include_scheduled_messages: false,
           messages: { limit: 1, id_lt: 'm3' },
         });
         expect(paginator.getItem('m1')).toBeDefined(); // kept — no data loss on a truncated reload
@@ -5321,6 +5323,7 @@ describe('MessagePaginator', () => {
 
         // The below-window oldest (m1) was probed and is real → kept. Final = the server truth.
         expect(channel.query).toHaveBeenCalledWith({
+          include_scheduled_messages: false,
           messages: { limit: 1, id_lt: 'm2' },
         });
         expect(paginator.getItem('m1')).toBeDefined();

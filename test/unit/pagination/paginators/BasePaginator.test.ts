@@ -5104,3 +5104,145 @@ describe('BasePaginator', () => {
     });
   });
 });
+
+describe('BasePaginator: a list loaded empty with nothing more either way', () => {
+  class CompleteListPaginator extends Paginator {
+    protected override get startsIntervalInEmptyCompleteList() {
+      return true;
+    }
+  }
+
+  const byAgeDescending = makeComparator<TestItem>({
+    sort: [{ field: 'age', direction: -1 }],
+  });
+
+  const create = <P extends Paginator>(PaginatorClass: new () => P) => {
+    const paginator = new PaginatorClass();
+    paginator.sortComparator = byAgeDescending;
+    return paginator;
+  };
+
+  it('records an empty first page that is also the last as complete', () => {
+    const paginator = create(Paginator);
+
+    paginator.setItems({ isFirstPage: true, isLastPage: true, valueOrFactory: [] });
+
+    expect(paginator.items).toEqual([]);
+    expect(paginator.hasMoreHead).toBe(false);
+    expect(paginator.hasMoreTail).toBe(false);
+  });
+
+  it('leaves the flags of an empty page that is not known to be the last', () => {
+    const paginator = create(Paginator);
+
+    paginator.setItems({ isFirstPage: true, valueOrFactory: [] });
+
+    expect(paginator.hasMoreHead).toBe(true);
+    expect(paginator.hasMoreTail).toBe(true);
+  });
+
+  it('keeps an ingested item in the logical head by default', () => {
+    const paginator = create(Paginator);
+    paginator.setItems({ isFirstPage: true, isLastPage: true, valueOrFactory: [] });
+
+    paginator.ingestItem(b);
+
+    expect(paginator.logicalHeadItems).toEqual([b]);
+  });
+
+  it('starts the only interval with the first item when the paginator opts in', () => {
+    const paginator = create(CompleteListPaginator);
+    paginator.setItems({ isFirstPage: true, isLastPage: true, valueOrFactory: [] });
+
+    paginator.ingestItem(b);
+    paginator.ingestItem(a);
+    paginator.ingestItem(d);
+
+    expect(paginator.items).toEqual([a, b, d]);
+    expect(paginator.logicalHeadItems).toEqual([]);
+    expect(paginator.hasMoreHead).toBe(false);
+    expect(paginator.hasMoreTail).toBe(false);
+  });
+
+  it('starts it again in a list emptied by removals', () => {
+    const paginator = create(CompleteListPaginator);
+    paginator.setItems({ isFirstPage: true, isLastPage: true, valueOrFactory: [b] });
+    paginator.removeItem({ id: b.id });
+
+    paginator.ingestItem(c);
+    paginator.ingestItem(a);
+
+    expect(paginator.items).toEqual([a, c]);
+  });
+
+  it('starts it again in a list emptied inside a batch, publishing once', () => {
+    const paginator = create(CompleteListPaginator);
+    paginator.setItems({ isFirstPage: true, isLastPage: true, valueOrFactory: [b] });
+    const publish = vi.fn();
+    const unsubscribe = paginator.state.subscribeWithSelector(
+      ({ items }) => ({ items }),
+      publish,
+    );
+    publish.mockClear();
+
+    paginator.batch(
+      () => {
+        paginator.removeItem({ id: b.id });
+        paginator.ingestItem(c);
+        paginator.ingestItem(a);
+      },
+      { coalesce: true },
+    );
+    unsubscribe();
+
+    expect(paginator.items).toEqual([a, c]);
+    expect(publish).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not apply to a list with more to load', () => {
+    const paginator = create(CompleteListPaginator);
+    paginator.setItems({ isFirstPage: true, valueOrFactory: [] });
+
+    paginator.ingestItem(b);
+
+    expect(paginator.logicalHeadItems).toEqual([b]);
+  });
+
+  it('does not apply to a list that never loaded a page', () => {
+    const paginator = create(CompleteListPaginator);
+
+    paginator.ingestItem(b);
+
+    expect(paginator.logicalHeadItems).toEqual([b]);
+    expect(paginator.hasLoadedPage).toBe(false);
+  });
+
+  it('places items ingested during a first query that came back empty as its page', async () => {
+    const paginator = create(CompleteListPaginator);
+    const query = paginator.toTail();
+    await sleep(0);
+    paginator.ingestItem(b);
+    paginator.ingestItem(a);
+
+    paginator.queryResolve({ items: [] });
+    await query;
+
+    expect(paginator.items).toEqual([a, b]);
+    expect(paginator.logicalHeadItems).toEqual([]);
+    expect(paginator.hasMoreHead).toBe(false);
+    expect(paginator.hasMoreTail).toBe(false);
+  });
+
+  it('leaves them in the logical head by default', async () => {
+    const paginator = create(Paginator);
+    const query = paginator.toTail();
+    await sleep(0);
+    paginator.ingestItem(b);
+
+    paginator.queryResolve({ items: [] });
+    await query;
+
+    expect(paginator.items).toEqual([]);
+    expect(paginator.logicalHeadItems).toEqual([b]);
+  });
+});

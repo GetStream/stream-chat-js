@@ -3,76 +3,56 @@ import type {
   EventHandlerPipelineHandler,
   LabeledEventHandler,
 } from '../EventHandlerPipeline';
-import type { ScheduledMessageStatus } from '../gen/models';
+import type { ScheduledMessageResponse, ScheduledMessageStatus } from '../gen/models';
 import type {
-  ScheduledMessageManagerEventHandlerContext,
-  ScheduledMessageManagerEventHandlers,
+  ScheduledMessagePaginatorsManagerEventHandlerContext,
+  ScheduledMessagePaginatorsManagerEventHandlers,
 } from './types';
 
 type ScheduledMessageEventHandler =
-  EventHandlerPipelineHandler<ScheduledMessageManagerEventHandlerContext>;
+  EventHandlerPipelineHandler<ScheduledMessagePaginatorsManagerEventHandlerContext>;
 
-const DEFAULT_HANDLER_ID_PREFIX = 'ScheduledMessageManager:default-handler';
+const DEFAULT_HANDLER_ID_PREFIX = 'ScheduledMessagePaginatorsManager:default-handler';
 
-const CONNECTION_RECOVERED_EVENT_TYPE = 'connection.recovered';
-
-const upsertScheduledMessage: ScheduledMessageEventHandler = ({
-  ctx: { scheduledMessageManager },
-  event: { scheduled_message: scheduledMessage },
-}) => {
-  if (!scheduledMessage) return;
-
-  scheduledMessageManager.upsertToState(scheduledMessage);
+const STATUS_BY_EVENT_TYPE: Partial<Record<string, ScheduledMessageStatus>> = {
+  [ScheduledMessageEventType.Deleted]: SCHEDULED_MESSAGE_STATUS.Canceled,
+  [ScheduledMessageEventType.Sent]: SCHEDULED_MESSAGE_STATUS.Sent,
 };
 
-const finishScheduledMessage =
-  (status: ScheduledMessageStatus): ScheduledMessageEventHandler =>
-  ({
-    ctx: { scheduledMessageManager },
-    event: { scheduled_message: scheduledMessage },
-  }) => {
-    if (!scheduledMessage) return;
+/** The event's scheduled message in the status the event leaves it in (`deleted` → canceled, `sent` → sent). */
+export const getScheduledMessageFromEvent = ({
+  scheduled_message: scheduledMessage,
+  type,
+}: {
+  scheduled_message?: ScheduledMessageResponse;
+  type: string;
+}): ScheduledMessageResponse | undefined => {
+  if (!scheduledMessage) return undefined;
 
-    scheduledMessageManager.upsertToState({ ...scheduledMessage, status });
-  };
+  const status = STATUS_BY_EVENT_TYPE[type];
 
-const recoverLists: ScheduledMessageEventHandler = async ({
-  ctx: { scheduledMessageManager },
+  return status ? { ...scheduledMessage, status } : scheduledMessage;
+};
+
+const ingestScheduledMessage: ScheduledMessageEventHandler = ({
+  ctx: { scheduledMessagePaginators },
+  event,
 }) => {
-  await scheduledMessageManager.recover();
+  const scheduledMessage = getScheduledMessageFromEvent(event);
+
+  if (scheduledMessage) scheduledMessagePaginators.ingest(scheduledMessage);
 };
 
 const toDefaultHandler = (
   eventType: string,
-  handle: ScheduledMessageEventHandler,
-): LabeledEventHandler<ScheduledMessageManagerEventHandlerContext>[] => [
-  { handle, id: `${DEFAULT_HANDLER_ID_PREFIX}:${eventType}` },
+): LabeledEventHandler<ScheduledMessagePaginatorsManagerEventHandlerContext>[] => [
+  { handle: ingestScheduledMessage, id: `${DEFAULT_HANDLER_ID_PREFIX}:${eventType}` },
 ];
 
-export const DEFAULT_SCHEDULED_MESSAGE_EVENT_HANDLERS: ScheduledMessageManagerEventHandlers =
-  {
-    [ScheduledMessageEventType.Created]: toDefaultHandler(
-      ScheduledMessageEventType.Created,
-      upsertScheduledMessage,
-    ),
-    [ScheduledMessageEventType.Deleted]: toDefaultHandler(
-      ScheduledMessageEventType.Deleted,
-      finishScheduledMessage(SCHEDULED_MESSAGE_STATUS.Canceled),
-    ),
-    [ScheduledMessageEventType.Failed]: toDefaultHandler(
-      ScheduledMessageEventType.Failed,
-      upsertScheduledMessage,
-    ),
-    [ScheduledMessageEventType.Sent]: toDefaultHandler(
-      ScheduledMessageEventType.Sent,
-      finishScheduledMessage(SCHEDULED_MESSAGE_STATUS.Sent),
-    ),
-    [ScheduledMessageEventType.Updated]: toDefaultHandler(
-      ScheduledMessageEventType.Updated,
-      upsertScheduledMessage,
-    ),
-    [CONNECTION_RECOVERED_EVENT_TYPE]: toDefaultHandler(
-      CONNECTION_RECOVERED_EVENT_TYPE,
-      recoverLists,
-    ),
-  };
+export const DEFAULT_SCHEDULED_MESSAGE_EVENT_HANDLERS: ScheduledMessagePaginatorsManagerEventHandlers =
+  Object.fromEntries(
+    Object.values(ScheduledMessageEventType).map((eventType) => [
+      eventType,
+      toDefaultHandler(eventType),
+    ]),
+  );
