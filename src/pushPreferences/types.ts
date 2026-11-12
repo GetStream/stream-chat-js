@@ -1,25 +1,4 @@
-import type {
-  PushPreference,
-  PushPreferencesResponse,
-  PushScheduleResponse,
-  QuietHoursRuleResponse,
-} from '../types';
-import type { QuietHoursDay } from './constants';
-
-export type IsInQuietHoursParams = {
-  schedule: PushScheduleResponse;
-  date?: Date;
-};
-
-export type ZonedWallClock = {
-  minutes: number;
-  weekday: QuietHoursDay;
-};
-
-export type IsQuietHoursRuleActiveParams = {
-  rule: QuietHoursRuleResponse;
-  wallClock: ZonedWallClock;
-};
+import type { PushPreference, PushPreferencesResponse } from '../types';
 
 export type MergeOwnPushPreferencesParams = {
   preferences: PushPreference[];

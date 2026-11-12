@@ -18,7 +18,6 @@ export * from './pagination';
 export * from './permissions';
 export * from './poll';
 export * from './poll_manager';
-export * from './pushPreferences';
 export * from './reminders';
 export * from './search';
 export * from './segment';
