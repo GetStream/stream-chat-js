@@ -77,7 +77,6 @@ import {
 import { MessageDeliveryReporter } from './messageDelivery';
 import { NotificationManager } from './notifications';
 import { ReminderManager } from './reminders';
-import { mergeOwnPushPreferences } from './pushPreferences/utils';
 import type { AbstractOfflineDB } from './offline-support';
 import { FixedSizeQueueCache } from './utils/FixedSizeQueueCache';
 import { isEqual } from './utils/mergeWith/mergeWithCore';
@@ -1737,24 +1736,13 @@ export class StreamChat extends ChatApi {
   override async updatePushNotificationPreferences(
     ...args: Parameters<ChatApi['updatePushNotificationPreferences']>
   ) {
-    const [{ preferences }] = args;
     const result = await super.updatePushNotificationPreferences(...args);
     const { user, userId } = this;
-    if (!user || !userId) return result;
-
-    const { push_preferences: previous } = user;
-    const { user_preferences: userPreferences } = result;
-    const updated = userPreferences?.[userId];
-    const pushPreferences = mergeOwnPushPreferences({
-      preferences,
-      previous,
-      updated,
-      userId,
-    });
-
-    const hasChanged = pushPreferences !== previous;
-    if (hasChanged) {
-      this.user = { ...user, push_preferences: pushPreferences };
+    // The response holds the full stored preferences of every user in the request, or
+    // null for a user with only channel-level items.
+    const updated = userId ? result.user_preferences?.[userId] : undefined;
+    if (user && updated) {
+      this.user = { ...user, push_preferences: updated };
     }
     return result;
   }
