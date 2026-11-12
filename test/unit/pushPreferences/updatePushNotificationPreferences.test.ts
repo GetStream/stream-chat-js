@@ -1,14 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { PushScheduleResponse, StreamChat } from '../../../src';
-import { QuietHoursDay } from '../../../src';
 import { getClientWithUser } from '../test-utils/getClient';
 
 const userId = 'user1';
 
 const nightSchedule: PushScheduleResponse = {
-  quiet_hours: [
-    { days: [QuietHoursDay.Monday, QuietHoursDay.Tuesday], end: '07:00', start: '22:00' },
-  ],
+  quiet_hours: [{ days: ['mon', 'tue'], end: '07:00', start: '22:00' }],
   timezone: 'Europe/Amsterdam',
 };
 
