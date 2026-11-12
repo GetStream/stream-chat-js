@@ -1737,11 +1737,13 @@ export class StreamChat extends ChatApi {
     ...args: Parameters<ChatApi['updatePushNotificationPreferences']>
   ) {
     const result = await super.updatePushNotificationPreferences(...args);
-    const { user, userId } = this;
-    // The response holds the full stored preferences of every user in the request, or
-    // null for a user with only channel-level items.
-    const updated = userId ? result.user_preferences?.[userId] : undefined;
-    if (user && updated) {
+    const { user } = this;
+    if (!user) return result;
+
+    // The full stored preferences after the update, or null when the request only had
+    // channel-level items for this user.
+    const updated = result.user_preferences[user.id];
+    if (updated) {
       this.user = { ...user, push_preferences: updated };
     }
     return result;
