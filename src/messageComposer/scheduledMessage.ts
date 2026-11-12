@@ -63,14 +63,12 @@ export const toScheduledMessageDraft = (
 ): DraftMessage => {
   const { id, message } = scheduledMessage;
 
-  const draftMessage = {
+  return {
     ...pickFields(message, COMPOSER_OWNED_FIELD_NAMES),
     custom: message.custom ?? {},
     id,
     text: message.text,
   } as DraftMessage;
-
-  return draftMessage;
 };
 
 export const toScheduledMessageComposition = (
@@ -79,14 +77,12 @@ export const toScheduledMessageComposition = (
   const { cid, created_at, message } = scheduledMessage;
   const { parent_id } = message;
 
-  const composition = {
+  return {
     channel_cid: cid,
     created_at,
     message: toScheduledMessageDraft(scheduledMessage),
     parent_id,
   } as DraftResponse;
-
-  return composition;
 };
 
 export const toScheduledMessagePayload = (
@@ -126,7 +122,7 @@ export const toScheduledMessagePreview = (
     text,
   } = message;
 
-  const previewMessage = formatMessage({
+  return formatMessage({
     attachments,
     cid,
     created_at,
@@ -155,8 +151,6 @@ export const toScheduledMessagePreview = (
     updated_at: scheduled_at,
     user,
   });
-
-  return previewMessage;
 };
 
 export const resolveMentionedUsers = async (
