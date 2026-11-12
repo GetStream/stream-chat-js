@@ -771,11 +771,8 @@ export type QuietHoursRuleInput = {
   days?: string[];
 };
 
-export type QuietHoursRuleResponse = {
-  end: string;
-  start: string;
-  days?: string[];
-};
+/** The API returns a quiet window in the same shape it accepts one. */
+export type QuietHoursRuleResponse = QuietHoursRuleInput;
 
 export type PushScheduleInput = {
   quiet_hours?: QuietHoursRuleInput[];

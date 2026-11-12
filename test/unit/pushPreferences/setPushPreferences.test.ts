@@ -1,30 +1,32 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type {
+  PushPreferencesResponse,
   PushScheduleResponse,
   StreamChat,
-  UpsertPushPreferencesResponse,
 } from '../../../src';
 import { getClientWithUser } from '../test-utils/getClient';
 
 const userId = 'user1';
 
-const nightSchedule: PushScheduleResponse = {
-  quiet_hours: [{ days: ['mon', 'tue'], end: '07:00', start: '22:00' }],
+const fridayNight: PushScheduleResponse = {
+  quiet_hours: [{ days: ['fri'], end: '07:00', start: '22:00' }],
   timezone: 'Europe/Amsterdam',
 };
 
 const setup = () => {
   const client = getClientWithUser({
     id: userId,
-    push_preferences: { chat_level: 'all' },
+    push_preferences: { chat_level: 'mentions', schedule: fridayNight },
   }) as StreamChat;
   const post = vi.spyOn(client, 'post');
   return { client, post };
 };
 
+// `user_preferences` as the API returns it: the full stored preferences of every user
+// in the request, or null for a user with only channel-level items.
 const respondWith = (
   post: ReturnType<typeof setup>['post'],
-  userPreferences: UpsertPushPreferencesResponse['user_preferences'],
+  userPreferences: Record<string, PushPreferencesResponse | null>,
 ) =>
   post.mockResolvedValue({
     duration: '',
@@ -37,43 +39,36 @@ describe('client.setPushPreferences', () => {
     vi.restoreAllMocks();
   });
 
-  it('sends the quiet hours schedule', async () => {
+  it('sends the preferences and stores the returned ones on the connected user', async () => {
     const { client, post } = setup();
-    respondWith(post, { [userId]: { chat_level: 'all', schedule: nightSchedule } });
+    const returned: PushPreferencesResponse = {
+      call_level: 'none',
+      chat_level: 'mentions',
+      schedule: fridayNight,
+    };
+    respondWith(post, { [userId]: returned });
 
-    await client.setPushPreferences([{ schedule: nightSchedule }]);
+    await client.setPushPreferences([{ call_level: 'none' }]);
 
     expect(post).toHaveBeenCalledWith(`${client.baseURL}/push_preferences`, {
-      preferences: [{ schedule: nightSchedule }],
+      preferences: [{ call_level: 'none' }],
     });
+    expect(client.user).toHaveProperty('push_preferences', returned);
   });
 
-  it('keeps the schedule on the connected user', async () => {
+  it('drops the preferences the response no longer has', async () => {
     const { client, post } = setup();
-    respondWith(post, { [userId]: { chat_level: 'all', schedule: nightSchedule } });
-
-    await client.setPushPreferences([{ schedule: nightSchedule }]);
-
-    expect(client.user).toHaveProperty('push_preferences', {
-      chat_level: 'all',
-      schedule: nightSchedule,
-    });
-  });
-
-  it('removes the schedule from the connected user after remove_schedule', async () => {
-    const { client, post } = setup();
-    client.user = { id: userId, push_preferences: { schedule: nightSchedule } } as never;
-    respondWith(post, { [userId]: {} });
+    respondWith(post, { [userId]: { chat_level: 'mentions' } });
 
     await client.setPushPreferences([{ remove_schedule: true }]);
 
-    expect(client.user).toHaveProperty('push_preferences', {});
+    expect(client.user).toHaveProperty('push_preferences', { chat_level: 'mentions' });
   });
 
   it('leaves the connected user unchanged for a channel preference', async () => {
     const { client, post } = setup();
     const user = client.user;
-    respondWith(post, {});
+    respondWith(post, { [userId]: null });
 
     await client.setPushPreferences([
       { channel_cid: 'messaging:general', chat_level: 'none' },
