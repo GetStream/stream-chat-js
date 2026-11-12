@@ -918,4 +918,228 @@ describe("a channel's scheduled messages", () => {
       });
     });
   });
+
+  describe('lists holding the same message', () => {
+    const setupTwoLists = (
+      filter?: ConstructorParameters<typeof ScheduledMessagePaginator>[0]['filter'],
+    ) => {
+      const context = setup();
+      const { channel, client } = context;
+      const registered = new ScheduledMessagePaginator({ client, filter });
+      client.scheduledMessagePaginators.insertPaginator({ paginator: registered });
+      client.scheduledMessagePaginators.registerSubscriptions();
+      channel.scheduledMessagesPaginator.hydrate([]);
+      registered.hydrate([]);
+      return { ...context, registered };
+    };
+
+    /** Dispatches an event and waits for the manager's pipelines, which run asynchronously. */
+    const dispatch = async (client: StreamChat, event: never) => {
+      client.dispatchEvent(event);
+      await Promise.all(
+        [...client.scheduledMessagePaginators.pipelines.values()].map((pipeline) =>
+          pipeline.drain(),
+        ),
+      );
+    };
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it.each(['scheduled_message.deleted', 'scheduled_message.sent'] as const)(
+      'all drop a message on %s',
+      async (type) => {
+        const { channel, client, registered } = setupTwoLists();
+        const sm = generateScheduledMessage({ updated_at: at(0) });
+        await dispatch(client, generateEvent('scheduled_message.created', sm));
+        expect(listed(channel)).toEqual([sm]);
+        expect(registered.items).toEqual([sm]);
+
+        await dispatch(client, generateEvent(type, { ...sm, updated_at: at(1) }));
+
+        expect(listed(channel)).toEqual([]);
+        expect(registered.items).toEqual([]);
+        client.scheduledMessagePaginators.unregisterSubscriptions();
+      },
+    );
+
+    it('all drop a message deleted through the channel', async () => {
+      const { channel, client, registered } = setupTwoLists();
+      const sm = generateScheduledMessage({ updated_at: at(0) });
+      await dispatch(client, generateEvent('scheduled_message.created', sm));
+      vi.spyOn(client, 'deleteScheduledMessage').mockResolvedValue({
+        duration: '',
+        scheduled_message: { ...sm, updated_at: at(1) },
+      } as never);
+
+      await channel.deleteScheduledMessage(sm.id);
+
+      expect(listed(channel)).toEqual([]);
+      expect(registered.items).toEqual([]);
+      client.scheduledMessagePaginators.unregisterSubscriptions();
+    });
+
+    it('takes a failed message out of a list of pending ones', async () => {
+      const { channel, client, registered } = setupTwoLists({ status: ['scheduled'] });
+      const sm = generateScheduledMessage({ updated_at: at(0) });
+      await dispatch(client, generateEvent('scheduled_message.created', sm));
+      const failed = {
+        ...sm,
+        failure_reason: 'channel_frozen',
+        status: 'failed',
+        updated_at: at(1),
+      } as ScheduledMessageResponse;
+
+      await dispatch(client, generateEvent('scheduled_message.failed', failed));
+
+      expect(listed(channel)).toEqual([failed]);
+      expect(registered.items).toEqual([]);
+      client.scheduledMessagePaginators.unregisterSubscriptions();
+    });
+
+    it('moves a rescheduled message in every list', async () => {
+      const { channel, client, registered } = setupTwoLists();
+      const first = generateScheduledMessage({ scheduled_at: at(10), updated_at: at(0) });
+      const second = generateScheduledMessage({
+        scheduled_at: at(20),
+        updated_at: at(0),
+      });
+      await dispatch(client, generateEvent('scheduled_message.created', first));
+      await dispatch(client, generateEvent('scheduled_message.created', second));
+      const moved = { ...second, scheduled_at: at(5), updated_at: at(1) };
+
+      await dispatch(client, generateEvent('scheduled_message.updated', moved));
+
+      expect(listed(channel)).toEqual([moved, first]);
+      expect(registered.items).toEqual([moved, first]);
+      client.scheduledMessagePaginators.unregisterSubscriptions();
+    });
+
+    it('moves a message in a list that another list changed in the store', async () => {
+      const { channel, client, registered } = setupTwoLists();
+      const first = generateScheduledMessage({ scheduled_at: at(10), updated_at: at(0) });
+      const second = generateScheduledMessage({
+        scheduled_at: at(20),
+        updated_at: at(0),
+      });
+      await dispatch(client, generateEvent('scheduled_message.created', first));
+      await dispatch(client, generateEvent('scheduled_message.created', second));
+      const moved = { ...second, scheduled_at: at(5), updated_at: at(1) };
+
+      // a channel query response reaches only the channel's list
+      channel.hydrateScheduledMessages(
+        [first, moved],
+        channel.scheduledMessagesPaginator.getItemIds(),
+      );
+
+      expect(registered.items).toEqual([moved, first]);
+      client.scheduledMessagePaginators.unregisterSubscriptions();
+    });
+  });
+
+  describe('a removal no list holds', () => {
+    it('keeps a channel query read before it from listing the message', () => {
+      const { client } = setup();
+      const otherCid = `${channelType}:other`;
+      const sm = generateScheduledMessage({ cid: otherCid, updated_at: at(0) });
+
+      client.dispatchEvent(
+        generateEvent('scheduled_message.sent', { ...sm, updated_at: at(1) }),
+      );
+      const other = client.channelManager.ensure({ id: 'other', type: channelType });
+      other.hydrateScheduledMessages([sm]);
+
+      expect(listed(other)).toEqual([]);
+    });
+  });
+
+  describe('reload', () => {
+    it('keeps the list until the response lands', async () => {
+      const { channel, queryScheduledMessages } = setup();
+      const kept = generateScheduledMessage({ scheduled_at: at(1), updated_at: at(0) });
+      const gone = generateScheduledMessage({ scheduled_at: at(2), updated_at: at(0) });
+      channel.scheduledMessagesPaginator.hydrate([kept, gone]);
+      const response = deferred<never>();
+      queryScheduledMessages.mockReturnValueOnce(response.promise);
+
+      const reloading = channel.scheduledMessagesPaginator.reload();
+      expect(listed(channel)).toEqual([kept, gone]);
+      response.resolve(queryResponse([kept]));
+      await reloading;
+
+      expect(listed(channel)).toEqual([kept]);
+    });
+
+    it('keeps a message that arrived while the request was out', async () => {
+      const { channel, client, queryScheduledMessages } = setup();
+      channel.scheduledMessagesPaginator.hydrate([]);
+      const response = deferred<never>();
+      queryScheduledMessages.mockReturnValueOnce(response.promise);
+
+      const reloading = channel.scheduledMessagesPaginator.reload();
+      const arrived = generateScheduledMessage();
+      client.dispatchEvent(generateEvent('scheduled_message.created', arrived));
+      response.resolve(queryResponse([]));
+      await reloading;
+
+      expect(listed(channel)).toEqual([arrived]);
+    });
+
+    it('places the first page of a longer list and keeps its cursor', async () => {
+      const { channel, queryScheduledMessages } = setup();
+      const old = generateScheduledMessage({ scheduled_at: at(1), updated_at: at(0) });
+      channel.scheduledMessagesPaginator.hydrate([old]);
+      const firstPage = generateScheduledMessage({
+        scheduled_at: at(2),
+        updated_at: at(0),
+      });
+      queryScheduledMessages.mockResolvedValueOnce({
+        ...(queryResponse([firstPage]) as object),
+        next: 'page-2',
+      } as never);
+
+      await channel.scheduledMessagesPaginator.reload();
+
+      expect(listed(channel)).toEqual([firstPage]);
+      expect(channel.scheduledMessagesPaginator.hasMoreTail).toBe(true);
+    });
+
+    it('joins a reload already in flight', async () => {
+      const { channel, queryScheduledMessages } = setup();
+      channel.scheduledMessagesPaginator.hydrate([]);
+
+      await Promise.all([
+        channel.scheduledMessagesPaginator.reload(),
+        channel.scheduledMessagesPaginator.reload(),
+      ]);
+
+      expect(queryScheduledMessages).toHaveBeenCalledTimes(1);
+    });
+
+    it('leaves a registered list that loaded empty to be recovered', async () => {
+      const { client, queryScheduledMessages } = setup();
+      const registered = new ScheduledMessagePaginator({ client });
+      client.scheduledMessagePaginators.insertPaginator({ paginator: registered });
+
+      await registered.reload();
+      await client.scheduledMessagePaginators.recover();
+
+      expect(registered.hasLoadedPage).toBe(true);
+      expect(queryScheduledMessages).toHaveBeenCalledTimes(2);
+    });
+
+    it('keeps the list and records the error when the request fails', async () => {
+      const { channel, queryScheduledMessages } = setup();
+      const sm = generateScheduledMessage();
+      channel.scheduledMessagesPaginator.hydrate([sm]);
+      const error = new Error('offline');
+      queryScheduledMessages.mockRejectedValueOnce(error);
+
+      await channel.scheduledMessagesPaginator.reload();
+
+      expect(listed(channel)).toEqual([sm]);
+      expect(channel.scheduledMessagesPaginator.lastQueryError).toBe(error);
+    });
+  });
 });

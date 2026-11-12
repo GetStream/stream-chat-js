@@ -807,6 +807,57 @@ describe('MessageComposer scheduled messages', () => {
       expect(composer.draftId).toBe('draft-1');
     });
 
+    it('waits for uploads in progress before saving the edit', async () => {
+      const { client, composer } = setup({ pendingUploadsEnabled: true });
+      const updateSpy = mockScheduledUpdate(client, generateScheduledMessage());
+      await composer.editScheduledMessage(generateScheduledMessage());
+      composer.attachmentManager.state.partialNext({
+        attachments: [uploadAttachment('uploading')],
+      });
+
+      const updating = composer.updateScheduledMessage();
+      await Promise.resolve();
+      expect(updateSpy).not.toHaveBeenCalled();
+      composer.attachmentManager.state.partialNext({
+        attachments: [uploadAttachment('finished')],
+      });
+
+      await expect(updating).resolves.toEqual(
+        expect.objectContaining({ status: 'scheduled' }),
+      );
+      expect(updatedMessage(updateSpy)).toEqual(
+        expect.objectContaining({
+          attachments: [
+            expect.objectContaining({ image_url: 'https://cdn.example.com/a.png' }),
+          ],
+        }),
+      );
+    });
+
+    it('keeps the edit and does not save it when an upload failed', async () => {
+      const { client, composer } = setup({ pendingUploadsEnabled: true });
+      const updateSpy = mockScheduledUpdate(client, generateScheduledMessage());
+      const addErrorSpy = vi.spyOn(client.notifications, 'addError');
+      const scheduledMessage = generateScheduledMessage();
+      await composer.editScheduledMessage(scheduledMessage);
+      composer.attachmentManager.state.partialNext({
+        attachments: [uploadAttachment('failed')],
+      });
+
+      const result = await composer.updateScheduledMessage();
+
+      expect(result).toEqual({ error: expect.any(Error), status: 'failed' });
+      expect(updateSpy).not.toHaveBeenCalled();
+      expect(composer.editedScheduledMessage).toBe(scheduledMessage);
+      expect(addErrorSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          options: expect.objectContaining({
+            type: CORE_NOTIFICATION_TYPE.scheduledMessageUpdateFailed,
+          }),
+        }),
+      );
+    });
+
     it('keeps the edit when the update fails', async () => {
       const { client, composer } = setup();
       const error = generateAPIError(4, 'boom');

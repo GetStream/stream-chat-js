@@ -1044,6 +1044,51 @@ describe('EntityStore conflict resolution', () => {
       expect(store.isHeld('e1')).toBe(false);
     });
 
+    const removalSpy = () => ({ onEntitiesChanged: vi.fn(), onEntityRemoved: vi.fn() });
+
+    it('removes the entry when a removal is upserted, telling every holder but the writer', () => {
+      const store = withTombstones();
+      const stored = open(1);
+      store.upsert(stored);
+      const writer = removalSpy();
+      const other = removalSpy();
+      store.link(stored.id, writer);
+      store.link(stored.id, other);
+
+      store.upsert(closed(2), writer);
+
+      expect(store.has('e1')).toBe(false);
+      expect(other.onEntityRemoved).toHaveBeenCalledWith('e1', stored);
+      expect(writer.onEntityRemoved).not.toHaveBeenCalled();
+      expect(writer.onEntitiesChanged).not.toHaveBeenCalled();
+      expect(store.resolveCanonicalEntity(open(1))).toEqual(closed(2));
+    });
+
+    it('takes a removal out of the writing list and the others', () => {
+      const store = withTombstones();
+      const owner = removalSpy();
+      const writing = new StoreBackedItemIndex<Versioned>({
+        getEntityId: ({ id }) => id,
+        owner,
+        store,
+      });
+      const otherOwner = removalSpy();
+      const other = new StoreBackedItemIndex<Versioned>({
+        getEntityId: ({ id }) => id,
+        owner: otherOwner,
+        store,
+      });
+      writing.setOne(open(1));
+      other.setOne(store.get('e1') as Versioned);
+
+      writing.setOne(closed(2));
+
+      expect(writing.has('e1')).toBe(false);
+      expect(other.has('e1')).toBe(false);
+      expect(otherOwner.onEntityRemoved).toHaveBeenCalledTimes(1);
+      expect(owner.onEntityRemoved).not.toHaveBeenCalled();
+    });
+
     it('without shouldReplace, lets any later copy replace the tombstone', () => {
       const store = create({ isTombstone });
       storeAndRelease(store, closed(2));

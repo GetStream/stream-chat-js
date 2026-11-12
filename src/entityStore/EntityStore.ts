@@ -67,7 +67,11 @@ export type EntityStoreOptions<T> = {
    * `false` skips the write. Defaults to always replacing.
    */
   shouldReplace?: (incoming: T, stored: T) => boolean;
-  /** Whether a copy removes its entity; such a copy is kept as a tombstone (see `tombstones`). */
+  /**
+   * Whether a copy removes its entity. Such a copy is kept as a tombstone (see `tombstones`), and
+   * upserting it removes the entry, so every other holder hears
+   * {@link EntityStoreSubscriber.onEntityRemoved}.
+   */
   isTombstone?: (entity: T) => boolean;
 };
 
@@ -148,9 +152,14 @@ export class EntityStore<T> {
       this.shouldReplace(incoming, current)
         ? incoming
         : current;
-    if (this.isTombstone?.(resolved)) this.tombstones.set(id, resolved);
+    if (this.removesEntity(resolved)) this.tombstones.set(id, resolved);
     else this.tombstones.delete(id);
     return resolved;
+  }
+
+  /** Whether `entity` is a copy that removes its entity (see `isTombstone` in the options). */
+  removesEntity(entity: T): boolean {
+    return this.isTombstone?.(entity) ?? false;
   }
 
   /**
@@ -276,7 +285,9 @@ export class EntityStore<T> {
 
   /**
    * Replaces the canonical copy of `entity` and notifies the subscribers watching its ID, unless
-   * {@link EntityStore.resolveCanonicalEntity} keeps another copy.
+   * {@link EntityStore.resolveCanonicalEntity} keeps another copy. A copy that removes its entity
+   * (`isTombstone`) is kept as the tombstone and removes the entry instead, as
+   * {@link EntityStore.remove} does.
    *
    * @param entity - The new canonical copy, stored under its own ID.
    * @param subscriber - The writer, which updates itself and is not notified.
@@ -284,6 +295,10 @@ export class EntityStore<T> {
   upsert(entity: T, subscriber?: EntityStoreSubscriber): void {
     if (this.resolveCanonicalEntity(entity) !== entity) return;
     const id = this.getEntityId(entity);
+    if (this.removesEntity(entity)) {
+      this.dropEntry(id, { release: true, writer: subscriber });
+      return;
+    }
     const previous = this.byId.get(id);
     // No-op on an unchanged reference, like `StateStore.next`.
     if (previous === entity) return;
@@ -411,17 +426,26 @@ export class EntityStore<T> {
     this.dropEntry(id, { release: false });
   }
 
-  private dropEntry(id: string, { release }: { release: boolean }) {
+  /**
+   * @param options.writer - The holder whose write removed the entry: it updates itself, so it is
+   *   unlinked but neither notified nor told of the removal.
+   */
+  private dropEntry(
+    id: string,
+    { release, writer }: { release: boolean; writer?: EntityStoreSubscriber },
+  ) {
     if (!this.byId.has(id)) return;
     const entity = this.byId.get(id) as T;
     const holders = this.subscribers.get(id);
-    this.markDirty(id);
+    this.markDirty(id, writer);
     this.subscribers.delete(id);
     this.pendingFlushIds?.delete(id);
     const runner = new RunnerWithErrorCollector();
     if (holders) {
-      for (const holder of holders)
+      for (const holder of holders) {
+        if (holder === writer) continue;
         runner.run(() => holder.onEntityRemoved?.(id, entity));
+      }
     }
     this.byId.delete(id);
     if (release) runner.run(() => this.onRelease?.(entity));

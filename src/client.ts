@@ -82,6 +82,7 @@ import {
   ScheduledMessagePaginatorsManager,
   shouldReplaceScheduledMessage,
 } from './scheduledMessages';
+import { getScheduledMessageFromEvent } from './scheduledMessages/eventHandlers';
 import type { AbstractOfflineDB } from './offline-support';
 import { FixedSizeQueueCache } from './utils/FixedSizeQueueCache';
 import { isEqual } from './utils/mergeWith/mergeWithCore';
@@ -977,6 +978,14 @@ export class StreamChat extends ChatApi {
     if (event.received_at == null) event.received_at = nowNs();
 
     const postListenerCallbacks = this._handleClientEvent(event as WSEvent);
+    // A sent or deleted scheduled message becomes a tombstone even when no list holds it, e.g. in a
+    // channel not loaded yet: a queryChannels response read before the event can't list it again.
+    const scheduledMessage = getScheduledMessageFromEvent(
+      event as Parameters<typeof getScheduledMessageFromEvent>[0],
+    );
+    if (scheduledMessage && this.scheduledMessageStore.removesEntity(scheduledMessage)) {
+      this.scheduledMessageStore.upsert(scheduledMessage);
+    }
 
     const cid = (event as Extract<Event, { cid?: any }>).cid;
     const channel = cid ? this.channelManager.get(cid) : undefined;

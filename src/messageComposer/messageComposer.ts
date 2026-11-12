@@ -1518,6 +1518,17 @@ export class MessageComposer extends WithSubscriptions {
       );
   };
 
+  /**
+   * Reports a failed upload, which a scheduled message would silently go without: unlike a sent
+   * message, it has no failed item in the message list to retry from. Returns the reported error.
+   */
+  private reportFailedUploads(type: CoreNotificationType, message: string) {
+    if (!this.attachmentManager.failedUploadsCount) return undefined;
+    const error = new Error('Some attachments failed to upload');
+    this.reportSubmitFailure(type, message, error);
+    return error;
+  }
+
   schedule = async (scheduledAt: Date): Promise<ScheduledMessageSubmitResult> => {
     if (this.hasEditInProgress) return { status: 'nothing-to-send' };
 
@@ -1535,15 +1546,11 @@ export class MessageComposer extends WithSubscriptions {
 
     if (compositionChanged) return { status: 'nothing-to-send' };
 
-    if (this.attachmentManager.failedUploadsCount) {
-      const error = new Error('Some attachments failed to upload');
-      this.reportSubmitFailure(
-        CORE_NOTIFICATION_TYPE.scheduledMessageCreateFailed,
-        'Failed to schedule the message',
-        error,
-      );
-      return { error, status: 'failed' };
-    }
+    const uploadError = this.reportFailedUploads(
+      CORE_NOTIFICATION_TYPE.scheduledMessageCreateFailed,
+      'Failed to schedule the message',
+    );
+    if (uploadError) return { error: uploadError, status: 'failed' };
 
     const composition = await this.compose({
       sendOptions: { scheduled_at: scheduledAt },
@@ -1599,6 +1606,19 @@ export class MessageComposer extends WithSubscriptions {
       await this.compose();
       return { status: 'blocked' };
     }
+
+    await this.waitForUploadsInProgress();
+
+    // the edit ended, or another message was opened, while the uploads finished
+    if (this.editedScheduledMessage?.id !== editedScheduledMessage.id) {
+      return { status: 'nothing-to-send' };
+    }
+
+    const uploadError = this.reportFailedUploads(
+      CORE_NOTIFICATION_TYPE.scheduledMessageUpdateFailed,
+      'Failed to update the scheduled message',
+    );
+    if (uploadError) return { error: uploadError, status: 'failed' };
 
     const composition = await this.compose();
 

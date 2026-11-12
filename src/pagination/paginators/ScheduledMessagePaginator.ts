@@ -169,12 +169,18 @@ export class ScheduledMessagePaginator extends BasePaginator<
   public ingestItem(item: ScheduledMessageResponse): boolean {
     const latest = this.store.resolveCanonicalEntity(item);
 
-    // the list already holds the copy that wins (e.g. `item` is stale): nothing to place
+    // the list already holds the copy that wins and placed it when it was stored (`onEntitiesChanged`
+    // places copies other lists store): nothing to place
     if (this.getItem(latest.id) === latest) return false;
 
-    const changed = super.ingestItem(latest);
+    return this.placeItem(latest);
+  }
 
-    if (!this.matchesFilter(latest)) this._itemIndex.remove(latest.id);
+  /** Places `item` by the list's filter and order: moves it, or takes it out when it no longer matches. */
+  private placeItem(item: ScheduledMessageResponse) {
+    const changed = super.ingestItem(item);
+
+    if (!this.matchesFilter(item)) this._itemIndex.remove(item.id);
 
     return changed;
   }
@@ -184,48 +190,149 @@ export class ScheduledMessagePaginator extends BasePaginator<
     return new Set(this._itemIndex.values().map(getScheduledMessageId));
   }
 
+  /** A page loaded and nothing more to load either way: the list holds every message it matches. */
+  private get holdsCompleteList() {
+    const { hasMoreHead, hasMoreTail } = this.state.getLatestValue();
+    return this.hasLoadedPage && !hasMoreHead && !hasMoreTail;
+  }
+
   /**
    * Applies a complete set (e.g. a channel query's `scheduled_messages`) through the paginator's own
-   * operations: removes what was held at `itemIdsAtRequest` and is missing, ingests the rest, or
-   * places it as the first, complete page. Messages taken since the snapshot stay. Publishes once.
+   * operations: removes what was held at `itemIdsAtRequest` and is missing, and ingests the rest. A
+   * list that does not hold a complete set yet is replaced by it instead. Messages taken since the
+   * snapshot stay. Publishes once.
    */
   public hydrate(
     scheduledMessages: ScheduledMessageResponse[],
     itemIdsAtRequest: ReadonlySet<string> = new Set(),
   ) {
     const snapshot = this.filterQueryResults(scheduledMessages);
-    const snapshotIds = new Set(snapshot.map(getScheduledMessageId));
 
+    if (!this.holdsCompleteList) {
+      this.replaceWithFirstPage({ itemIdsAtRequest, page: snapshot, tailward: null });
+      return;
+    }
+
+    const snapshotIds = new Set(snapshot.map(getScheduledMessageId));
     this.batch(
       () => {
         // held when the request went out and missing from the response: gone on the server
         itemIdsAtRequest.forEach((id) => {
           if (!snapshotIds.has(id)) this.removeItem({ id });
         });
+        snapshot.forEach((item) => this.ingestItem(item));
+      },
+      { coalesce: true },
+    );
+  }
 
-        if (this.hasLoadedPage) {
-          snapshot.forEach((item) => this.ingestItem(item));
-          return;
-        }
+  /**
+   * Re-queries the first page and applies it in place: the current messages stay until the response
+   * lands, unlike the base `reload()`, which empties the list first. A complete response is applied
+   * as {@link hydrate} does; a longer list is replaced by its first page. Messages taken by events
+   * while the request was out stay. A failed query keeps the list and records `lastQueryError`; a
+   * success clears it. Only the first load publishes `isLoading`. A call while one is in flight
+   * joins it.
+   */
+  reload = (): Promise<void> => {
+    this.reloadInFlight ??= this.reloadFirstPage().finally(() => {
+      this.reloadInFlight = undefined;
+    });
+    return this.reloadInFlight;
+  };
 
-        // events that arrived before the first page wait in the logical intervals, which
-        // `setItems` folds into the page
-        const waitingItems = [...this.logicalHeadItems, ...this.logicalTailItems].filter(
-          ({ id }) => !snapshotIds.has(id),
-        );
+  private reloadInFlight?: Promise<void>;
+
+  private reloadFirstPage = async () => {
+    const isFirstLoad = !this.hasLoadedPage;
+    const itemIdsAtRequest = this.getItemIds();
+    if (isFirstLoad) this.state.partialNext({ isLoading: true });
+    let applied = false;
+    try {
+      const fetchParams = {
+        queryShape: this.getNextQueryShape(),
+        retryCount: this.config.retryCount,
+      };
+      const response = await this.fetchQueryResponseWithRetries(fetchParams);
+      if (!response) return;
+      const { items, tailward } = this.extractQueryPage(response);
+      if (tailward) {
+        this.replaceWithFirstPage({
+          itemIdsAtRequest,
+          page: this.filterQueryResults(items),
+          tailward,
+        });
+      } else {
+        this.hydrate(items, itemIdsAtRequest);
+      }
+      applied = true;
+    } finally {
+      const clearError = applied && this.lastQueryError;
+      if (isFirstLoad || clearError) {
+        this.state.partialNext({
+          ...(isFirstLoad ? { isLoading: false } : {}),
+          ...(clearError ? { lastQueryError: undefined } : {}),
+        });
+      }
+    }
+  };
+
+  /**
+   * Replaces the list with `page` as its first page. Messages taken by events since the request went
+   * out (held now, not at `itemIdsAtRequest`) stay; the others the page leaves out go. Publishes once.
+   */
+  private replaceWithFirstPage({
+    itemIdsAtRequest,
+    page,
+    tailward,
+  }: {
+    itemIdsAtRequest: ReadonlySet<string>;
+    page: ScheduledMessageResponse[];
+    tailward: string | null | undefined;
+  }) {
+    const pageIds = new Set(page.map(getScheduledMessageId));
+    const takenSinceRequest = this._itemIndex
+      .values()
+      .filter(({ id }) => !pageIds.has(id) && !itemIdsAtRequest.has(id));
+    const keptIds = new Set([
+      ...pageIds,
+      ...takenSinceRequest.map(getScheduledMessageId),
+    ]);
+
+    this.batch(
+      () => {
+        this.setIntervals([]);
+        this.setActiveInterval(undefined);
+        this.clearIntervalViews();
+        this._itemIndex.values().forEach(({ id }) => {
+          if (!keptIds.has(id)) this._itemIndex.remove(id);
+        });
         this.setItems({
-          cursor: EXHAUSTED_CURSOR,
+          cursor: tailward ? { headward: null, tailward } : EXHAUSTED_CURSOR,
           isFirstPage: true,
-          isLastPage: true,
-          valueOrFactory: [...snapshot, ...waitingItems].sort(this.sortComparator),
+          isLastPage: !tailward,
+          valueOrFactory: [...page, ...takenSinceRequest].sort(this.sortComparator),
         });
       },
       { coalesce: true },
     );
   }
 
+  /**
+   * Another list stored a newer copy of items this one holds. A change can move a scheduled message
+   * (`scheduled_at`) or take it out of this list (`status`), so each changed item is placed by this
+   * list's filter and order.
+   */
   public onEntitiesChanged({ changedIds }: EntityStoreChangeBatch) {
-    this.reconcileChangedIds(changedIds);
+    this.batch(
+      () => {
+        changedIds.forEach((id) => {
+          const item = this.getItem(id);
+          if (item) this.placeItem(item);
+        });
+      },
+      { coalesce: true },
+    );
   }
 
   public onEntityRemoved(id: string, item: unknown) {

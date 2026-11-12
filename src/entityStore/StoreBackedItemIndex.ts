@@ -63,8 +63,15 @@ export class StoreBackedItemIndex<T> implements ItemIndexApi<T> {
 
   setOne(item: T) {
     const id = this.getEntityId(item);
+    const isCanonical = this.store.resolveCanonicalEntity(item) === item;
     // a stale copy of a removed entity resolves to its tombstone
-    if (this.store.resolveCanonicalEntity(item) !== item && !this.store.has(id)) return;
+    if (!isCanonical && !this.store.has(id)) return;
+    // a removal leaves this list too; the store tells the other holders
+    if (isCanonical && this.store.removesEntity(item)) {
+      this.memberIds.delete(id);
+      this.store.upsert(item, this.holder);
+      return;
+    }
     this.store.link(id, this.holder);
     this.memberIds.add(id);
     this.store.upsert(item, this.holder);

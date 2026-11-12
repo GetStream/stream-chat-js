@@ -235,7 +235,7 @@ export class ScheduledMessagePaginatorsManager extends WithSubscriptions {
 
   /** Reloads the loaded lists after a reconnect (called by `ConnectionRecoveryManager`). */
   public recover = async () => {
-    const loadedPaginators = this.paginators.filter(({ isInitialized }) => isInitialized);
+    const loadedPaginators = this.paginators.filter(({ hasLoadedPage }) => hasLoadedPage);
 
     await Promise.allSettled(loadedPaginators.map((paginator) => paginator.reload()));
   };
