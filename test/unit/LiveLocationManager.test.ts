@@ -131,6 +131,254 @@ describe('LiveLocationManager', () => {
       expect(manager.hasSubscriptions).toBeFalsy();
     });
 
+    it('registers subscriptions before the active live locations load', async () => {
+      const client = await getClientWithUser(user);
+      vi.spyOn(client, 'getUserLiveLocations').mockReturnValue(new Promise(() => null));
+      const manager = new LiveLocationManager({ client, getDeviceId, watchLocation });
+
+      void manager.init();
+      expect(manager.hasSubscriptions).toBeTruthy();
+      manager.unregisterSubscriptions();
+      expect(manager.hasSubscriptions).toBeFalsy();
+    });
+
+    describe('failed load of the active live locations', () => {
+      const loadError = new Error('location sharing is not enabled for this app');
+
+      it('resolves init, reports the error and still registers subscriptions', async () => {
+        const client = await getClientWithUser(user);
+        vi.spyOn(client, 'getUserLiveLocations').mockRejectedValue(loadError);
+        const manager = new LiveLocationManager({ client, getDeviceId, watchLocation });
+
+        await expect(manager.init()).resolves.toBeUndefined();
+        expect(manager.hasSubscriptions).toBeTruthy();
+        expect(manager.stateIsReady).toBe(false);
+        expect(manager.state.getLatestValue().lastQueryError).toBe(loadError);
+      });
+
+      it('tracks and updates a share started later', async () => {
+        const client = await getClientWithUser(user);
+        vi.spyOn(client, 'getUserLiveLocations').mockRejectedValue(loadError);
+        const updateLocationSpy = vi
+          .spyOn(client, 'updateLiveLocation')
+          .mockResolvedValue(liveLocation);
+        const newCoords = { latitude: 2, longitude: 2 };
+        const manager = new LiveLocationManager({
+          client,
+          getDeviceId,
+          watchLocation: makeWatchLocation([newCoords]),
+        });
+
+        await manager.init();
+        client.dispatchEvent({
+          message: {
+            id: liveLocation.message_id,
+            shared_location: liveLocation,
+            type: 'regular',
+            user,
+          },
+          type: 'live_location_sharing.started',
+        });
+
+        expect(manager.messages.has(liveLocation.message_id)).toBe(true);
+        await vi.waitFor(() => {
+          expect(updateLocationSpy).toHaveBeenCalledWith({
+            message_id: liveLocation.message_id,
+            ...newCoords,
+          });
+        });
+      });
+
+      it('retries the load on the next init and clears the error', async () => {
+        const client = await getClientWithUser(user);
+        const getUserLiveLocationsSpy = vi
+          .spyOn(client, 'getUserLiveLocations')
+          .mockRejectedValueOnce(loadError)
+          .mockResolvedValue({ active_live_locations: [liveLocation], duration: '' });
+        const manager = new LiveLocationManager({ client, getDeviceId, watchLocation });
+
+        await manager.init();
+        await manager.init();
+
+        expect(getUserLiveLocationsSpy).toHaveBeenCalledTimes(2);
+        expect(manager.stateIsReady).toBe(true);
+        expect(manager.state.getLatestValue().lastQueryError).toBeUndefined();
+        expect(manager.messages.has(liveLocation.message_id)).toBe(true);
+        manager.unregisterSubscriptions();
+        manager.unregisterSubscriptions();
+      });
+    });
+
+    it('sends one load request for overlapping init calls', async () => {
+      const client = await getClientWithUser(user);
+      const getUserLiveLocationsSpy = vi
+        .spyOn(client, 'getUserLiveLocations')
+        .mockResolvedValue({ active_live_locations: [], duration: '' });
+      const manager = new LiveLocationManager({ client, getDeviceId, watchLocation });
+
+      await Promise.all([manager.init(), manager.init()]);
+
+      expect(getUserLiveLocationsSpy).toHaveBeenCalledTimes(1);
+      // @ts-expect-error accessing private attribute
+      expect(manager.refCount).toBe(2);
+    });
+
+    it('keeps a share started while the active live locations load', async () => {
+      const client = await getClientWithUser(user);
+      let resolveLoad!: (value: {
+        active_live_locations: SharedLiveLocationResponse[];
+        duration: string;
+      }) => void;
+      vi.spyOn(client, 'getUserLiveLocations').mockReturnValue(
+        new Promise((resolve) => {
+          resolveLoad = resolve;
+        }),
+      );
+      vi.spyOn(client, 'updateLiveLocation').mockResolvedValue(liveLocation);
+      const manager = new LiveLocationManager({ client, getDeviceId, watchLocation });
+
+      const init = manager.init();
+      client.dispatchEvent({
+        message: {
+          id: liveLocation2.message_id,
+          shared_location: liveLocation2,
+          type: 'regular',
+          user,
+        },
+        type: 'live_location_sharing.started',
+      });
+      resolveLoad({ active_live_locations: [liveLocation], duration: '' });
+      await init;
+
+      expect([...manager.messages.keys()].sort()).toEqual(
+        [liveLocation.message_id, liveLocation2.message_id].sort(),
+      );
+    });
+
+    it('keeps the event entry when the loaded snapshot has the same share', async () => {
+      const client = await getClientWithUser(user);
+      let resolveLoad!: (value: {
+        active_live_locations: SharedLiveLocationResponse[];
+        duration: string;
+      }) => void;
+      vi.spyOn(client, 'getUserLiveLocations').mockReturnValue(
+        new Promise((resolve) => {
+          resolveLoad = resolve;
+        }),
+      );
+      vi.spyOn(client, 'updateLiveLocation').mockResolvedValue(liveLocation);
+      const manager = new LiveLocationManager({ client, getDeviceId, watchLocation });
+      const eventLocation = { ...liveLocation, latitude: 10, longitude: 20 };
+
+      const init = manager.init();
+      client.dispatchEvent({
+        message: {
+          id: liveLocation.message_id,
+          shared_location: eventLocation,
+          type: 'regular',
+          user,
+        },
+        type: 'live_location_sharing.started',
+      });
+      const eventEntry = manager.messages.get(liveLocation.message_id);
+      resolveLoad({ active_live_locations: [liveLocation], duration: '' });
+      await init;
+
+      expect(manager.messages.size).toBe(1);
+      expect(manager.messages.get(liveLocation.message_id)).toBe(eventEntry);
+      expect(eventEntry).toMatchObject({ latitude: 10, longitude: 20 });
+    });
+
+    it('does not re-add a share stopped while the active live locations load', async () => {
+      const client = await getClientWithUser(user);
+      let resolveLoad!: (value: {
+        active_live_locations: SharedLiveLocationResponse[];
+        duration: string;
+      }) => void;
+      vi.spyOn(client, 'getUserLiveLocations').mockReturnValue(
+        new Promise((resolve) => {
+          resolveLoad = resolve;
+        }),
+      );
+      const manager = new LiveLocationManager({ client, getDeviceId, watchLocation });
+
+      const init = manager.init();
+      client.dispatchEvent({
+        live_location: liveLocation,
+        type: 'live_location_sharing.stopped',
+      });
+      resolveLoad({ active_live_locations: [liveLocation, liveLocation2], duration: '' });
+      await init;
+
+      expect([...manager.messages.keys()]).toEqual([liveLocation2.message_id]);
+    });
+
+    it('does not re-add a share stopped on another device while the active live locations load', async () => {
+      const client = await getClientWithUser(user);
+      let resolveLoad!: (value: {
+        active_live_locations: SharedLiveLocationResponse[];
+        duration: string;
+      }) => void;
+      vi.spyOn(client, 'getUserLiveLocations').mockReturnValue(
+        new Promise((resolve) => {
+          resolveLoad = resolve;
+        }),
+      );
+      const manager = new LiveLocationManager({ client, getDeviceId, watchLocation });
+
+      const init = manager.init();
+      client.dispatchEvent({
+        message: {
+          id: liveLocation.message_id,
+          shared_location: {
+            ...liveLocation,
+            end_at: convertDateToTimestamp('2000-01-01T00:00:00.000Z'),
+          },
+          type: 'regular',
+          user,
+        },
+        type: 'message.updated',
+      });
+      resolveLoad({ active_live_locations: [liveLocation, liveLocation2], duration: '' });
+      await init;
+
+      expect([...manager.messages.keys()]).toEqual([liveLocation2.message_id]);
+    });
+
+    it('retries a failed load on connection.recovered', async () => {
+      const client = await getClientWithUser(user);
+      const getUserLiveLocationsSpy = vi
+        .spyOn(client, 'getUserLiveLocations')
+        .mockRejectedValueOnce(new Error('network'))
+        .mockResolvedValue({ active_live_locations: [liveLocation], duration: '' });
+      const manager = new LiveLocationManager({ client, getDeviceId, watchLocation });
+
+      await manager.init();
+      expect(manager.stateIsReady).toBe(false);
+      client.dispatchEvent({ type: 'connection.recovered' });
+
+      await vi.waitFor(() => expect(manager.stateIsReady).toBe(true));
+      expect(getUserLiveLocationsSpy).toHaveBeenCalledTimes(2);
+      expect(manager.messages.has(liveLocation.message_id)).toBe(true);
+
+      client.dispatchEvent({ type: 'connection.recovered' });
+      expect(getUserLiveLocationsSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it('stops retrying on connection.recovered once unregistered', async () => {
+      const client = await getClientWithUser(user);
+      const getUserLiveLocationsSpy = vi
+        .spyOn(client, 'getUserLiveLocations')
+        .mockRejectedValue(new Error('network'));
+      const manager = new LiveLocationManager({ client, getDeviceId, watchLocation });
+
+      await manager.init();
+      manager.unregisterSubscriptions();
+      client.dispatchEvent({ type: 'connection.recovered' });
+
+      expect(getUserLiveLocationsSpy).toHaveBeenCalledTimes(1);
+    });
+
     /**
      * The configuration subscription is registered by the constructor, not by `registerSubscriptions`, and
      * nothing re-registers it — so releasing it while another caller still holds the manager stops a

@@ -7,6 +7,7 @@ export type ChatLoggerScope =
   | 'client'
   | 'connection'
   | 'instance-configuration'
+  | 'live-location-manager'
   | 'message-composer'
   | 'offline-db'
   | 'state-store'
