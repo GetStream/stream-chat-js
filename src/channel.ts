@@ -19,6 +19,7 @@ import {
   logChatPromiseExecution,
   sanitizeOutgoingAttachments,
 } from './utils';
+import { getCarriedActiveMemberCount } from './utils/activeMemberCount';
 import { asTimestampNS, nowNs } from './utils/time';
 import { abortError, waitUnlessAborted } from './utils/abort';
 import { normalizeUploadFile } from './upload-utils';
@@ -94,11 +95,6 @@ type WatchQueryInFlight = {
   promise: Promise<void>;
   abortController: AbortController;
   waitingCount: number;
-};
-
-type CarriedActiveMemberCountParams = {
-  next: Partial<ChannelResponse>;
-  previous: Partial<ChannelResponse> | undefined;
 };
 
 /** Re-exported here because `src/messageOperations` is not in the root barrel. */
@@ -187,27 +183,6 @@ const ownDeclarativeConfig = (
     typingEvents,
     userMessageReminders,
   } as Partial<ChannelConfig>;
-};
-
-const getCarriedActiveMemberCount = ({
-  next,
-  previous,
-}: CarriedActiveMemberCountParams) => {
-  const { active_member_count: nextActiveMemberCount } = next;
-  const {
-    active_member_count: previousActiveMemberCount,
-    member_count: previousMemberCount,
-  } = previous ?? {};
-  const hasOwnActiveMemberCount = typeof nextActiveMemberCount === 'number';
-  const hasPreviousActiveMemberCount = typeof previousActiveMemberCount === 'number';
-  if (hasOwnActiveMemberCount || !hasPreviousActiveMemberCount) return undefined;
-
-  // Only Query Channels returns the count, so between queries it is carried unchanged.
-  // It is still capped at `member_count`, which other updates (`channel.updated`, …) refresh.
-  const memberCount = next.member_count ?? previousMemberCount;
-  return typeof memberCount === 'number'
-    ? Math.min(previousActiveMemberCount, memberCount)
-    : previousActiveMemberCount;
 };
 
 export const DEFAULT_CHANNEL_CONFIG: ChannelConfig = deepFreezeConfig({
@@ -1215,9 +1190,11 @@ export class Channel extends ChannelApi {
    * `ownCapabilities` in one update. If the object omits `member_count`, `active_member_count` or
    * `own_capabilities`, the last known values are carried onto a copy (the assigned object is not
    * changed). A carried `active_member_count` is kept as-is (only capped at `member_count`), since
-   * only Query Channels returns it. Editing `channel.data.x` in place does not reach the state.
-   * `ownCapabilities` keeps its array while the capabilities stay the same (in any order), so a
-   * subscriber to it is notified only when they change.
+   * only Query Channels returns it; treat it as a last-known estimate, refreshed on the next query —
+   * it can lag a (de)activation or an already-deactivated member being added or removed. Editing
+   * `channel.data.x` in place does not reach the state. `ownCapabilities` keeps its array while the
+   * capabilities stay the same (in any order), so a subscriber to it is notified only when they
+   * change.
    */
   get data(): Partial<ChannelResponse> | undefined {
     return this.state.getLatestValue().data;
