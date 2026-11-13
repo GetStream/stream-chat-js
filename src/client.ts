@@ -1,5 +1,4 @@
 /* eslint no-unused-vars: "off" */
-/* global process */
 
 import type { AxiosInstance, AxiosRequestConfig } from 'axios';
 import axios from 'axios';
@@ -22,6 +21,7 @@ import {
   sanitizeOutgoingAttachments,
 } from './utils';
 import { nowNs } from './utils/time';
+import { readInjectedClientBundle, readInjectedVersion } from './version';
 import { normalizeUploadFile } from './upload-utils';
 
 import type {
@@ -1733,6 +1733,22 @@ export class StreamChat extends ChatApi {
     return result;
   }
 
+  override async updatePushNotificationPreferences(
+    ...args: Parameters<ChatApi['updatePushNotificationPreferences']>
+  ) {
+    const result = await super.updatePushNotificationPreferences(...args);
+    const { user } = this;
+    if (!user) return result;
+
+    // The full stored preferences after the update, or null when the request only had
+    // channel-level items for this user.
+    const updated = result.user_preferences[user.id];
+    if (updated) {
+      this.user = { ...user, push_preferences: updated };
+    }
+    return result;
+  }
+
   async unblockUser(blockedUserId: string, requestOptions?: StreamRequestOptions) {
     const result = await this.unblockUsers(
       {
@@ -1951,7 +1967,7 @@ export class StreamChat extends ChatApi {
 
     // Memoized on the first call: later changes to the identifiers are not picked up.
     if (!this.cachedUserAgent) {
-      const version = process.env.PKG_VERSION;
+      const version = readInjectedVersion();
       const { name: sdkName, version: sdkVersion } = this.sdkIdentifier ?? {};
       const { name: appName, version: appVersion } = this.appIdentifier ?? {};
       const { os, model: deviceModel } = this.deviceIdentifier ?? {};
@@ -1968,7 +1984,7 @@ export class StreamChat extends ChatApi {
           app_version: appVersion,
           os,
           device_model: deviceModel,
-          client_bundle: process.env.CLIENT_BUNDLE,
+          client_bundle: readInjectedClientBundle(),
         })
           .filter(([, value]) => value && value.length > 0)
           .map(([key, value]) => `${key}=${value}`),

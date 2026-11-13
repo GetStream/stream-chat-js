@@ -3037,6 +3037,20 @@ describe('X-Stream-Client header', () => {
 		);
 	});
 
+	// A browser loading `src/` unbundled has no `process`; every request and socket connect builds this
+	// header, so reading the injected values must not throw there.
+	it('does not throw when process is not defined', () => {
+		vi.stubGlobal('process', undefined);
+		let userAgent;
+		try {
+			userAgent = client.getUserAgent();
+		} finally {
+			vi.unstubAllGlobals();
+		}
+
+		expect(userAgent).toBe('stream-chat-js-vundefined-node');
+	});
+
 	it('SDK integration with appIdentifier', () => {
 		client.sdkIdentifier = { name: 'react-native', version: '2.3.4' };
 		client.appIdentifier = { name: 'Acme', version: '2.1.0' };
