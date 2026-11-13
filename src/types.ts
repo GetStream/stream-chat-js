@@ -51,8 +51,8 @@ export type RequireAtLeastOne<T> = {
 }[keyof T];
 
 /**
- * The return type of `StreamChat.unbanUser`, kept so its signature is unchanged. Its v1 fallback
- * (`remove_future_channels_ban`) is the one hand-written `/moderation/*` call left.
+ * The return type of `StreamChat.unbanUser`, kept so its signature is unchanged. `unbanUser` itself
+ * goes through the generated V2 `moderation.unban()`.
  */
 export type APIResponse = {
   duration: string;

@@ -388,7 +388,7 @@ const server = new StreamClient(
 const token = server.generateUserToken({ user_id: 'jane', validity_in_seconds: 60 * 60 });
 ```
 
-Client-side relatives: `client.revokeTokens(before?)` now revokes only the connected user's tokens (Ref: revoke-tokens); `client.unbanUser` keeps its signature but goes through V2 `/moderation/unban` (v1 only for `remove_future_channels_ban: true`).
+Client-side relatives: `client.revokeTokens(before?)` now revokes only the connected user's tokens (Ref: revoke-tokens); `client.unbanUser` keeps its signature but goes through V2 `/moderation/unban`.
 
 <a id="s2-client-construction-and-configuration"></a>
 

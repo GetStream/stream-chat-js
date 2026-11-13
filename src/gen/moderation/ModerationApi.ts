@@ -489,11 +489,15 @@ export class ModerationApi {
   }
 
   unban(
-    request: UnbanRequest & { target_user_id: string; channel_cid?: string },
+    request: UnbanRequest & {
+      target_user_id: string;
+      channel_cid?: string;
+      remove_future_channels_ban?: boolean;
+    },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<UnbanResponse>> {
-    const { target_user_id, channel_cid, ...body } = request;
-    const queryParams = { target_user_id, channel_cid };
+    const { target_user_id, channel_cid, remove_future_channels_ban, ...body } = request;
+    const queryParams = { target_user_id, channel_cid, remove_future_channels_ban };
 
     return this.apiClient.sendRequest<UnbanResponse>(
       'POST',
