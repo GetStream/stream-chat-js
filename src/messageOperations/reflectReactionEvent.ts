@@ -39,5 +39,8 @@ export const reflectReactionEvent = (
       removed,
       userId: client.userId,
     }),
+    // Marks are derived per viewer and the event message never carries them: keep the local ones.
+    mark_groups: existing?.mark_groups ?? formatted.mark_groups,
+    own_marks: existing?.own_marks ?? formatted.own_marks,
   });
 };

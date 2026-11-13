@@ -15,6 +15,8 @@ import type {
   CreateDraftResponse,
   CreateGuestRequest,
   CreateGuestResponse,
+  CreateMessageMarkRequest,
+  CreateMessageMarkResponse,
   CreatePollOptionRequest,
   CreatePollRequest,
   CreateReminderRequest,
@@ -908,6 +910,22 @@ export class ChatApi {
     return this.apiClient.sendRequest<MessageActionResponse>(
       'POST',
       '/api/v2/chat/messages/{id}/action',
+      pathParams,
+      undefined,
+      request,
+      'application/json',
+      requestOptions,
+    );
+  }
+
+  createMessageMark(
+    pathParams: { id: string },
+    request: CreateMessageMarkRequest,
+    requestOptions?: StreamRequestOptions,
+  ): Promise<StreamResponse<CreateMessageMarkResponse>> {
+    return this.apiClient.sendRequest<CreateMessageMarkResponse>(
+      'POST',
+      '/api/v2/chat/messages/{id}/marks',
       pathParams,
       undefined,
       request,
