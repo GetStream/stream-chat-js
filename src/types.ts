@@ -760,7 +760,25 @@ export type PushPreference = {
   chat_preferences?: ChatPreferences;
   disabled_until?: string; // snooze until this time
   remove_disable?: boolean; // stop snoozing (clears disabled_until)
+  remove_schedule?: boolean;
+  schedule?: PushScheduleInput;
   user_id?: string;
+};
+
+export type QuietHoursRuleInput = {
+  end: string;
+  start: string;
+  days?: string[];
+};
+
+export type PushScheduleInput = {
+  quiet_hours?: QuietHoursRuleInput[];
+  timezone?: string;
+};
+
+export type PushScheduleResponse = {
+  quiet_hours: QuietHoursRuleInput[];
+  timezone: string;
 };
 
 /** Per-user push preferences returned by the API (matches OpenAPI `PushPreferencesResponse`). */
@@ -769,6 +787,7 @@ export type PushPreferencesResponse = {
   chat_level?: ChatLevelPushPreference;
   chat_preferences?: ChatPreferences;
   disabled_until?: string;
+  schedule?: PushScheduleResponse;
 };
 
 /** Per-channel push preferences returned by the API (matches OpenAPI `ChannelPushPreferencesResponse`). */

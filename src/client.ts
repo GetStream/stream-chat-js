@@ -2542,10 +2542,20 @@ export class StreamChat {
    * @return {<UpsertPushPreferencesResponse>}
    */
   async setPushPreferences(preferences: PushPreference[]) {
-    return await this.post<UpsertPushPreferencesResponse>(
+    const result = await this.post<UpsertPushPreferencesResponse>(
       this.baseURL + '/push_preferences',
       { preferences },
     );
+    const { user } = this;
+    if (!user) return result;
+
+    // The full stored preferences after the update, or null when the request only had
+    // channel-level items for this user.
+    const updated = result.user_preferences[user.id];
+    if (updated) {
+      this.user = { ...user, push_preferences: updated };
+    }
+    return result;
   }
 
   /**
