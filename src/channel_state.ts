@@ -78,6 +78,7 @@ export type MembersState = {
    * member change and is authoritative, while counting per member event double-counts.
    */
   memberCount: number;
+  activeMemberCount?: number;
 };
 
 export type MembershipState = {

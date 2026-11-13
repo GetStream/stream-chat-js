@@ -19,6 +19,7 @@ import {
   logChatPromiseExecution,
   sanitizeOutgoingAttachments,
 } from './utils';
+import { getCarriedActiveMemberCount } from './utils/activeMemberCount';
 import { asTimestampNS, nowNs } from './utils/time';
 import { abortError, waitUnlessAborted } from './utils/abort';
 import { normalizeUploadFile } from './upload-utils';
@@ -1185,11 +1186,15 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Reads `state.data`. Assigning publishes `data`, `memberCount` and `ownCapabilities` in one update.
-   * If the object omits `member_count` or `own_capabilities`, the last known values are carried onto
-   * a copy (the assigned object is not changed). Editing `channel.data.x` in place does not reach
-   * the state. `ownCapabilities` keeps its array while the capabilities stay the same (in any
-   * order), so a subscriber to it is notified only when they change.
+   * Reads `state.data`. Assigning publishes `data`, `memberCount`, `activeMemberCount` and
+   * `ownCapabilities` in one update. If the object omits `member_count`, `active_member_count` or
+   * `own_capabilities`, the last known values are carried onto a copy (the assigned object is not
+   * changed). A carried `active_member_count` is kept as-is (only capped at `member_count`), since
+   * only Query Channels returns it; treat it as a last-known estimate, refreshed on the next query —
+   * it can lag a (de)activation or an already-deactivated member being added or removed. Editing
+   * `channel.data.x` in place does not reach the state. `ownCapabilities` keeps its array while the
+   * capabilities stay the same (in any order), so a subscriber to it is notified only when they
+   * change.
    */
   get data(): Partial<ChannelResponse> | undefined {
     return this.state.getLatestValue().data;
@@ -1197,6 +1202,7 @@ export class Channel extends ChannelApi {
 
   set data(next: Partial<ChannelResponse> | undefined) {
     const {
+      activeMemberCount: previousActiveMemberCount,
       data: previous,
       memberCount: previousMemberCount,
       ownCapabilities: previousOwnCapabilities,
@@ -1205,27 +1211,40 @@ export class Channel extends ChannelApi {
       typeof next?.member_count !== 'number' && typeof previous?.member_count === 'number'
         ? previous.member_count
         : undefined;
+    const carriedActiveMemberCount = next
+      ? getCarriedActiveMemberCount({ next, previous })
+      : undefined;
     // `own_capabilities` stays undefined until known, so "not loaded" isn't read as "none"
     const carriedCapabilities =
       !Array.isArray(next?.own_capabilities) && Array.isArray(previous?.own_capabilities)
         ? [...previous.own_capabilities]
         : undefined;
 
+    const carriesMemberCount = carriedMemberCount !== undefined;
+    const carriesActiveMemberCount = carriedActiveMemberCount !== undefined;
+    const carriesValues =
+      carriesMemberCount || carriesActiveMemberCount || !!carriedCapabilities;
+
     const data =
-      next && (carriedMemberCount !== undefined || carriedCapabilities)
+      next && carriesValues
         ? {
             ...next,
-            ...(carriedMemberCount !== undefined && { member_count: carriedMemberCount }),
+            ...(carriesMemberCount && { member_count: carriedMemberCount }),
+            ...(carriesActiveMemberCount && {
+              active_member_count: carriedActiveMemberCount,
+            }),
             ...(carriedCapabilities && { own_capabilities: carriedCapabilities }),
           }
         : next;
 
     const memberCount = data?.member_count ?? carriedMemberCount;
+    const activeMemberCount = data ? data.active_member_count : previousActiveMemberCount;
     const ownCapabilities = data?.own_capabilities ?? carriedCapabilities ?? [];
     const toKey = (capabilities: readonly string[]) => [...capabilities].sort().join();
     const haveSameOwnCapabilities =
       toKey(previousOwnCapabilities) === toKey(ownCapabilities);
     this.state.partialNext({
+      activeMemberCount,
       data,
       memberCount: memberCount ?? previousMemberCount,
       ownCapabilities: haveSameOwnCapabilities
