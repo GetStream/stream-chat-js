@@ -97,7 +97,6 @@ type WatchQueryInFlight = {
 };
 
 type CarriedActiveMemberCountParams = {
-  memberCount: number | undefined;
   next: Partial<ChannelResponse>;
   previous: Partial<ChannelResponse> | undefined;
 };
@@ -191,7 +190,6 @@ const ownDeclarativeConfig = (
 };
 
 const getCarriedActiveMemberCount = ({
-  memberCount,
   next,
   previous,
 }: CarriedActiveMemberCountParams) => {
@@ -204,19 +202,12 @@ const getCarriedActiveMemberCount = ({
   const hasPreviousActiveMemberCount = typeof previousActiveMemberCount === 'number';
   if (hasOwnActiveMemberCount || !hasPreviousActiveMemberCount) return undefined;
 
-  const knowsMemberCount = typeof memberCount === 'number';
-  const knowsBothMemberCounts =
-    knowsMemberCount && typeof previousMemberCount === 'number';
-  const memberCountChange = knowsBothMemberCounts ? memberCount - previousMemberCount : 0;
-  const shiftedActiveMemberCount = Math.max(
-    0,
-    previousActiveMemberCount + memberCountChange,
-  );
-
-  const carriedActiveMemberCount = knowsMemberCount
-    ? Math.min(shiftedActiveMemberCount, memberCount)
-    : shiftedActiveMemberCount;
-  return carriedActiveMemberCount;
+  // Only Query Channels returns the count, so between queries it is carried unchanged.
+  // It is still capped at `member_count`, which other updates (`channel.updated`, …) refresh.
+  const memberCount = next.member_count ?? previousMemberCount;
+  return typeof memberCount === 'number'
+    ? Math.min(previousActiveMemberCount, memberCount)
+    : previousActiveMemberCount;
 };
 
 export const DEFAULT_CHANNEL_CONFIG: ChannelConfig = deepFreezeConfig({
@@ -1223,10 +1214,10 @@ export class Channel extends ChannelApi {
    * Reads `state.data`. Assigning publishes `data`, `memberCount`, `activeMemberCount` and
    * `ownCapabilities` in one update. If the object omits `member_count`, `active_member_count` or
    * `own_capabilities`, the last known values are carried onto a copy (the assigned object is not
-   * changed). A carried `active_member_count` moves with `member_count`, since only Query Channels
-   * returns it. Editing `channel.data.x` in place does not reach the state. `ownCapabilities` keeps
-   * its array while the capabilities stay the same (in any order), so a subscriber to it is notified
-   * only when they change.
+   * changed). A carried `active_member_count` is kept as-is (only capped at `member_count`), since
+   * only Query Channels returns it. Editing `channel.data.x` in place does not reach the state.
+   * `ownCapabilities` keeps its array while the capabilities stay the same (in any order), so a
+   * subscriber to it is notified only when they change.
    */
   get data(): Partial<ChannelResponse> | undefined {
     return this.state.getLatestValue().data;
@@ -1243,13 +1234,8 @@ export class Channel extends ChannelApi {
       typeof next?.member_count !== 'number' && typeof previous?.member_count === 'number'
         ? previous.member_count
         : undefined;
-    const { member_count: nextMemberCount } = next ?? {};
     const carriedActiveMemberCount = next
-      ? getCarriedActiveMemberCount({
-          memberCount: nextMemberCount ?? carriedMemberCount,
-          next,
-          previous,
-        })
+      ? getCarriedActiveMemberCount({ next, previous })
       : undefined;
     // `own_capabilities` stays undefined until known, so "not loaded" isn't read as "none"
     const carriedCapabilities =

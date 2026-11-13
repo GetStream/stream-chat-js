@@ -196,7 +196,6 @@ export class ChannelState extends StateStore<ChannelStateData> {
       read: {},
       members: {},
       memberCount: 0,
-      activeMemberCount: undefined,
       membership: {} as ChannelMemberResponse,
       ownCapabilities: [],
       // written by the `Channel.data` setter, which the channel calls once its state exists

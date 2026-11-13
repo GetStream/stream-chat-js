@@ -179,14 +179,14 @@ describe('ChannelState active member count', () => {
 		expect(state.getLatestValue().activeMemberCount).to.equal(3);
 	});
 
-	it('moves with member_count when members are added or removed', () => {
+	it('does not move when member_count changes without a re-query', () => {
 		const { channel, state } = setup({ active_member_count: 8, member_count: 10 });
 
 		updateChannel(channel, { member_count: 12 });
-		expect(state.getLatestValue().activeMemberCount).to.equal(10);
+		expect(state.getLatestValue().activeMemberCount).to.equal(8);
 
 		updateChannel(channel, { member_count: 11 });
-		expect(state.getLatestValue().activeMemberCount).to.equal(9);
+		expect(state.getLatestValue().activeMemberCount).to.equal(8);
 	});
 
 	it('stays unchanged on a channel.updated event without member_count', () => {
@@ -200,15 +200,7 @@ describe('ChannelState active member count', () => {
 		});
 	});
 
-	it('never moves below zero', () => {
-		const { channel, state } = setup({ active_member_count: 1, member_count: 5 });
-
-		updateChannel(channel, { member_count: 2 });
-
-		expect(state.getLatestValue().activeMemberCount).to.equal(0);
-	});
-
-	it('never moves above member_count', () => {
+	it('is capped at member_count when member_count drops below it', () => {
 		const { channel, state } = setup({ active_member_count: 4 });
 
 		channel.data = { member_count: 2 };
