@@ -363,6 +363,7 @@ export type ChannelResponse = CustomChannelData & {
   frozen: boolean;
   id: string;
   type: string;
+  active_member_count?: number;
   blocked?: boolean;
   auto_translation_enabled?: boolean;
   auto_translation_language?: TranslationLanguages;
@@ -1185,6 +1186,7 @@ export type BanUserOptions = UnBanUserOptions & {
 };
 
 export type ChannelOptions = {
+  include_active_member_count?: boolean;
   limit?: number;
   member_limit?: number;
   message_limit?: number;
