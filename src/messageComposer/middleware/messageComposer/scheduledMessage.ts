@@ -19,17 +19,13 @@ export const getScheduleBlockReason = (
   composer: MessageComposer,
   commandSearchSource: CommandSearchSource,
 ): ScheduledMessageBlockReason | undefined => {
-  const { channel, locationComposer } = composer;
+  const { channel } = composer;
 
   if (!channel.scheduledMessagesEnabled) return ScheduledMessageBlockReason.Unavailable;
 
   if (getCurrentCommand(composer, commandSearchSource)) {
     return ScheduledMessageBlockReason.Command;
   }
-
-  // A poll can be scheduled. A location cannot: a static one would be stale by the time it is sent,
-  // and a live one would have its sharing window counted from now.
-  if (locationComposer.validLocation) return ScheduledMessageBlockReason.SharedLocation;
 
   return undefined;
 };

@@ -73,6 +73,16 @@ export class LocationComposer {
   }
 
   get validLocation(): StaticLocationPreview | null {
+    return this.validateLocation();
+  }
+
+  /**
+   * The location to send, or `null` while it is incomplete. A live location's `durationMs` counts
+   * from `sharingStartsAt`: now by default, the send time for a scheduled message.
+   */
+  validateLocation = ({
+    sharingStartsAt = new Date(),
+  }: { sharingStartsAt?: Date } = {}): StaticLocationPreview | null => {
     const location = (this.location ?? {}) as LiveLocationPreview &
       Pick<StaticLocationPreview, 'end_at'>;
     const { durationMs, end_at } = location;
@@ -89,17 +99,17 @@ export class LocationComposer {
         latitude: location.latitude,
         longitude: location.longitude,
         message_id: location.message_id,
-        // A `durationMs` resolves against the clock when read. An existing `end_at` is kept as is, so
-        // editing a message does not extend (or drop) its live location's expiry.
+        // A `durationMs` resolves against the sharing start when read. An existing `end_at` is kept
+        // as is, so editing a message does not extend (or drop) its live location's expiry.
         ...(typeof durationMs === 'number'
-          ? { end_at: new Date(Date.now() + durationMs) }
+          ? { end_at: new Date(sharingStartsAt.getTime() + durationMs) }
           : end_at
             ? { end_at }
             : {}),
       };
     }
     return null;
-  }
+  };
 
   initState = ({ message }: { message?: DraftMessage | LocalMessage } = {}) => {
     this.state.next(initState({ message }));

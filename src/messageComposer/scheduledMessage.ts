@@ -13,7 +13,7 @@ import type { DraftMessage, DraftResponse, LocalMessage, UserResponse } from '..
 
 const logger = chatLoggerSystem.getLogger('message-composer');
 
-const SCHEDULED_MESSAGE_SERVER_FIELDS = ['id', 'mml', 'shared_location'];
+const SCHEDULED_MESSAGE_SERVER_FIELDS = ['id', 'mml'];
 
 const SERVER_OWNED_FIELDS: ReadonlySet<string> = new Set([
   ...Object.keys(RESERVED_UPDATED_MESSAGE_FIELDS),
@@ -32,6 +32,7 @@ const COMPOSER_OWNED_FIELD_NAMES = [
   'parent_id',
   'poll_id',
   'quoted_message_id',
+  'shared_location',
   'show_in_channel',
   'text',
 ] as const satisfies ReadonlyArray<keyof ScheduledMessageContentResponse>;
@@ -62,9 +63,12 @@ export const toScheduledMessageDraft = (
   scheduledMessage: ScheduledMessageResponse,
 ): DraftMessage => {
   const { id, message } = scheduledMessage;
+  const { shared_location: sharedLocation } = message;
 
   return {
     ...pickFields(message, COMPOSER_OWNED_FIELD_NAMES),
+    // the location composer keys a location to its message
+    ...(sharedLocation ? { shared_location: { ...sharedLocation, message_id: id } } : {}),
     custom: message.custom ?? {},
     id,
     text: message.text,

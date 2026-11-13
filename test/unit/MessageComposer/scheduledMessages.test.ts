@@ -363,23 +363,50 @@ describe('MessageComposer scheduled messages', () => {
       expect(composer.pollId).toBeNull();
     });
 
-    it('blocks a shared location', async () => {
+    it('schedules a static shared location', async () => {
       const { client, composer } = setup();
-      const sendSpy = vi.spyOn(client, 'sendMessage');
+      const sendSpy = mockScheduledSend(client, generateScheduledMessage());
       const addWarningSpy = vi.spyOn(client.notifications, 'addWarning');
-      vi.spyOn(composer.locationComposer, 'validLocation', 'get').mockReturnValue({
-        created_by_device_id: 'device-1',
-        latitude: 1,
-        longitude: 2,
-        message_id: 'm-1',
-      } as never);
+      const messageId = composer.id;
+      composer.locationComposer.state.partialNext({
+        location: {
+          created_by_device_id: 'device-1',
+          latitude: 1,
+          longitude: 2,
+          message_id: messageId,
+        },
+      });
 
       const result = await composer.schedule(scheduledAt);
 
-      expect(result).toEqual({ status: 'blocked' });
-      expect(sendSpy).not.toHaveBeenCalled();
-      expect(addWarningSpy).toHaveBeenCalledWith(
-        blockedWarning(ScheduledMessageBlockReason.SharedLocation),
+      expect(result.status).toBe('scheduled');
+      expect(addWarningSpy).not.toHaveBeenCalled();
+      expect(sentRequest(sendSpy).message.shared_location).toEqual({
+        created_by_device_id: 'device-1',
+        latitude: 1,
+        longitude: 2,
+        message_id: messageId,
+      });
+    });
+
+    it("counts a live location's sharing time from the send time", async () => {
+      const { client, composer } = setup();
+      const sendSpy = mockScheduledSend(client, generateScheduledMessage());
+      const durationMs = 15 * 60 * 1000;
+      composer.locationComposer.state.partialNext({
+        location: {
+          created_by_device_id: 'device-1',
+          durationMs,
+          latitude: 1,
+          longitude: 2,
+          message_id: composer.id,
+        },
+      });
+
+      await composer.schedule(scheduledAt);
+
+      expect(sentRequest(sendSpy).message.shared_location?.end_at).toEqual(
+        new Date(scheduledAt.getTime() + durationMs),
       );
     });
 
@@ -610,7 +637,7 @@ describe('MessageComposer scheduled messages', () => {
       expect(composer.scheduleBlockReason).toBeUndefined();
     });
 
-    it('is shared_location for a shared location', () => {
+    it('is nothing for a shared location', () => {
       const { composer } = setup();
       vi.spyOn(composer.locationComposer, 'validLocation', 'get').mockReturnValue({
         created_by_device_id: 'device-1',
@@ -619,9 +646,7 @@ describe('MessageComposer scheduled messages', () => {
         message_id: 'm-1',
       } as never);
 
-      expect(composer.scheduleBlockReason).toBe(
-        ScheduledMessageBlockReason.SharedLocation,
-      );
+      expect(composer.scheduleBlockReason).toBeUndefined();
     });
   });
 
@@ -768,6 +793,58 @@ describe('MessageComposer scheduled messages', () => {
       expect(message).not.toHaveProperty('shared_location');
       expect(result).toEqual({ scheduledMessage: updated, status: 'scheduled' });
       expect(client.scheduledMessageStore.get('sm-1')).toEqual(updated);
+    });
+
+    it('keeps the shared location in the update, with its end time', async () => {
+      const { client, composer } = setup();
+      const endAt = msToNs(scheduledAt.getTime() + 60 * 60 * 1000);
+      const scheduledMessage = generateScheduledMessage({
+        message: {
+          custom: {},
+          shared_location: {
+            created_by_device_id: 'device-1',
+            end_at: endAt,
+            latitude: 1,
+            longitude: 2,
+          },
+          text: 'meet me here',
+        },
+      });
+      const updateSpy = mockScheduledUpdate(client, scheduledMessage);
+      await composer.editScheduledMessage(scheduledMessage);
+      composer.textComposer.setText('meet me there');
+
+      await composer.updateScheduledMessage();
+
+      expect(updatedMessage(updateSpy).shared_location).toEqual({
+        created_by_device_id: 'device-1',
+        end_at: nsToDate(endAt),
+        latitude: 1,
+        longitude: 2,
+        message_id: 'sm-1',
+      });
+    });
+
+    it('drops a shared location removed in the composer from the update', async () => {
+      const { client, composer } = setup();
+      const scheduledMessage = generateScheduledMessage({
+        message: {
+          custom: {},
+          shared_location: {
+            created_by_device_id: 'device-1',
+            latitude: 1,
+            longitude: 2,
+          },
+          text: 'meet me here',
+        },
+      });
+      const updateSpy = mockScheduledUpdate(client, scheduledMessage);
+      await composer.editScheduledMessage(scheduledMessage);
+      composer.locationComposer.initState();
+
+      await composer.updateScheduledMessage();
+
+      expect(updatedMessage(updateSpy)).not.toHaveProperty('shared_location');
     });
 
     it('drops content removed in the composer from the update', async () => {
