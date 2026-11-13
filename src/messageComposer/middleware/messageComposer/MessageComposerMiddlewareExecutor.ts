@@ -34,6 +34,8 @@ import {
 import { createUserDataInjectionMiddleware } from './userDataInjection';
 import { createPollOnlyCompositionMiddleware } from './pollOnly';
 import { createSharedLocationCompositionMiddleware } from './sharedLocation';
+import { createScheduledMessageCompositionMiddleware } from './scheduledMessage';
+import { CommandSearchSource } from '../textComposer/commands';
 
 export class MessageComposerMiddlewareExecutor extends MiddlewareExecutor<
   MessageComposerMiddlewareState,
@@ -41,10 +43,12 @@ export class MessageComposerMiddlewareExecutor extends MiddlewareExecutor<
 > {
   constructor({ composer }: MessageComposerMiddlewareExecutorOptions) {
     super();
+    const commandSearchSource = new CommandSearchSource(composer.channel);
     // todo: document how to add custom data to a composed message using middleware
     //  or adding custom composer components (apart from AttachmentsManager, TextComposer etc.)
     this.use([
       createUserDataInjectionMiddleware(composer),
+      createScheduledMessageCompositionMiddleware(composer, commandSearchSource),
       createPollOnlyCompositionMiddleware(composer),
       createTextComposerCompositionMiddleware(composer),
       createAttachmentsCompositionMiddleware(composer),
@@ -52,7 +56,7 @@ export class MessageComposerMiddlewareExecutor extends MiddlewareExecutor<
       createSharedLocationCompositionMiddleware(composer),
       createMessageComposerStateCompositionMiddleware(composer),
       createCustomDataCompositionMiddleware(composer),
-      createCompositionValidationMiddleware(composer),
+      createCompositionValidationMiddleware(composer, commandSearchSource),
       createCompositionDataCleanupMiddleware(composer),
     ]);
   }

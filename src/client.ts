@@ -204,6 +204,8 @@ import type {
   QueryReactionsOptions,
   QueryRemindersOptions,
   QueryRemindersResponse,
+  QueryScheduledMessagesOptions,
+  QueryScheduledMessagesResponse,
   QuerySegmentsOptions,
   QuerySegmentTargetsFilter,
   QueryTeamUsageStatsOptions,
@@ -225,6 +227,7 @@ import type {
   RequestOptions,
   ReviewFlagReportOptions,
   ReviewFlagReportResponse,
+  ScheduledMessageAPIResponse,
   SdkIdentifier,
   SearchAPIResponse,
   SearchMessageSortBase,
@@ -266,6 +269,7 @@ import type {
   UpdatePollOptionAPIResponse,
   UpdatePredefinedFilterOptions,
   UpdateReminderOptions,
+  UpdateScheduledMessageOptions,
   UpdateSegmentData,
   UpdateUserGroupOptions,
   UpdateUserGroupResponse,
@@ -294,6 +298,7 @@ import { ChannelManager } from './channel_manager';
 import { MessageDeliveryReporter } from './messageDelivery';
 import { NotificationManager } from './notifications';
 import { ReminderManager } from './reminders';
+import { ScheduledMessageManager } from './scheduledMessages';
 import { StateStore } from './store';
 import type { MessageComposer } from './messageComposer';
 import type { AbstractOfflineDB } from './offline-support';
@@ -350,6 +355,7 @@ export class StreamChat {
   offlineDb?: AbstractOfflineDB;
   notifications: NotificationManager;
   reminders: ReminderManager;
+  scheduledMessages: ScheduledMessageManager;
   anonymous: boolean;
   persistUserOnConnectionFailure?: boolean;
   axiosInstance: AxiosInstance;
@@ -586,6 +592,7 @@ export class StreamChat {
     this.threads = new ThreadManager({ client: this });
     this.polls = new PollManager({ client: this });
     this.reminders = new ReminderManager({ client: this });
+    this.scheduledMessages = new ScheduledMessageManager({ client: this });
     this.messageDeliveryReporter = new MessageDeliveryReporter({ client: this });
     this.messageComposerCache = new FixedSizeQueueCache<string, MessageComposer>(64);
   }
@@ -1135,6 +1142,7 @@ export class StreamChat {
     this.state = new ClientState({ client: this });
     // reset thread manager
     this.threads.resetState();
+    this.scheduledMessages.resetState();
     this.uploadManager.reset();
     this.messageComposerCache.clear();
 
@@ -2260,6 +2268,7 @@ export class StreamChat {
     options: ChannelOptions = {},
     stateOptions: ChannelStateOptions = {},
   ): Promise<Channel[] | QueryChannelsResponseWithChannels> {
+    const scheduledMessagesVersion = this.scheduledMessages.version;
     const queryChannelsResponse = await this.queryChannelsRequestWithResponse(
       filterConditions,
       sort,
@@ -2267,7 +2276,7 @@ export class StreamChat {
       // stateOptions is never serialized, so it carries the abort signal
       { signal: stateOptions.signal },
     );
-    const channels = queryChannelsResponse.channels;
+    const channels = queryChannelsResponse.channels ?? [];
 
     this.dispatchEvent({
       type: 'channels.queried',
@@ -2276,13 +2285,23 @@ export class StreamChat {
         isLatestMessageSet: true,
       },
     });
-    if (channels?.length && this.offlineDb?.upsertChannels) {
+    if (channels.length && this.offlineDb?.upsertChannels) {
       await this.offlineDb.upsertChannels({
         channels,
         isLatestMessagesSet: true,
       });
     }
 
+    const { skipInitialization } = stateOptions;
+    for (const channelState of channels) {
+      if (skipInitialization?.includes(channelState.channel.id)) continue;
+
+      this.scheduledMessages.hydrateChannelState(
+        channelState.channel.cid,
+        channelState.scheduled_messages,
+        scheduledMessagesVersion,
+      );
+    }
     const hydratedChannels = this.hydrateActiveChannels(channels, stateOptions, options);
 
     if (stateOptions.withResponse) {
@@ -5252,6 +5271,35 @@ export class StreamChat {
       sort: sort && normalizeQuerySort(sort),
       ...rest,
     });
+  }
+
+  async updateScheduledMessage(id: string, options: UpdateScheduledMessageOptions) {
+    return await this.patch<ScheduledMessageAPIResponse>(
+      `${this.baseURL}/scheduled_messages/${encodeURIComponent(id)}`,
+      options,
+    );
+  }
+
+  async deleteScheduledMessage(id: string) {
+    return await this.delete<ScheduledMessageAPIResponse>(
+      `${this.baseURL}/scheduled_messages/${encodeURIComponent(id)}`,
+    );
+  }
+
+  async sendScheduledMessageNow(id: string) {
+    return await this.post<ScheduledMessageAPIResponse>(
+      `${this.baseURL}/scheduled_messages/${encodeURIComponent(id)}/send_now`,
+    );
+  }
+
+  async queryScheduledMessages({ sort, ...rest }: QueryScheduledMessagesOptions = {}) {
+    return await this.post<QueryScheduledMessagesResponse>(
+      `${this.baseURL}/scheduled_messages/query`,
+      {
+        ...rest,
+        sort: sort && normalizeQuerySort(sort),
+      },
+    );
   }
 
   /**

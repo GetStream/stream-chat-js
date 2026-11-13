@@ -19,6 +19,7 @@ export * from './permissions';
 export * from './poll';
 export * from './poll_manager';
 export * from './reminders';
+export * from './scheduledMessages';
 export * from './search';
 export * from './segment';
 export * from './signing';

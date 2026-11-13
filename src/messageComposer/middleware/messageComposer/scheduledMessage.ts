@@ -1,0 +1,78 @@
+import { ScheduledMessageBlockReason } from '../../../types';
+import { CommandSearchSource } from '../textComposer/commands';
+import { getCurrentCommand } from '../textComposer/commandUtils';
+import type { MiddlewareHandlerParams } from '../../../middleware';
+import type { MessageComposer } from '../../messageComposer';
+import type {
+  MessageComposerMiddlewareState,
+  MessageCompositionMiddleware,
+} from './types';
+
+const getScheduleBlockReason = (
+  composer: MessageComposer,
+  commandSearchSource: CommandSearchSource,
+): ScheduledMessageBlockReason | undefined => {
+  const { locationComposer, pollId } = composer;
+
+  if (getCurrentCommand(composer, commandSearchSource)) {
+    return ScheduledMessageBlockReason.Command;
+  }
+
+  if (pollId) return ScheduledMessageBlockReason.Poll;
+
+  if (locationComposer.validLocation) return ScheduledMessageBlockReason.SharedLocation;
+
+  return undefined;
+};
+
+const notifyScheduleBlocked = (
+  composer: MessageComposer,
+  reason: ScheduledMessageBlockReason,
+) => {
+  composer.client.notifications.addWarning({
+    message: 'This message cannot be scheduled',
+    origin: {
+      emitter: 'MessageComposer',
+      context: { composer },
+    },
+    options: {
+      type: 'validation:scheduled-message:blocked',
+      metadata: { reason },
+    },
+  });
+};
+
+export const createScheduledMessageCompositionMiddleware = (
+  composer: MessageComposer,
+  commandSearchSource?: CommandSearchSource,
+): MessageCompositionMiddleware => {
+  const effectiveCommandSearchSource =
+    commandSearchSource ?? new CommandSearchSource(composer.channel);
+
+  return {
+    id: 'stream-io/message-composer-middleware/scheduled-message',
+    handlers: {
+      compose: async ({
+        state,
+        discard,
+        forward,
+      }: MiddlewareHandlerParams<MessageComposerMiddlewareState>) => {
+        const { scheduled_at: scheduledAt } = state.sendOptions;
+        const isScheduling = !!scheduledAt || !!composer.editedScheduledMessage;
+
+        if (!isScheduling) return await forward();
+
+        const blockReason = getScheduleBlockReason(
+          composer,
+          effectiveCommandSearchSource,
+        );
+
+        if (!blockReason) return await forward();
+
+        notifyScheduleBlocked(composer, blockReason);
+
+        return await discard();
+      },
+    },
+  };
+};
