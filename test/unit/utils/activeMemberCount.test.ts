@@ -35,32 +35,25 @@ describe('withCarriedActiveMemberCount', () => {
     expect(next).toStrictEqual({ member_count: 5 });
   });
 
-  it('moves the carried count by the change in member_count', () => {
+  it('does not move the carried count with member_count, only caps it', () => {
     const previous = { active_member_count: 4, member_count: 5 };
 
     const added = withCarriedActiveMemberCount({ next: { member_count: 6 }, previous });
     const removed = withCarriedActiveMemberCount({ next: { member_count: 3 }, previous });
 
-    expect(added.active_member_count).toBe(5);
-    expect(removed.active_member_count).toBe(2);
+    // member_count grew: the carried count is kept as-is (not shifted up).
+    expect(added.active_member_count).toBe(4);
+    // member_count dropped below it: the carried count is capped at member_count.
+    expect(removed.active_member_count).toBe(3);
   });
 
-  it('keeps the carried count when either member_count is unknown', () => {
+  it('keeps the carried count when member_count is unknown on both sides', () => {
     const data = withCarriedActiveMemberCount({
       next: {},
-      previous: { active_member_count: 4, member_count: 5 },
+      previous: { active_member_count: 4 },
     });
 
     expect(data.active_member_count).toBe(4);
-  });
-
-  it('never carries a count below zero', () => {
-    const data = withCarriedActiveMemberCount({
-      next: { member_count: 0 },
-      previous: { active_member_count: 1, member_count: 3 },
-    });
-
-    expect(data.active_member_count).toBe(0);
   });
 
   it('never carries a count above member_count', () => {

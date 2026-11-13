@@ -59,12 +59,16 @@ describe('Channel active member count', () => {
     expect(channel.data).toMatchObject({ active_member_count: 4, name: 'renamed' });
   });
 
-  it('moves the count with member_count when members change', async () => {
+  it('does not move the count with member_count, only caps it', async () => {
     const { channel } = await setUpQueriedChannel();
 
+    // member_count grew (5 -> 6): the carried count is kept as-is, not shifted up.
     channel.data = { ...channel.data, active_member_count: undefined, member_count: 6 };
+    expect(channel.data?.active_member_count).toBe(4);
 
-    expect(channel.data?.active_member_count).toBe(5);
+    // member_count dropped below it (-> 3): the carried count is capped at member_count.
+    channel.data = { ...channel.data, active_member_count: undefined, member_count: 3 };
+    expect(channel.data?.active_member_count).toBe(3);
   });
 
   it('keeps the count after a channel.updated event without it', async () => {

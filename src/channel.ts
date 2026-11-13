@@ -187,10 +187,7 @@ export class Channel {
 
   public set data(next: Partial<ChannelData & ChannelResponse> | undefined) {
     const previous = this._channelData;
-
-    const data = next && withCarriedActiveMemberCount({ next, previous });
-
-    this._channelData = data;
+    this._channelData = next && withCarriedActiveMemberCount({ next, previous });
   }
 
   /**

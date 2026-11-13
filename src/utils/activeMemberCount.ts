@@ -2,47 +2,28 @@ import type { ChannelResponse } from '../types';
 
 type MemberCounts = Pick<ChannelResponse, 'active_member_count' | 'member_count'>;
 
-export type CarryActiveMemberCountParams<TData extends MemberCounts> = {
-  next: TData;
-  previous?: MemberCounts;
-};
-
-const getCarriedActiveMemberCount = ({
+export const withCarriedActiveMemberCount = <TData extends MemberCounts>({
   next,
   previous,
-}: CarryActiveMemberCountParams<MemberCounts>) => {
-  const { active_member_count: nextActiveMemberCount, member_count: memberCount } = next;
+}: {
+  next: TData;
+  previous?: MemberCounts;
+}) => {
+  const { active_member_count: nextActiveMemberCount, member_count: nextMemberCount } =
+    next;
   const {
     active_member_count: previousActiveMemberCount,
     member_count: previousMemberCount,
   } = previous ?? {};
   const hasOwnActiveMemberCount = typeof nextActiveMemberCount === 'number';
   const hasPreviousActiveMemberCount = typeof previousActiveMemberCount === 'number';
-  if (hasOwnActiveMemberCount || !hasPreviousActiveMemberCount) return undefined;
+  if (hasOwnActiveMemberCount || !hasPreviousActiveMemberCount) return next;
 
-  const knowsMemberCount = typeof memberCount === 'number';
-  const knowsBothMemberCounts =
-    knowsMemberCount && typeof previousMemberCount === 'number';
-  const memberCountChange = knowsBothMemberCounts ? memberCount - previousMemberCount : 0;
-  const shiftedActiveMemberCount = Math.max(
-    0,
-    previousActiveMemberCount + memberCountChange,
-  );
+  const memberCount = nextMemberCount ?? previousMemberCount;
+  const carriedActiveMemberCount =
+    typeof memberCount === 'number'
+      ? Math.min(previousActiveMemberCount, memberCount)
+      : previousActiveMemberCount;
 
-  const carriedActiveMemberCount = knowsMemberCount
-    ? Math.min(shiftedActiveMemberCount, memberCount)
-    : shiftedActiveMemberCount;
-  return carriedActiveMemberCount;
-};
-
-export const withCarriedActiveMemberCount = <TData extends MemberCounts>({
-  next,
-  previous,
-}: CarryActiveMemberCountParams<TData>) => {
-  const activeMemberCount = getCarriedActiveMemberCount({ next, previous });
-  const carriesActiveMemberCount = activeMemberCount !== undefined;
-  if (!carriesActiveMemberCount) return next;
-
-  const data = { ...next, active_member_count: activeMemberCount };
-  return data;
+  return { ...next, active_member_count: carriedActiveMemberCount };
 };
