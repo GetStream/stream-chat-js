@@ -5,11 +5,28 @@ import { queueOrRun } from './offline-support/queueableOperations';
 import { MessageComposer } from './messageComposer';
 import { MessageReceiptsTracker } from './messageDelivery';
 import type { ReadStoreReconcileMeta } from './messageDelivery';
-import { MessagePaginator, PinnedMessagePaginator } from './pagination/paginators';
+import {
+  MessagePaginator,
+  PinnedMessagePaginator,
+  ScheduledMessagePaginator,
+} from './pagination/paginators';
 import { createMessageOperations, reflectReactionEvent } from './messageOperations';
 import type { MessageOperations } from './messageOperations';
 import type { OperationRequestFn } from './messageOperations/types';
+import type {
+  DefaultScheduledMessageRequest,
+  ScheduledMessageIdRequestParams,
+  ScheduledMessageRequestFn,
+  ScheduledMessageRequestHandlers,
+  UpdateScheduledMessageRequestParams,
+} from './scheduledMessages/types';
+import { getScheduledMessageLimitsFromServerConfig } from './scheduledMessages/limits';
+import { SCHEDULED_MESSAGE_STATUS } from './scheduledMessages/constants';
+import { isScheduledMessageNotFoundError } from './scheduledMessages/errors';
+import { getScheduledMessageFromEvent } from './scheduledMessages/eventHandlers';
+import { ScheduledMessagesView } from './scheduledMessages/ScheduledMessagesView';
 import {
+  channelCanScheduleMessages,
   channelHasReadEvents,
   formatMessage,
   generateChannelTempCid,
@@ -17,6 +34,7 @@ import {
   invokeEventListener,
   isThreadOnlyReply,
   logChatPromiseExecution,
+  runDetached,
   sanitizeOutgoingAttachments,
 } from './utils';
 import { asTimestampNS, nowNs } from './utils/time';
@@ -77,6 +95,9 @@ import type {
   ChannelPushPreferencesResponse as Gen_ChannelPushPreferencesResponse,
   MuteChannelRequest as Gen_MuteChannelRequest,
   UnmuteChannelRequest as Gen_UnmuteChannelRequest,
+  ScheduledMessageResponse,
+  SendMessageRequest,
+  UpdateScheduledMessageRequest,
   UploadChannelFileRequest,
   UploadChannelRequest,
   WSEvent,
@@ -122,7 +143,7 @@ export type ChannelConfig = {
     sendMessageRequest?: OperationRequestFn<'send'>;
     retrySendMessageRequest?: OperationRequestFn<'retry'>;
     updateMessageRequest?: OperationRequestFn<'update'>;
-  };
+  } & ScheduledMessageRequestHandlers;
   /**
    * Typing indicators. Defaults to enabled. ANDed with the channel type's `typing_events`. Read by
    * {@link Channel.keystroke} and {@link Channel.stopTyping}.
@@ -146,6 +167,7 @@ export type ChannelConfig = {
    * Message reminders. Defaults to enabled. ANDed with the channel type's `user_message_reminders`.
    */
   userMessageReminders: { enabled: boolean };
+  scheduledMessages: { enabled: boolean };
   /** Delivery receipts. Defaults to enabled. ANDed with the channel type's `delivery_events`. */
   deliveryEvents: { enabled: boolean };
   /**
@@ -170,6 +192,7 @@ const ownDeclarativeConfig = (
     readEvents,
     replies,
     requestHandlers,
+    scheduledMessages,
     typingEvents,
     userMessageReminders,
   } = slice;
@@ -179,6 +202,7 @@ const ownDeclarativeConfig = (
     readEvents,
     replies,
     requestHandlers,
+    scheduledMessages,
     typingEvents,
     userMessageReminders,
   } as Partial<ChannelConfig>;
@@ -189,6 +213,7 @@ export const DEFAULT_CHANNEL_CONFIG: ChannelConfig = deepFreezeConfig({
   deliveryEvents: { enabled: true },
   readEvents: { enabled: true, localUnreadCountEnabled: false },
   replies: { enabled: true },
+  scheduledMessages: { enabled: true },
   typingEvents: { enabled: true },
   userMessageReminders: { enabled: true },
 });
@@ -222,6 +247,17 @@ export class Channel extends ChannelApi {
   public readonly messageOperations: MessageOperations;
   public readonly messagePaginator: MessagePaginator;
   public readonly pinnedMessagesPaginator: PinnedMessagePaginator;
+  /**
+   * The current user's scheduled messages in this channel, thread replies included. Filled by the
+   * channel query (`include_scheduled_messages`), so it queries only when the response leaves them
+   * out. Events can define `items` before a page loads: check `hasLoadedPage`.
+   */
+  public readonly scheduledMessagesPaginator: ScheduledMessagePaginator;
+  /**
+   * The channel's own scheduled messages: a view of `scheduledMessagesPaginator` without the
+   * thread replies it holds too. A thread's are `thread.scheduledMessages`.
+   */
+  public readonly scheduledMessages: ScheduledMessagesView;
   public readonly cooldownTimer: CooldownTimer;
   private unsubscribeConfiguration?: Unsubscribe;
   private unsubscribeServerConfig?: Unsubscribe;
@@ -297,6 +333,21 @@ export class Channel extends ChannelApi {
       channel: this,
       paginatorOptions: { declarativeConfig: declarativeConfig?.pinnedMessagesPaginator },
     });
+    this.scheduledMessagesPaginator = new ScheduledMessagePaginator({
+      client,
+      // a channel created from its members gets its cid from its first query (`storeUnderServerCid`)
+      filter: { cid: this.cid },
+      id: `scheduled-message-paginator-${this.cid}`,
+      paginatorOptions: {
+        declarativeConfig: declarativeConfig?.scheduledMessagesPaginator,
+      },
+    });
+
+    this.scheduledMessages = new ScheduledMessagesView({
+      paginator: this.scheduledMessagesPaginator,
+      scope: { type: 'channel' },
+    });
+    this.scheduledMessages.registerSubscriptions();
 
     this.messageReceiptsTracker = new MessageReceiptsTracker({ channel: this });
     this.messageReceiptsTracker.registerSubscriptions();
@@ -365,6 +416,11 @@ export class Channel extends ChannelApi {
       deliveryEvents: { enabled: channelConfig?.delivery_events },
       readEvents: { enabled: channelConfig?.read_events },
       replies: { enabled: channelConfig?.replies },
+      scheduledMessages: {
+        enabled: channelConfig
+          ? !!getScheduledMessageLimitsFromServerConfig(channelConfig)
+          : undefined,
+      },
       typingEvents: { enabled: channelConfig?.typing_events },
       userMessageReminders: { enabled: channelConfig?.user_message_reminders },
     };
@@ -397,6 +453,9 @@ export class Channel extends ChannelApi {
     // No shared key: the pinned paginator has a single parent.
     this.pinnedMessagesPaginator.initializeConfig(
       declarativeConfig?.pinnedMessagesPaginator,
+    );
+    this.scheduledMessagesPaginator.initializeConfig(
+      declarativeConfig?.scheduledMessagesPaginator,
     );
 
     // Shared key with a per-parent override, as for `messagePaginator`.
@@ -454,10 +513,167 @@ export class Channel extends ChannelApi {
   override async sendMessage(...args: Parameters<ChannelApi['sendMessage']>) {
     const [request, requestOptions] = args;
 
-    return await super.sendMessage(
+    const response = await super.sendMessage(
       { ...request, message: sanitizeOutgoingAttachments(request.message) },
       requestOptions,
     );
+
+    if (response.scheduled_message)
+      this.applyScheduledMessage(response.scheduled_message);
+
+    return response;
+  }
+
+  /**
+   * Fills the list from a channel query's `scheduled_messages`.
+   *
+   * @internal
+   */
+  hydrateScheduledMessages(
+    scheduledMessages: ScheduledMessageResponse[],
+    itemIdsAtRequest?: ReadonlySet<string>,
+  ) {
+    // a response landing after logout would bring the previous user's messages back
+    if (this.pendingDisposal || !this.config.scheduledMessages.enabled) return;
+    this.scheduledMessagesPaginator.hydrate(scheduledMessages, itemIdsAtRequest);
+  }
+
+  /** Without the field (over 100, or unreadable), a list that had loaded reloads itself. */
+  private applyScheduledMessagesFromResponse(
+    scheduledMessages: ScheduledMessageResponse[] | undefined,
+    itemIdsAtRequest: ReadonlySet<string> | undefined,
+  ) {
+    if (scheduledMessages) {
+      this.hydrateScheduledMessages(scheduledMessages, itemIdsAtRequest);
+      return;
+    }
+    const paginator = this.scheduledMessagesPaginator;
+    if (this.pendingDisposal || !paginator.hasLoadedPage || paginator.isLoading) return;
+    runDetached(paginator.reload(), { context: 'reloadScheduledMessages' });
+  }
+
+  /** Ingests an action's result into this list and the registered ones; its echo event is a tie. */
+  private applyScheduledMessage(scheduledMessage: ScheduledMessageResponse) {
+    this.scheduledMessagesPaginator.ingestItem(scheduledMessage);
+    this.getClient().scheduledMessagePaginators.ingest(scheduledMessage);
+  }
+
+  private get scheduledMessageRequestHandlers(): ScheduledMessageRequestHandlers {
+    return this.configState.getLatestValue().requestHandlers ?? {};
+  }
+
+  private sendScheduledMessageRequest<TParams, TResponse>(
+    handler: ScheduledMessageRequestFn<TParams, TResponse> | undefined,
+    defaultRequest: DefaultScheduledMessageRequest<TParams, TResponse>,
+    params: TParams,
+  ) {
+    return handler ? handler(params, defaultRequest) : defaultRequest(params);
+  }
+
+  /** Removes the message from the lists when the server no longer has it. */
+  private async removeScheduledMessageWhenNotFound<TResult>(
+    id: string,
+    request: () => Promise<TResult>,
+  ): Promise<TResult> {
+    try {
+      return await request();
+    } catch (error) {
+      const stored = this.getClient().scheduledMessageStore.get(id);
+      if (isScheduledMessageNotFoundError(error) && stored) {
+        this.applyScheduledMessage({
+          ...stored,
+          status: SCHEDULED_MESSAGE_STATUS.Canceled,
+        });
+      }
+      throw error;
+    }
+  }
+
+  private requestUpdateScheduledMessage = ({
+    id,
+    request,
+  }: UpdateScheduledMessageRequestParams) =>
+    this.getClient().updateScheduledMessage({ id }, request);
+
+  private requestDeleteScheduledMessage = ({ id }: ScheduledMessageIdRequestParams) =>
+    this.getClient().deleteScheduledMessage({ id });
+
+  private requestSendScheduledMessageNow = ({ id }: ScheduledMessageIdRequestParams) =>
+    this.getClient().sendScheduledMessageNow({ id });
+
+  /** Sends a message with `scheduled_at`, through `requestHandlers.scheduleMessageRequest` if set. */
+  async scheduleMessage(request: SendMessageRequest) {
+    const sanitizedRequest = {
+      ...request,
+      message: sanitizeOutgoingAttachments(request.message),
+    };
+
+    const response = await this.sendScheduledMessageRequest(
+      this.scheduledMessageRequestHandlers.scheduleMessageRequest,
+      (params) => this.sendMessage(params),
+      sanitizedRequest,
+    );
+
+    if (response.scheduled_message)
+      this.applyScheduledMessage(response.scheduled_message);
+
+    return response;
+  }
+
+  /** Edits a scheduled message, through `requestHandlers.updateScheduledMessageRequest` if set. */
+  async updateScheduledMessage(id: string, request: UpdateScheduledMessageRequest) {
+    const { message } = request;
+    const sanitizedRequest = message
+      ? { ...request, message: sanitizeOutgoingAttachments(message) }
+      : request;
+
+    const { scheduled_message: scheduledMessage } =
+      await this.removeScheduledMessageWhenNotFound(id, () =>
+        this.sendScheduledMessageRequest(
+          this.scheduledMessageRequestHandlers.updateScheduledMessageRequest,
+          this.requestUpdateScheduledMessage,
+          { id, request: sanitizedRequest },
+        ),
+      );
+
+    this.applyScheduledMessage(scheduledMessage);
+
+    return scheduledMessage;
+  }
+
+  /** Cancels a scheduled message, through `requestHandlers.deleteScheduledMessageRequest` if set. */
+  async deleteScheduledMessage(id: string) {
+    const { scheduled_message: scheduledMessage } =
+      await this.removeScheduledMessageWhenNotFound(id, () =>
+        this.sendScheduledMessageRequest(
+          this.scheduledMessageRequestHandlers.deleteScheduledMessageRequest,
+          this.requestDeleteScheduledMessage,
+          { id },
+        ),
+      );
+
+    this.applyScheduledMessage({
+      ...scheduledMessage,
+      status: SCHEDULED_MESSAGE_STATUS.Canceled,
+    });
+
+    return scheduledMessage;
+  }
+
+  /** Sends a scheduled message now, through `requestHandlers.sendScheduledMessageNowRequest` if set. */
+  async sendScheduledMessageNow(id: string) {
+    const { scheduled_message: scheduledMessage } =
+      await this.removeScheduledMessageWhenNotFound(id, () =>
+        this.sendScheduledMessageRequest(
+          this.scheduledMessageRequestHandlers.sendScheduledMessageNowRequest,
+          this.requestSendScheduledMessageNow,
+          { id },
+        ),
+      );
+
+    this.applyScheduledMessage(scheduledMessage);
+
+    return scheduledMessage;
   }
 
   async sendReaction(...args: Parameters<ChatApi['sendReaction']>) {
@@ -1113,6 +1329,10 @@ export class Channel extends ChannelApi {
     return this.config.readEvents.enabled && channelHasReadEvents(this);
   }
 
+  get scheduledMessagesEnabled(): boolean {
+    return this.config.scheduledMessages.enabled && channelCanScheduleMessages(this);
+  }
+
   /**
    * Marks read through `MessageDeliveryReporter`: uses the `markReadRequest` handler if set, marks
    * read locally when read events are off and `localUnreadCountEnabled` is set, and drops the
@@ -1719,6 +1939,8 @@ export class Channel extends ChannelApi {
     const { channelManager } = this.getClient();
     const storedUnder = this.cid;
     this.cid = serverCid;
+    if (storedUnder !== serverCid)
+      this.scheduledMessagesPaginator.filter = { cid: serverCid };
     const isStoredUnderOldCid =
       storedUnder !== serverCid && channelManager.get(storedUnder) === this;
     // A disconnected channel is replaced by this instance, not superseded by it.
@@ -1788,10 +2010,19 @@ export class Channel extends ChannelApi {
       const externalQuery = placeMessages
         ? this.messagePaginator.prepareExternalQuery(options.messages)
         : undefined;
+      // free when the app has no scheduled messages: the server omits the field
+      const includeScheduledMessages =
+        this.config.scheduledMessages.enabled &&
+        options.include_scheduled_messages !== false;
+      // tells messages arriving during the request apart, so the response does not drop them
+      const scheduledMessageIdsAtRequest = this.scheduledMessagesPaginator.getItemIds();
       const state = await this.requestChannelState(
-        externalQuery
-          ? { ...options, messages: externalQuery.messagePaginationParams }
-          : options,
+        {
+          ...(includeScheduledMessages && { include_scheduled_messages: true }),
+          ...(externalQuery
+            ? { ...options, messages: externalQuery.messagePaginationParams }
+            : options),
+        },
         requestOptions,
         { placesNewestPage: externalQuery?.isNewestPage ?? false },
       );
@@ -1810,6 +2041,13 @@ export class Channel extends ChannelApi {
         });
       }
       if (placedFirstPage) this.messagePaginator.seedUnreadSnapshot();
+      if (includeScheduledMessages) {
+        // a channel created from members may have been superseded by the stored instance
+        (this.supersededBy ?? this).applyScheduledMessagesFromResponse(
+          state.scheduled_messages,
+          scheduledMessageIdsAtRequest,
+        );
+      }
       return state;
     });
   }
@@ -2656,7 +2894,12 @@ export class Channel extends ChannelApi {
             event.channel?.frozen !== undefined &&
             event.channel.frozen !== channel.data?.frozen;
           if (isFrozenChanged) {
-            this.query({ state: false, messages: { limit: 0 }, watchers: { limit: 0 } });
+            this.query({
+              include_scheduled_messages: false,
+              messages: { limit: 0 },
+              state: false,
+              watchers: { limit: 0 },
+            });
           }
           const newChannelData = {
             ...event.channel,
@@ -2718,6 +2961,17 @@ export class Channel extends ChannelApi {
             user: { ...(member?.user || {}), ...event.user },
           },
         };
+        break;
+      }
+      case 'scheduled_message.created':
+      case 'scheduled_message.deleted':
+      case 'scheduled_message.failed':
+      case 'scheduled_message.sent':
+      case 'scheduled_message.updated': {
+        // the registered lists hear it from `client.scheduledMessagePaginators`
+        const scheduledMessage = getScheduledMessageFromEvent(event);
+        if (scheduledMessage)
+          this.scheduledMessagesPaginator.ingestItem(scheduledMessage);
         break;
       }
       default:
@@ -2926,9 +3180,11 @@ export class Channel extends ChannelApi {
     this.unsubscribeServerConfig = undefined;
     this.messageReceiptsTracker.unregisterSubscriptions();
     this.cooldownTimer.unregisterSubscriptions();
+    this.scheduledMessages.unregisterSubscriptions();
     // Otherwise the message store keeps this channel and its messages alive through its subscribers.
     this.messagePaginator.dispose();
     this.pinnedMessagesPaginator.dispose();
+    this.scheduledMessagesPaginator.dispose();
 
     // One update, last, so subscribers see both together. A deleted channel must not be re-watched.
     this._lastWatchOptions = undefined;

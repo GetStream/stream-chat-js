@@ -612,6 +612,9 @@ const CHANNEL_FIELDS: Record<keyof ChannelDeclarativeConfig, ConfigNode> = {
     "The channel's pinned message list. Nested rather than top-level: a channel is its only parent.",
   ),
   requestHandlers: REQUEST_HANDLERS_NODE,
+  scheduledMessagesPaginator: paginatorGroup(
+    "The current user's scheduled messages in the channel. Filled by the channel query; it queries only when the channel query leaves them out, at most 100 per page.",
+  ),
   typingEvents: {
     description: 'Typing indicators for the channel.',
     fields: {
@@ -630,6 +633,18 @@ const CHANNEL_FIELDS: Record<keyof ChannelDeclarativeConfig, ConfigNode> = {
       enabled: {
         description:
           'Offers threaded replies. The server must also allow them per channel type (`replies`), and a server "no" wins.',
+        kind: 'value',
+        type: 'boolean',
+      },
+    },
+    kind: 'group',
+  },
+  scheduledMessages: {
+    description: 'Scheduling messages to be sent later.',
+    fields: {
+      enabled: {
+        description:
+          'Offers scheduling messages. The app must also have the feature (its scheduled message limits are in the channel server config), and a server "no" wins. Without the own `schedule-message` capability scheduling stays off.',
         kind: 'value',
         type: 'boolean',
       },

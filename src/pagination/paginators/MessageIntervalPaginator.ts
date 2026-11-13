@@ -13,6 +13,7 @@ import type {
 } from './BasePaginator';
 import {
   BasePaginator,
+  EXHAUSTED_CURSOR,
   isLogicalInterval,
   type PaginationQueryReturnValue,
   type PaginationQueryShapeChangeIdentifier,
@@ -1568,7 +1569,7 @@ export class MessageIntervalPaginator extends BasePaginator<
     if (this.isActiveInterval(headAfterRequest)) {
       this.state.partialNext({
         hasMoreTail: false,
-        cursor: { headward: null, tailward: null },
+        cursor: EXHAUSTED_CURSOR,
       });
     }
   }
@@ -1580,7 +1581,10 @@ export class MessageIntervalPaginator extends BasePaginator<
       ? await this.channel
           .getClient()
           .getReplies({ parent_id: this.parentMessageId }, pagination)
-      : await this.channel.query({ messages: pagination });
+      : await this.channel.query({
+          include_scheduled_messages: false,
+          messages: pagination,
+        });
     return Array.isArray(messages) && messages.length > 0;
   }
 

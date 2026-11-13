@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { EntityStore } from '../../src/entityStore/EntityStore';
 import type { EntityStoreSubscriber } from '../../src/entityStore/EntityStore';
+import { StoreBackedItemIndex } from '../../src/entityStore/StoreBackedItemIndex';
 import { formatMessage } from '../../src/utils';
 import { generateMsg } from './test-utils/generateMessage';
 import type { LocalMessage } from '../../src';
@@ -904,5 +905,209 @@ describe('EntityStore', () => {
       });
       expect(a.onEntitiesChanged).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('EntityStore conflict resolution', () => {
+  type Versioned = { id: string; status: 'open' | 'closed'; version: number };
+
+  const isTombstone = ({ status }: Versioned) => status === 'closed';
+  const isNewer = (incoming: Versioned, stored: Versioned) =>
+    incoming.version >= stored.version;
+
+  const create = (options: {
+    isTombstone?: typeof isTombstone;
+    shouldReplace?: typeof isNewer;
+  }) => new EntityStore<Versioned>({ getEntityId: ({ id }) => id, ...options });
+
+  const open = (version: number): Versioned => ({ id: 'e1', status: 'open', version });
+
+  describe('shouldReplace', () => {
+    it('keeps the stored copy when the incoming one does not replace it, and notifies nobody', () => {
+      const store = create({ shouldReplace: isNewer });
+      const newer = open(2);
+      store.upsert(newer);
+      const holder = spySubscriber();
+      store.link(newer.id, holder);
+
+      store.upsert(open(1));
+
+      expect(store.get(newer.id)).toBe(newer);
+      expect(holder.onEntitiesChanged).not.toHaveBeenCalled();
+    });
+
+    it('writes the incoming copy when it replaces the stored one', () => {
+      const store = create({ shouldReplace: isNewer });
+      store.upsert(open(1));
+      const newer = open(2);
+
+      store.upsert(newer);
+
+      expect(store.get(newer.id)).toBe(newer);
+    });
+
+    it('is not asked when nothing is stored', () => {
+      const shouldReplace = vi.fn(isNewer);
+      const store = create({ shouldReplace });
+      const first = open(1);
+
+      store.upsert(first);
+
+      expect(shouldReplace).not.toHaveBeenCalled();
+      expect(store.get(first.id)).toBe(first);
+    });
+
+    it('is asked by resolveCanonicalEntity without writing', () => {
+      const store = create({ shouldReplace: isNewer });
+      const newer = open(2);
+      store.upsert(newer);
+      const older = open(1);
+
+      expect(store.resolveCanonicalEntity(older)).toBe(newer);
+      expect(store.resolveCanonicalEntity(open(3))).toEqual(open(3));
+      expect(store.get(newer.id)).toBe(newer);
+    });
+  });
+
+  describe('isTombstone', () => {
+    const closed = (version: number): Versioned => ({
+      id: 'e1',
+      status: 'closed',
+      version,
+    });
+    const withTombstones = () => create({ isTombstone, shouldReplace: isNewer });
+
+    /** Stores `copy` through a list, then lets the list drop it, as a list drops a removed entity. */
+    const storeAndRelease = (store: EntityStore<Versioned>, copy: Versioned) => {
+      const holder = spySubscriber();
+      store.link(copy.id, holder);
+      store.upsert(copy);
+      store.unlink(copy.id, holder);
+    };
+
+    it('resolves a stale copy to the tombstone after the entry left the store', () => {
+      const store = withTombstones();
+      const removal = closed(2);
+      storeAndRelease(store, removal);
+      expect(store.has('e1')).toBe(false);
+
+      expect(store.resolveCanonicalEntity(open(1))).toBe(removal);
+      store.upsert(open(1));
+      expect(store.has('e1')).toBe(false);
+    });
+
+    it('lets a newer copy replace the tombstone and be stored again', () => {
+      const store = withTombstones();
+      storeAndRelease(store, closed(2));
+      const reopened = open(3);
+
+      expect(store.resolveCanonicalEntity(reopened)).toBe(reopened);
+      store.upsert(reopened);
+
+      expect(store.get('e1')).toBe(reopened);
+      // the tombstone is gone: an older copy now resolves against the stored one
+      expect(store.resolveCanonicalEntity(open(1))).toBe(reopened);
+    });
+
+    it('records a tombstone that resolve saw, even if nothing stored it', () => {
+      const store = withTombstones();
+      const removal = closed(2);
+
+      store.resolveCanonicalEntity(removal);
+
+      expect(store.resolveCanonicalEntity(open(1))).toBe(removal);
+    });
+
+    it('drops the tombstones on clear', () => {
+      const store = withTombstones();
+      storeAndRelease(store, closed(2));
+
+      store.clear();
+      const older = open(1);
+      store.upsert(older);
+
+      expect(store.get('e1')).toBe(older);
+    });
+
+    it('keeps a list from linking a stale copy of a removed entity', () => {
+      const store = withTombstones();
+      store.resolveCanonicalEntity(closed(2));
+      const index = new StoreBackedItemIndex<Versioned>({
+        getEntityId: ({ id }) => id,
+        owner: spySubscriber(),
+        store,
+      });
+
+      index.setOne(open(1));
+
+      expect(index.has('e1')).toBe(false);
+      expect(store.isHeld('e1')).toBe(false);
+    });
+
+    const removalSpy = () => ({ onEntitiesChanged: vi.fn(), onEntityRemoved: vi.fn() });
+
+    it('removes the entry when a removal is upserted, telling every holder but the writer', () => {
+      const store = withTombstones();
+      const stored = open(1);
+      store.upsert(stored);
+      const writer = removalSpy();
+      const other = removalSpy();
+      store.link(stored.id, writer);
+      store.link(stored.id, other);
+
+      store.upsert(closed(2), writer);
+
+      expect(store.has('e1')).toBe(false);
+      expect(other.onEntityRemoved).toHaveBeenCalledWith('e1', stored);
+      expect(writer.onEntityRemoved).not.toHaveBeenCalled();
+      expect(writer.onEntitiesChanged).not.toHaveBeenCalled();
+      expect(store.resolveCanonicalEntity(open(1))).toEqual(closed(2));
+    });
+
+    it('takes a removal out of the writing list and the others', () => {
+      const store = withTombstones();
+      const owner = removalSpy();
+      const writing = new StoreBackedItemIndex<Versioned>({
+        getEntityId: ({ id }) => id,
+        owner,
+        store,
+      });
+      const otherOwner = removalSpy();
+      const other = new StoreBackedItemIndex<Versioned>({
+        getEntityId: ({ id }) => id,
+        owner: otherOwner,
+        store,
+      });
+      writing.setOne(open(1));
+      other.setOne(store.get('e1') as Versioned);
+
+      writing.setOne(closed(2));
+
+      expect(writing.has('e1')).toBe(false);
+      expect(other.has('e1')).toBe(false);
+      expect(otherOwner.onEntityRemoved).toHaveBeenCalledTimes(1);
+      expect(owner.onEntityRemoved).not.toHaveBeenCalled();
+    });
+
+    it('without shouldReplace, lets any later copy replace the tombstone', () => {
+      const store = create({ isTombstone });
+      storeAndRelease(store, closed(2));
+      const older = open(1);
+
+      store.upsert(older);
+
+      expect(store.get('e1')).toBe(older);
+    });
+  });
+
+  it('leaves a store without the options unchanged', () => {
+    const store = create({});
+    store.upsert(open(2));
+    const older = open(1);
+
+    store.upsert(older);
+
+    expect(store.resolveCanonicalEntity(older)).toBe(older);
+    expect(store.get('e1')).toBe(older);
   });
 });
