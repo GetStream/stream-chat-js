@@ -10,6 +10,8 @@ on:
 permissions:
   id-token: write # Required for OIDC
   contents: write
+  issues: write
+  pull-requests: write
 
 jobs:
   package_release:
@@ -29,9 +31,7 @@ jobs:
 
       - name: Release
         env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-          # https://github.com/stream-ci-bot
-          GITHUB_TOKEN: ${{ secrets.DOCUSAURUS_GH_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_CONFIG_PROVENANCE: 'true'
         run: >
           yarn semantic-release
