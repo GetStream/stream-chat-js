@@ -2374,6 +2374,91 @@ describe('ChannelPaginator', () => {
       expect(paginator.predefinedFilter?.filter).toEqual({ archived: false });
     });
 
+    describe('a predefined-filter list before the server reports its filter', () => {
+      const MESSAGING_ONLY = { name: 'messaging_only', filter: { type: 'messaging' } };
+
+      // the query's response, sent once the query is out
+      const respondLater = () => {
+        let respond: (() => void) | undefined;
+        vi.spyOn(client, 'queryChannelsAndHydrate').mockImplementation(
+          () =>
+            new Promise((resolve) => {
+              respond = () =>
+                resolve({
+                  channels: [new Channel(client, 'messaging', 'm1', {})],
+                  duration: '0.1ms',
+                  predefined_filter: MESSAGING_ONLY,
+                } as never);
+            }),
+        );
+        return async () => {
+          await vi.waitFor(() => expect(respond).toBeDefined());
+          respond?.();
+        };
+      };
+
+      it('takes no channel from events while its first page loads', async () => {
+        const paginator = new ChannelPaginator({
+          client,
+          requestOptions: { predefined_filter: 'messaging_only' },
+        });
+        const respond = respondLater();
+        const query = paginator.toTail();
+
+        paginator.ingestItem(new Channel(client, 'livestream', 'x', {}));
+        await respond();
+        await query;
+
+        expect(paginator.items?.map((channel) => channel.cid)).toEqual(['messaging:m1']);
+      });
+
+      it('takes no channel from events while its first page loads after a reset', async () => {
+        const paginator = new ChannelPaginator({
+          client,
+          requestOptions: { predefined_filter: 'messaging_only' },
+        });
+        let respond = respondLater();
+        let query = paginator.toTail();
+        await respond();
+        await query;
+
+        paginator.resetState();
+        respond = respondLater();
+        query = paginator.reload();
+        paginator.ingestItem(new Channel(client, 'livestream', 'x', {}));
+        await respond();
+        await query;
+
+        expect(paginator.items?.map((channel) => channel.cid)).toEqual(['messaging:m1']);
+      });
+
+      it.each([
+        ['a page loaded through doRequest', { doRequest: async () => ({ items: [] }) }],
+        // the server's response carries no `predefined_filter`
+        ['a page reported without its filter', {}],
+      ])(
+        'matches by its static filters once it holds %s',
+        async (_, paginatorOptions) => {
+          vi.spyOn(client, 'queryChannelsAndHydrate').mockResolvedValue({
+            channels: [],
+            duration: '0.1ms',
+          });
+          const paginator = new ChannelPaginator({
+            client,
+            filters: { type: 'messaging' },
+            requestOptions: { predefined_filter: 'messaging_only' },
+            paginatorOptions,
+          });
+          const channel = new Channel(client, 'messaging', 'm2', {});
+          expect(paginator.matchesFilter(channel)).toBe(false);
+
+          await paginator.toTail();
+
+          expect(paginator.matchesFilter(channel)).toBe(true);
+        },
+      );
+    });
+
     it('ignores the response metadata when items are fetched through doRequest', async () => {
       const spy = mockQueryResponse([], PREDEFINED_FILTER);
       const paginator = new ChannelPaginator({

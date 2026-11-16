@@ -2501,6 +2501,56 @@ describe('MessagePaginator', () => {
         });
       });
 
+      // as after the channel query, but the paginator's own query (`executeQuery`) loaded the page
+      describe("after the paginator's own newest page returned no messages", () => {
+        const failFirstQuery = async (paginator: MessagePaginator) => {
+          (channel.query as unknown as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+            new Error('network'),
+          );
+          await paginator.executeQuery();
+          expect(paginator.items).toBeUndefined();
+        };
+
+        describe.each([
+          ['without a last_message_at', null],
+          // e.g. the history before the user joined is hidden
+          ['with a last_message_at', at('10')],
+        ])('%s', (_, lastMessageAt) => {
+          it.each([
+            ['a first query', async () => undefined, {}],
+            [
+              'a refresh keeping the previous items',
+              async () => undefined,
+              { keepPreviousItems: true },
+            ],
+            [
+              'a refresh keeping the previous items after the first query failed',
+              failFirstQuery,
+              { keepPreviousItems: true },
+            ],
+          ])('%s', async (__, before, params) => {
+            const paginator = new MessagePaginator({ channel, itemIndex });
+            await before(paginator);
+            // as the channel query response sets it
+            paginator.setQueriedLatestMessageAt(lastMessageAt);
+            (channel.query as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+              messages: [],
+            });
+
+            await paginator.executeQuery(params);
+            expect(paginator.items).toEqual([]);
+
+            paginator.ingestItem(msg('m20', '20'));
+            paginator.ingestItem(msg('m21', '21'));
+
+            expect(headOf(paginator)).toEqual(['m20', 'm21']);
+            expect(paginator.items?.map((m) => m.id)).toEqual(['m20', 'm21']);
+            expect(paginator.isActiveIntervalAtHead).toBe(true);
+            expect(paginator.hasMoreTail).toBe(false);
+          });
+        });
+      });
+
       describe('has older messages to load when the newest window was not loaded empty', () => {
         it('while nothing was queried', () => {
           const paginator = new MessagePaginator({ channel, itemIndex });

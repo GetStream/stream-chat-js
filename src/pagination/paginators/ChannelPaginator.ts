@@ -563,7 +563,24 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
       baseFilters: { ...this.effectiveFilters },
     });
 
+  /**
+   * Whether the list runs a `predefined_filter` query and holds neither a page nor the filter the
+   * server reported for it (`predefinedFilter`): its `staticFilters` do not say which channels it
+   * holds. A list holding items without that filter (loaded through `doRequest`, or from an offline
+   * cache stored without it) matches by `staticFilters`.
+   */
+  private get awaitsPredefinedFilter(): boolean {
+    return (
+      !!this._options?.predefined_filter && !this._predefinedFilter && !this.hasResults
+    );
+  }
+
+  /**
+   * Whether `channel` belongs to the list. Nothing does while a list with
+   * `options.predefined_filter` holds neither a page nor `predefinedFilter`.
+   */
   matchesFilter(channel: Channel): boolean {
+    if (this.awaitsPredefinedFilter) return false;
     const filters = this.buildMatchFilters();
 
     // Like `queryChannels`, exclude hidden channels unless the filter asks for them. Not a synthetic
