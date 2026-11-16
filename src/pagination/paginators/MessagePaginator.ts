@@ -717,6 +717,7 @@ export class MessagePaginator extends MessageIntervalPaginator {
       });
 
       if (!inferredLastReadMessageId) {
+        const checkWasStateResetDuringQuery = this.makeStateResetWatcher();
         const result = await this.executeQuery({
           claimsActiveInterval: true,
           queryShape: {
@@ -728,6 +729,8 @@ export class MessagePaginator extends MessageIntervalPaginator {
         });
         // a later claim decides the active interval, and the page stays stored
         if (result?.isSuperseded) return false;
+        // a reset ignored the query: not a failed jump
+        if (checkWasStateResetDuringQuery()) return false;
         if (result) {
           ({
             firstUnreadMessageId: inferredFirstUnreadMessageId,
