@@ -3,6 +3,7 @@ import { ChannelState } from './channel_state';
 import { CooldownTimer } from './CooldownTimer';
 import { MessageComposer } from './messageComposer';
 import { MessageReceiptsTracker } from './messageDelivery';
+import { withCarriedActiveMemberCount } from './utils/activeMemberCount';
 import {
   channelHasReadEvents,
   generateChannelTempCid,
@@ -92,7 +93,7 @@ export class Channel {
   _client: StreamChat;
   type: string;
   id: string | undefined;
-  data: Partial<ChannelData & ChannelResponse> | undefined;
+  private _channelData: Partial<ChannelData & ChannelResponse> | undefined;
   _data: Partial<ChannelData & ChannelResponse>;
   cid: string;
   /**  */
@@ -178,6 +179,15 @@ export class Channel {
     });
 
     this.cooldownTimer = new CooldownTimer({ channel: this });
+  }
+
+  public get data(): Partial<ChannelData & ChannelResponse> | undefined {
+    return this._channelData;
+  }
+
+  public set data(next: Partial<ChannelData & ChannelResponse> | undefined) {
+    const previous = this._channelData;
+    this._channelData = next && withCarriedActiveMemberCount({ next, previous });
   }
 
   /**
