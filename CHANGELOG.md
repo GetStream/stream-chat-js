@@ -1,3 +1,9 @@
+## [9.56.1](https://github.com/GetStream/stream-chat-js/compare/v9.56.0...v9.56.1) (2026-11-17)
+
+### Bug Fixes
+
+* limit decompressed webhook payloads to 10 MiB ([#2031](https://github.com/GetStream/stream-chat-js/issues/2031)) ([4f40505](https://github.com/GetStream/stream-chat-js/commit/4f405057611e57e73e7f24ed683d0112c9e5f01a))
+
 ## [9.56.0](https://github.com/GetStream/stream-chat-js/compare/v9.55.0...v9.56.0) (2026-11-17)
 
 ### Bug Fixes
