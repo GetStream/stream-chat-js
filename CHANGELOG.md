@@ -1,3 +1,14 @@
+## [9.56.0](https://github.com/GetStream/stream-chat-js/compare/v9.55.0...v9.56.0) (2026-11-17)
+
+### Bug Fixes
+
+* **types:** add two_way_block_effect_enabled to the app settings response ([#2010](https://github.com/GetStream/stream-chat-js/issues/2010)) ([34481ab](https://github.com/GetStream/stream-chat-js/commit/34481ab2c4e0ef972bca9a14eefe47bf0677f712)), closes [#1742](https://github.com/GetStream/stream-chat-js/issues/1742) [#1887](https://github.com/GetStream/stream-chat-js/issues/1887) [#2000](https://github.com/GetStream/stream-chat-js/issues/2000) [#2000](https://github.com/GetStream/stream-chat-js/issues/2000)
+
+### Features
+
+* keep the channel's active member count across channel updates (REACT-1376) ([#2002](https://github.com/GetStream/stream-chat-js/issues/2002)) ([a7b712f](https://github.com/GetStream/stream-chat-js/commit/a7b712f19b1562720c1d78d95afbf5232b53645b)), closes [#2001](https://github.com/GetStream/stream-chat-js/issues/2001)
+* support quiet hours for push notifications (REACT-1375) ([#2000](https://github.com/GetStream/stream-chat-js/issues/2000)) ([6627030](https://github.com/GetStream/stream-chat-js/commit/66270308c3b069c456bc916c9ec0400f51968fd1)), closes [#1999](https://github.com/GetStream/stream-chat-js/issues/1999)
+
 ## [9.55.0](https://github.com/GetStream/stream-chat-js/compare/v9.54.4...v9.55.0) (2026-11-06)
 
 ### Bug Fixes
