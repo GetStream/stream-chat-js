@@ -1,8 +1,5 @@
 import { CORE_NOTIFICATION_TYPE } from '../../../notifications';
-import {
-  SCHEDULED_MESSAGE_STATUS,
-  ScheduledMessageBlockReason,
-} from '../../../scheduledMessages/constants';
+import { ScheduledMessageBlockReason } from '../../../scheduledMessages/constants';
 import { CommandSearchSource } from '../textComposer/commands';
 import { getCurrentCommand } from '../textComposer/commandUtils';
 import type { MiddlewareHandlerParams } from '../../../middleware';
@@ -66,13 +63,7 @@ export const createScheduledMessageCompositionMiddleware = (
         discard,
         forward,
       }: MiddlewareHandlerParams<MessageComposerMiddlewareState>) => {
-        const { scheduled_at: scheduledAt } = state.sendOptions;
-        const { editedScheduledMessage } = composer;
-        // saving a pending one is scheduling; a failed one sent again now is not
-        const isScheduling =
-          !!scheduledAt ||
-          (!!editedScheduledMessage &&
-            editedScheduledMessage.status !== SCHEDULED_MESSAGE_STATUS.Failed);
+        const isScheduling = !!state.scheduling || !!state.sendOptions.scheduled_at;
 
         if (!isScheduling) return await forward();
 

@@ -92,9 +92,11 @@ describe('scheduled message configuration', () => {
       const addWarningSpy = vi.spyOn(client.notifications, 'addWarning');
       composer.textComposer.setText('see you tomorrow');
 
-      const result = await composer.schedule(scheduledAt);
+      const result = await composer.scheduledMessageComposition.schedule(scheduledAt);
 
-      expect(composer.scheduleBlockReason).toBe(ScheduledMessageBlockReason.Unavailable);
+      expect(composer.scheduledMessageComposition.scheduleBlockReason).toBe(
+        ScheduledMessageBlockReason.Unavailable,
+      );
       expect(result).toEqual({ status: 'blocked' });
       expect(sendSpy).not.toHaveBeenCalled();
       expect(addWarningSpy).toHaveBeenCalledWith(
