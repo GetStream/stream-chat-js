@@ -252,7 +252,6 @@ export class Channel extends ChannelApi {
    * thread replies it holds too. A thread's are `thread.scheduledMessages`.
    */
   public readonly scheduledMessages: ScheduledMessagesView;
-  /** The request lifecycle (schedule, update, cancel, send-now) for this channel's scheduled messages. */
   public readonly scheduledMessageOperations: ScheduledMessageOperations;
   public readonly cooldownTimer: CooldownTimer;
   private unsubscribeConfiguration?: Unsubscribe;
@@ -550,34 +549,18 @@ export class Channel extends ChannelApi {
     runDetached(paginator.reload(), { context: 'reloadScheduledMessages' });
   }
 
-  /**
-   * Sends a message with `scheduled_at`, through `requestHandlers.scheduleMessageRequest` if set.
-   * Delegates to {@link Channel.scheduledMessageOperations}.
-   */
   async scheduleMessage(request: SendMessageRequest) {
     return await this.scheduledMessageOperations.schedule(request);
   }
 
-  /**
-   * Edits a scheduled message, through `requestHandlers.updateScheduledMessageRequest` if set.
-   * Delegates to {@link Channel.scheduledMessageOperations}.
-   */
   async updateScheduledMessage(id: string, request: UpdateScheduledMessageRequest) {
     return await this.scheduledMessageOperations.update(id, request);
   }
 
-  /**
-   * Cancels a scheduled message, through `requestHandlers.deleteScheduledMessageRequest` if set.
-   * Delegates to {@link Channel.scheduledMessageOperations}.
-   */
   async deleteScheduledMessage(id: string) {
     return await this.scheduledMessageOperations.cancel(id);
   }
 
-  /**
-   * Sends a scheduled message now, through `requestHandlers.sendScheduledMessageNowRequest` if set.
-   * Delegates to {@link Channel.scheduledMessageOperations}.
-   */
   async sendScheduledMessageNow(id: string) {
     return await this.scheduledMessageOperations.sendNow(id);
   }

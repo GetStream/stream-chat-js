@@ -21,15 +21,6 @@ export type ScheduledMessageOperationsOptions = {
   channel: Channel;
 };
 
-/**
- * The request lifecycle for a channel's scheduled messages: schedule, update, cancel and send-now.
- *
- * Sibling of `MessageOperations`. It owns everything that is not composition: request-handler
- * resolution (`ChannelConfig.requestHandlers`), attachment sanitizing, the "server no longer has it
- * → cancel it locally" rule, and the single fan-out seam ({@link ScheduledMessageOperations.ingest})
- * into the channel's own list and the registered cross-channel lists. `Channel` keeps only thin
- * delegations to these methods.
- */
 export class ScheduledMessageOperations {
   private readonly channel: Channel;
 
@@ -45,17 +36,11 @@ export class ScheduledMessageOperations {
     return this.channel.configState.getLatestValue().requestHandlers ?? {};
   }
 
-  /**
-   * Ingests an action's result into the channel's list and the registered ones; each decides whether
-   * and where it belongs. The event the server echoes carries the same `updated_at`, so the store
-   * takes it as a tie and nothing reorders.
-   */
   ingest(scheduledMessage: ScheduledMessageResponse) {
     this.channel.scheduledMessagesPaginator.ingestItem(scheduledMessage);
     this.client.scheduledMessagePaginators.ingest(scheduledMessage);
   }
 
-  /** Runs the integrator's handler for the operation when set, else the default request. */
   private runRequest<TParams, TResponse>(
     handler: ScheduledMessageRequestFn<TParams, TResponse> | undefined,
     defaultRequest: DefaultScheduledMessageRequest<TParams, TResponse>,
@@ -64,7 +49,6 @@ export class ScheduledMessageOperations {
     return handler ? handler(params, defaultRequest) : defaultRequest(params);
   }
 
-  /** Removes the message from the lists when the server no longer has it, then rethrows. */
   private async cancelWhenNotFound<TResult>(
     id: string,
     request: () => Promise<TResult>,
@@ -89,7 +73,6 @@ export class ScheduledMessageOperations {
   private requestSendNow = ({ id }: ScheduledMessageIdRequestParams) =>
     this.client.sendScheduledMessageNow({ id });
 
-  /** Sends a message with `scheduled_at`, through `requestHandlers.scheduleMessageRequest` if set. */
   async schedule(
     request: SendMessageRequest,
   ): Promise<StreamResponse<SendMessageResponse>> {
@@ -109,7 +92,6 @@ export class ScheduledMessageOperations {
     return response;
   }
 
-  /** Edits a scheduled message, through `requestHandlers.updateScheduledMessageRequest` if set. */
   async update(
     id: string,
     request: UpdateScheduledMessageRequest,
@@ -137,7 +119,6 @@ export class ScheduledMessageOperations {
     return scheduledMessage;
   }
 
-  /** Cancels a scheduled message, through `requestHandlers.deleteScheduledMessageRequest` if set. */
   async cancel(id: string): Promise<ScheduledMessageResponse> {
     const { scheduled_message: scheduledMessage } = await this.cancelWhenNotFound(
       id,
@@ -156,7 +137,6 @@ export class ScheduledMessageOperations {
     return scheduledMessage;
   }
 
-  /** Sends a scheduled message now, through `requestHandlers.sendScheduledMessageNowRequest` if set. */
   async sendNow(id: string): Promise<ScheduledMessageResponse> {
     const { scheduled_message: scheduledMessage } = await this.cancelWhenNotFound(
       id,
