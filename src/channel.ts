@@ -13,17 +13,10 @@ import {
 import { createMessageOperations, reflectReactionEvent } from './messageOperations';
 import type { MessageOperations } from './messageOperations';
 import type { OperationRequestFn } from './messageOperations/types';
-import type {
-  DefaultScheduledMessageRequest,
-  ScheduledMessageIdRequestParams,
-  ScheduledMessageRequestFn,
-  ScheduledMessageRequestHandlers,
-  UpdateScheduledMessageRequestParams,
-} from './scheduledMessages/types';
+import type { ScheduledMessageRequestHandlers } from './scheduledMessages/types';
 import { getScheduledMessageLimitsFromServerConfig } from './scheduledMessages/limits';
-import { SCHEDULED_MESSAGE_STATUS } from './scheduledMessages/constants';
-import { isScheduledMessageNotFoundError } from './scheduledMessages/errors';
 import { getScheduledMessageFromEvent } from './scheduledMessages/eventHandlers';
+import { ScheduledMessageOperations } from './scheduledMessages/ScheduledMessageOperations';
 import { ScheduledMessagesView } from './scheduledMessages/ScheduledMessagesView';
 import {
   channelCanScheduleMessages,
@@ -37,6 +30,7 @@ import {
   runDetached,
   sanitizeOutgoingAttachments,
 } from './utils';
+import { getCarriedActiveMemberCount } from './utils/activeMemberCount';
 import { asTimestampNS, nowNs } from './utils/time';
 import { abortError, waitUnlessAborted } from './utils/abort';
 import { normalizeUploadFile } from './upload-utils';
@@ -258,6 +252,7 @@ export class Channel extends ChannelApi {
    * thread replies it holds too. A thread's are `thread.scheduledMessages`.
    */
   public readonly scheduledMessages: ScheduledMessagesView;
+  public readonly scheduledMessageOperations: ScheduledMessageOperations;
   public readonly cooldownTimer: CooldownTimer;
   private unsubscribeConfiguration?: Unsubscribe;
   private unsubscribeServerConfig?: Unsubscribe;
@@ -348,6 +343,8 @@ export class Channel extends ChannelApi {
       scope: { type: 'channel' },
     });
     this.scheduledMessages.registerSubscriptions();
+
+    this.scheduledMessageOperations = new ScheduledMessageOperations({ channel: this });
 
     this.messageReceiptsTracker = new MessageReceiptsTracker({ channel: this });
     this.messageReceiptsTracker.registerSubscriptions();
@@ -519,7 +516,7 @@ export class Channel extends ChannelApi {
     );
 
     if (response.scheduled_message)
-      this.applyScheduledMessage(response.scheduled_message);
+      this.scheduledMessageOperations.ingest(response.scheduled_message);
 
     return response;
   }
@@ -552,128 +549,20 @@ export class Channel extends ChannelApi {
     runDetached(paginator.reload(), { context: 'reloadScheduledMessages' });
   }
 
-  /** Ingests an action's result into this list and the registered ones; its echo event is a tie. */
-  private applyScheduledMessage(scheduledMessage: ScheduledMessageResponse) {
-    this.scheduledMessagesPaginator.ingestItem(scheduledMessage);
-    this.getClient().scheduledMessagePaginators.ingest(scheduledMessage);
-  }
-
-  private get scheduledMessageRequestHandlers(): ScheduledMessageRequestHandlers {
-    return this.configState.getLatestValue().requestHandlers ?? {};
-  }
-
-  private sendScheduledMessageRequest<TParams, TResponse>(
-    handler: ScheduledMessageRequestFn<TParams, TResponse> | undefined,
-    defaultRequest: DefaultScheduledMessageRequest<TParams, TResponse>,
-    params: TParams,
-  ) {
-    return handler ? handler(params, defaultRequest) : defaultRequest(params);
-  }
-
-  /** Removes the message from the lists when the server no longer has it. */
-  private async removeScheduledMessageWhenNotFound<TResult>(
-    id: string,
-    request: () => Promise<TResult>,
-  ): Promise<TResult> {
-    try {
-      return await request();
-    } catch (error) {
-      const stored = this.getClient().scheduledMessageStore.get(id);
-      if (isScheduledMessageNotFoundError(error) && stored) {
-        this.applyScheduledMessage({
-          ...stored,
-          status: SCHEDULED_MESSAGE_STATUS.Canceled,
-        });
-      }
-      throw error;
-    }
-  }
-
-  private requestUpdateScheduledMessage = ({
-    id,
-    request,
-  }: UpdateScheduledMessageRequestParams) =>
-    this.getClient().updateScheduledMessage({ id }, request);
-
-  private requestDeleteScheduledMessage = ({ id }: ScheduledMessageIdRequestParams) =>
-    this.getClient().deleteScheduledMessage({ id });
-
-  private requestSendScheduledMessageNow = ({ id }: ScheduledMessageIdRequestParams) =>
-    this.getClient().sendScheduledMessageNow({ id });
-
-  /** Sends a message with `scheduled_at`, through `requestHandlers.scheduleMessageRequest` if set. */
   async scheduleMessage(request: SendMessageRequest) {
-    const sanitizedRequest = {
-      ...request,
-      message: sanitizeOutgoingAttachments(request.message),
-    };
-
-    const response = await this.sendScheduledMessageRequest(
-      this.scheduledMessageRequestHandlers.scheduleMessageRequest,
-      (params) => this.sendMessage(params),
-      sanitizedRequest,
-    );
-
-    if (response.scheduled_message)
-      this.applyScheduledMessage(response.scheduled_message);
-
-    return response;
+    return await this.scheduledMessageOperations.schedule(request);
   }
 
-  /** Edits a scheduled message, through `requestHandlers.updateScheduledMessageRequest` if set. */
   async updateScheduledMessage(id: string, request: UpdateScheduledMessageRequest) {
-    const { message } = request;
-    const sanitizedRequest = message
-      ? { ...request, message: sanitizeOutgoingAttachments(message) }
-      : request;
-
-    const { scheduled_message: scheduledMessage } =
-      await this.removeScheduledMessageWhenNotFound(id, () =>
-        this.sendScheduledMessageRequest(
-          this.scheduledMessageRequestHandlers.updateScheduledMessageRequest,
-          this.requestUpdateScheduledMessage,
-          { id, request: sanitizedRequest },
-        ),
-      );
-
-    this.applyScheduledMessage(scheduledMessage);
-
-    return scheduledMessage;
+    return await this.scheduledMessageOperations.update(id, request);
   }
 
-  /** Cancels a scheduled message, through `requestHandlers.deleteScheduledMessageRequest` if set. */
   async deleteScheduledMessage(id: string) {
-    const { scheduled_message: scheduledMessage } =
-      await this.removeScheduledMessageWhenNotFound(id, () =>
-        this.sendScheduledMessageRequest(
-          this.scheduledMessageRequestHandlers.deleteScheduledMessageRequest,
-          this.requestDeleteScheduledMessage,
-          { id },
-        ),
-      );
-
-    this.applyScheduledMessage({
-      ...scheduledMessage,
-      status: SCHEDULED_MESSAGE_STATUS.Canceled,
-    });
-
-    return scheduledMessage;
+    return await this.scheduledMessageOperations.cancel(id);
   }
 
-  /** Sends a scheduled message now, through `requestHandlers.sendScheduledMessageNowRequest` if set. */
   async sendScheduledMessageNow(id: string) {
-    const { scheduled_message: scheduledMessage } =
-      await this.removeScheduledMessageWhenNotFound(id, () =>
-        this.sendScheduledMessageRequest(
-          this.scheduledMessageRequestHandlers.sendScheduledMessageNowRequest,
-          this.requestSendScheduledMessageNow,
-          { id },
-        ),
-      );
-
-    this.applyScheduledMessage(scheduledMessage);
-
-    return scheduledMessage;
+    return await this.scheduledMessageOperations.sendNow(id);
   }
 
   async sendReaction(...args: Parameters<ChatApi['sendReaction']>) {
@@ -1405,11 +1294,16 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Reads `state.data`. Assigning publishes `data`, `memberCount` and `ownCapabilities` in one update.
-   * If the object omits `member_count` or `own_capabilities`, the last known values are carried onto
-   * a copy (the assigned object is not changed). Editing `channel.data.x` in place does not reach
-   * the state. `ownCapabilities` keeps its array while the capabilities stay the same (in any
-   * order), so a subscriber to it is notified only when they change.
+   * Reads `state.data`. Assigning publishes `data`, `memberCount`, `activeMemberCount` and
+   * `ownCapabilities` in one update. If the object omits `member_count`, `active_member_count` or
+   * `own_capabilities`, the last known values are carried onto a copy (the assigned object is not
+   * changed). A carried `active_member_count` moves with `member_count` (shifted by the change in
+   * membership, clamped to `member_count`), since only Query Channels returns it; treat it as a
+   * last-known estimate, refreshed on the next query — it can lag a (de)activation or an
+   * already-deactivated member being added or removed. Editing
+   * `channel.data.x` in place does not reach the state. `ownCapabilities` keeps its array while the
+   * capabilities stay the same (in any order), so a subscriber to it is notified only when they
+   * change.
    */
   get data(): Partial<ChannelResponse> | undefined {
     return this.state.getLatestValue().data;
@@ -1417,6 +1311,7 @@ export class Channel extends ChannelApi {
 
   set data(next: Partial<ChannelResponse> | undefined) {
     const {
+      activeMemberCount: previousActiveMemberCount,
       data: previous,
       memberCount: previousMemberCount,
       ownCapabilities: previousOwnCapabilities,
@@ -1425,27 +1320,40 @@ export class Channel extends ChannelApi {
       typeof next?.member_count !== 'number' && typeof previous?.member_count === 'number'
         ? previous.member_count
         : undefined;
+    const carriedActiveMemberCount = next
+      ? getCarriedActiveMemberCount({ next, previous })
+      : undefined;
     // `own_capabilities` stays undefined until known, so "not loaded" isn't read as "none"
     const carriedCapabilities =
       !Array.isArray(next?.own_capabilities) && Array.isArray(previous?.own_capabilities)
         ? [...previous.own_capabilities]
         : undefined;
 
+    const carriesMemberCount = carriedMemberCount !== undefined;
+    const carriesActiveMemberCount = carriedActiveMemberCount !== undefined;
+    const carriesValues =
+      carriesMemberCount || carriesActiveMemberCount || !!carriedCapabilities;
+
     const data =
-      next && (carriedMemberCount !== undefined || carriedCapabilities)
+      next && carriesValues
         ? {
             ...next,
-            ...(carriedMemberCount !== undefined && { member_count: carriedMemberCount }),
+            ...(carriesMemberCount && { member_count: carriedMemberCount }),
+            ...(carriesActiveMemberCount && {
+              active_member_count: carriedActiveMemberCount,
+            }),
             ...(carriedCapabilities && { own_capabilities: carriedCapabilities }),
           }
         : next;
 
     const memberCount = data?.member_count ?? carriedMemberCount;
+    const activeMemberCount = data ? data.active_member_count : previousActiveMemberCount;
     const ownCapabilities = data?.own_capabilities ?? carriedCapabilities ?? [];
     const toKey = (capabilities: readonly string[]) => [...capabilities].sort().join();
     const haveSameOwnCapabilities =
       toKey(previousOwnCapabilities) === toKey(ownCapabilities);
     this.state.partialNext({
+      activeMemberCount,
       data,
       memberCount: memberCount ?? previousMemberCount,
       ownCapabilities: haveSameOwnCapabilities

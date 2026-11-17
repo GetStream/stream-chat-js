@@ -1,7 +1,6 @@
 import type { MiddlewareHandlerParams } from '../../../middleware';
 import type { SharedLocationResponseData as Gen_SharedLocationResponseData } from '../../../gen/models';
 import type { MessageComposer } from '../../messageComposer';
-import { SCHEDULED_MESSAGE_STATUS } from '../../../scheduledMessages/constants';
 import { dateToNs, nowNs, nsToDate } from '../../../utils/time';
 import type {
   MessageComposerMiddlewareState,
@@ -9,8 +8,8 @@ import type {
 } from './types';
 
 /**
- * When the message is sent: the requested send time, the send time of the pending scheduled
- * message being edited, or `undefined` for now.
+ * When the message is sent: the requested send time, the send time of the scheduled message a
+ * scheduled save updates, or `undefined` for now.
  */
 const getSendTime = (
   composer: MessageComposer,
@@ -18,11 +17,8 @@ const getSendTime = (
 ): Date | undefined => {
   const scheduledAt = state.sendOptions.scheduled_at;
   if (scheduledAt) return new Date(scheduledAt);
-  const { editedScheduledMessage } = composer;
-  if (
-    editedScheduledMessage &&
-    editedScheduledMessage.status !== SCHEDULED_MESSAGE_STATUS.Failed
-  ) {
+  const { editedScheduledMessage } = composer.scheduledMessageComposition;
+  if (state.scheduling && editedScheduledMessage) {
     return nsToDate(editedScheduledMessage.scheduled_at);
   }
   return undefined;
