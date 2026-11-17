@@ -1,3 +1,4 @@
+import { constants } from 'buffer';
 import crypto from 'crypto';
 import zlib from 'zlib';
 
@@ -141,6 +142,26 @@ describe('Webhook verification + parsing', () => {
           `payload exceeds ${JSON_BODY.length - 1} bytes`,
         );
         webhookConfig.maxPayloadBytes = JSON_BODY.length;
+        expect(gunzipPayload(gzip(JSON_BODY)).toString('utf8')).toBe(JSON_BODY);
+      });
+
+      it.each([
+        [NaN, 'NaN'],
+        [0, '0'],
+        [-1, '-1'],
+        [Infinity, 'Infinity'],
+        ['5', '"5"'],
+      ])('rejects an invalid limit %s with a RangeError', (value, shown) => {
+        webhookConfig.maxPayloadBytes = value as number;
+        const run = () => gunzipPayload(gzip(JSON_BODY));
+        expect(run).toThrow(RangeError);
+        expect(run).toThrow(
+          `webhookConfig.maxPayloadBytes must be a positive integer, got ${shown}`,
+        );
+      });
+
+      it('clamps a limit above buffer.constants.MAX_LENGTH', () => {
+        webhookConfig.maxPayloadBytes = constants.MAX_LENGTH + 1;
         expect(gunzipPayload(gzip(JSON_BODY)).toString('utf8')).toBe(JSON_BODY);
       });
 
