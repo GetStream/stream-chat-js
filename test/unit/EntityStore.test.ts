@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { EntityStore } from '../../src/entityStore/EntityStore';
 import type { EntityStoreSubscriber } from '../../src/entityStore/EntityStore';
 import { StoreBackedItemIndex } from '../../src/entityStore/StoreBackedItemIndex';
+import { TombstoneConflictPolicy } from '../../src/entityStore/EntityConflictPolicy';
 import { formatMessage } from '../../src/utils';
 import { generateMsg } from './test-utils/generateMessage';
 import type { LocalMessage } from '../../src';
@@ -915,10 +916,25 @@ describe('EntityStore conflict resolution', () => {
   const isNewer = (incoming: Versioned, stored: Versioned) =>
     incoming.version >= stored.version;
 
-  const create = (options: {
-    isTombstone?: typeof isTombstone;
-    shouldReplace?: typeof isNewer;
-  }) => new EntityStore<Versioned>({ getEntityId: ({ id }) => id, ...options });
+  const getEntityId = ({ id }: Versioned) => id;
+
+  const create = (
+    options: {
+      isTombstone?: typeof isTombstone;
+      shouldReplace?: typeof isNewer;
+    } = {},
+  ) =>
+    new EntityStore<Versioned>({
+      getEntityId,
+      conflictPolicy: new TombstoneConflictPolicy<Versioned>({
+        getEntityId,
+        isTombstone: options.isTombstone ?? (() => false),
+        shouldReplace: options.shouldReplace ?? (() => true),
+      }),
+    });
+
+  const resolve = (store: EntityStore<Versioned>, item: Versioned) =>
+    store.conflictPolicy.resolveCanonicalEntity(item, store.get(item.id));
 
   const open = (version: number): Versioned => ({ id: 'e1', status: 'open', version });
 
@@ -963,8 +979,8 @@ describe('EntityStore conflict resolution', () => {
       store.upsert(newer);
       const older = open(1);
 
-      expect(store.resolveCanonicalEntity(older)).toBe(newer);
-      expect(store.resolveCanonicalEntity(open(3))).toEqual(open(3));
+      expect(resolve(store, older)).toBe(newer);
+      expect(resolve(store, open(3))).toEqual(open(3));
       expect(store.get(newer.id)).toBe(newer);
     });
   });
@@ -991,7 +1007,7 @@ describe('EntityStore conflict resolution', () => {
       storeAndRelease(store, removal);
       expect(store.has('e1')).toBe(false);
 
-      expect(store.resolveCanonicalEntity(open(1))).toBe(removal);
+      expect(resolve(store, open(1))).toBe(removal);
       store.upsert(open(1));
       expect(store.has('e1')).toBe(false);
     });
@@ -1001,21 +1017,21 @@ describe('EntityStore conflict resolution', () => {
       storeAndRelease(store, closed(2));
       const reopened = open(3);
 
-      expect(store.resolveCanonicalEntity(reopened)).toBe(reopened);
+      expect(resolve(store, reopened)).toBe(reopened);
       store.upsert(reopened);
 
       expect(store.get('e1')).toBe(reopened);
       // the tombstone is gone: an older copy now resolves against the stored one
-      expect(store.resolveCanonicalEntity(open(1))).toBe(reopened);
+      expect(resolve(store, open(1))).toBe(reopened);
     });
 
     it('records a tombstone that resolve saw, even if nothing stored it', () => {
       const store = withTombstones();
       const removal = closed(2);
 
-      store.resolveCanonicalEntity(removal);
+      resolve(store, removal);
 
-      expect(store.resolveCanonicalEntity(open(1))).toBe(removal);
+      expect(resolve(store, open(1))).toBe(removal);
     });
 
     it('drops the tombstones on clear', () => {
@@ -1031,7 +1047,7 @@ describe('EntityStore conflict resolution', () => {
 
     it('keeps a list from linking a stale copy of a removed entity', () => {
       const store = withTombstones();
-      store.resolveCanonicalEntity(closed(2));
+      resolve(store, closed(2));
       const index = new StoreBackedItemIndex<Versioned>({
         getEntityId: ({ id }) => id,
         owner: spySubscriber(),
@@ -1061,7 +1077,7 @@ describe('EntityStore conflict resolution', () => {
       expect(other.onEntityRemoved).toHaveBeenCalledWith('e1', stored);
       expect(writer.onEntityRemoved).not.toHaveBeenCalled();
       expect(writer.onEntitiesChanged).not.toHaveBeenCalled();
-      expect(store.resolveCanonicalEntity(open(1))).toEqual(closed(2));
+      expect(resolve(store, open(1))).toEqual(closed(2));
     });
 
     it('takes a removal out of the writing list and the others', () => {
@@ -1107,7 +1123,7 @@ describe('EntityStore conflict resolution', () => {
 
     store.upsert(older);
 
-    expect(store.resolveCanonicalEntity(older)).toBe(older);
+    expect(resolve(store, older)).toBe(older);
     expect(store.get('e1')).toBe(older);
   });
 });

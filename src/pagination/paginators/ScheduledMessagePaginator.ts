@@ -161,13 +161,19 @@ export class ScheduledMessagePaginator extends BasePaginator<
   }
 
   public filterQueryResults(items: ScheduledMessageResponse[]) {
-    const latestItems = items.map((item) => this.store.resolveCanonicalEntity(item));
+    const { conflictPolicy } = this.store;
+    const latestItems = items.map((item) =>
+      conflictPolicy.resolveCanonicalEntity(item, this.store.get(item.id)),
+    );
 
     return latestItems.filter((item) => this.matchesFilter(item));
   }
 
   public ingestItem(item: ScheduledMessageResponse): boolean {
-    const latest = this.store.resolveCanonicalEntity(item);
+    const latest = this.store.conflictPolicy.resolveCanonicalEntity(
+      item,
+      this.store.get(item.id),
+    );
 
     // the list already holds the copy that wins and placed it when it was stored (`onEntitiesChanged`
     // places copies other lists store): nothing to place
