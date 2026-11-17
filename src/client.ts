@@ -67,6 +67,7 @@ import { ThreadManager } from './thread_manager';
 import { DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE } from './constants';
 import { PollManager } from './poll_manager';
 import { EntityStore } from './entityStore/EntityStore';
+import { TombstoneConflictPolicy } from './entityStore/EntityConflictPolicy';
 import { ChannelManager } from './ChannelManager';
 import {
   ConnectionIdManager,
@@ -336,13 +337,14 @@ export class StreamChat extends ChatApi {
     this.messageStore = new EntityStore<LocalMessage>({
       getEntityId: (message) => message.id,
     });
-    // Before the channels and lists that use it.
     this.scheduledMessageStore = new EntityStore<ScheduledMessageResponse>({
       getEntityId: ({ id }) => id,
-      isTombstone: isRemovedScheduledMessage,
-      shouldReplace: shouldReplaceScheduledMessage,
+      conflictPolicy: new TombstoneConflictPolicy<ScheduledMessageResponse>({
+        getEntityId: ({ id }) => id,
+        isTombstone: isRemovedScheduledMessage,
+        shouldReplace: shouldReplaceScheduledMessage,
+      }),
     });
-    // Before the managers that claim channels in its store.
     this.channelManager = new ChannelManager({ client: this });
     this.threads = new ThreadManager({ client: this });
     this.polls = new PollManager({ client: this });
@@ -983,7 +985,10 @@ export class StreamChat extends ChatApi {
     const scheduledMessage = getScheduledMessageFromEvent(
       event as Parameters<typeof getScheduledMessageFromEvent>[0],
     );
-    if (scheduledMessage && this.scheduledMessageStore.removesEntity(scheduledMessage)) {
+    if (
+      scheduledMessage &&
+      this.scheduledMessageStore.conflictPolicy.removesEntity(scheduledMessage)
+    ) {
       this.scheduledMessageStore.upsert(scheduledMessage);
     }
 

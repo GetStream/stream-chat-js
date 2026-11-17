@@ -1,3 +1,5 @@
+import { identityConflictPolicy } from './EntityConflictPolicy';
+import type { EntityConflictPolicy } from './EntityConflictPolicy';
 import type { Unsubscribe } from '@stream-io/state-store';
 
 /**
@@ -63,16 +65,12 @@ export type EntityStoreOptions<T> = {
    */
   releaseOnLastUnlink?: boolean;
   /**
-   * Whether an incoming copy replaces the stored one (or its tombstone), on `upsert` and `resolveCanonicalEntity`.
-   * `false` skips the write. Defaults to always replacing.
+   * Decides, on every `upsert`, whether an incoming copy replaces the stored one and whether a copy
+   * removes its entity (keeping a tombstone so a later stale copy cannot bring it back). Defaults to
+   * always replacing and never removing; read by the store and its lists through
+   * {@link EntityStore.conflictPolicy}.
    */
-  shouldReplace?: (incoming: T, stored: T) => boolean;
-  /**
-   * Whether a copy removes its entity. Such a copy is kept as a tombstone (see `tombstones`), and
-   * upserting it removes the entry, so every other holder hears
-   * {@link EntityStoreSubscriber.onEntityRemoved}.
-   */
-  isTombstone?: (entity: T) => boolean;
+  conflictPolicy?: EntityConflictPolicy<T>;
 };
 
 /**
@@ -112,13 +110,7 @@ export class EntityStore<T> {
   private readonly getEntityId: (entity: T) => string;
   private readonly onRelease?: (entity: T) => void;
   private readonly releaseOnLastUnlink: boolean;
-  private readonly shouldReplace?: (incoming: T, stored: T) => boolean;
-  private readonly isTombstone?: (entity: T) => boolean;
-  /**
-   * The copy that removed each removed entity, kept after its entry is gone, so `shouldReplace` can
-   * refuse an older copy arriving late and let a newer one bring the entity back. Cleared by `clear`.
-   */
-  private tombstones = new Map<string, T>();
+  private readonly policy: EntityConflictPolicy<T>;
 
   private transactionDepth = 0;
   private pendingChanged = new Map<EntityStoreSubscriber, Set<string>>();
@@ -126,40 +118,19 @@ export class EntityStore<T> {
   private pendingFlushIds?: Set<string>;
 
   constructor({
+    conflictPolicy,
     getEntityId,
-    isTombstone,
     onRelease,
     releaseOnLastUnlink = true,
-    shouldReplace,
   }: EntityStoreOptions<T>) {
     this.getEntityId = getEntityId;
-    this.isTombstone = isTombstone;
     this.onRelease = onRelease;
     this.releaseOnLastUnlink = releaseOnLastUnlink;
-    this.shouldReplace = shouldReplace;
+    this.policy = conflictPolicy ?? identityConflictPolicy<T>();
   }
 
-  /**
-   * The canonical copy for `incoming`, without writing it: `incoming`, or the stored copy or tombstone
-   * it does not replace. Records or drops the tombstone accordingly.
-   */
-  resolveCanonicalEntity(incoming: T): T {
-    const id = this.getEntityId(incoming);
-    const current = this.byId.get(id) ?? this.tombstones.get(id);
-    const resolved =
-      current === undefined ||
-      !this.shouldReplace ||
-      this.shouldReplace(incoming, current)
-        ? incoming
-        : current;
-    if (this.removesEntity(resolved)) this.tombstones.set(id, resolved);
-    else this.tombstones.delete(id);
-    return resolved;
-  }
-
-  /** Whether `entity` is a copy that removes its entity (see `isTombstone` in the options). */
-  removesEntity(entity: T): boolean {
-    return this.isTombstone?.(entity) ?? false;
+  get conflictPolicy(): EntityConflictPolicy<T> {
+    return this.policy;
   }
 
   /**
@@ -284,22 +255,19 @@ export class EntityStore<T> {
   }
 
   /**
-   * Replaces the canonical copy of `entity` and notifies the subscribers watching its ID, unless
-   * {@link EntityStore.resolveCanonicalEntity} keeps another copy. A copy that removes its entity
-   * (`isTombstone`) is kept as the tombstone and removes the entry instead, as
-   * {@link EntityStore.remove} does.
+   * Replaces the canonical copy of `entity` and notifies the subscribers watching its ID.
    *
    * @param entity - The new canonical copy, stored under its own ID.
    * @param subscriber - The writer, which updates itself and is not notified.
    */
   upsert(entity: T, subscriber?: EntityStoreSubscriber): void {
-    if (this.resolveCanonicalEntity(entity) !== entity) return;
     const id = this.getEntityId(entity);
-    if (this.removesEntity(entity)) {
+    const previous = this.byId.get(id);
+    if (this.policy.resolveCanonicalEntity(entity, previous) !== entity) return;
+    if (this.policy.removesEntity(entity)) {
       this.dropEntry(id, { release: true, writer: subscriber });
       return;
     }
-    const previous = this.byId.get(id);
     // No-op on an unchanged reference, like `StateStore.next`.
     if (previous === entity) return;
     this.byId.set(id, entity);
@@ -426,10 +394,6 @@ export class EntityStore<T> {
     this.dropEntry(id, { release: false });
   }
 
-  /**
-   * @param options.writer - The holder whose write removed the entry: it updates itself, so it is
-   *   unlinked but neither notified nor told of the removal.
-   */
   private dropEntry(
     id: string,
     { release, writer }: { release: boolean; writer?: EntityStoreSubscriber },
@@ -454,15 +418,14 @@ export class EntityStore<T> {
   }
 
   /**
-   * Removes every entry, holder and tombstone. Each holder gets
-   * {@link EntityStoreSubscriber.onEntityRemoved} for every entity it held, then `onRelease` is called
-   * for each removed entity. A throwing holder or `onRelease` does not stop the clear: the first error
-   * is rethrown at the end.
+   * Removes every entry and holder. Each holder gets {@link EntityStoreSubscriber.onEntityRemoved}
+   * for every entity it held, then `onRelease` is called for each removed entity. A throwing holder
+   * or `onRelease` does not stop the clear: the first error is rethrown at the end.
    */
   clear(): void {
     const holdersById = this.subscribers;
     this.subscribers = new Map();
-    this.tombstones.clear();
+    this.policy.clear();
     this.pendingChanged.clear();
     this.pendingFlushIds = undefined;
     const runner = new RunnerWithErrorCollector();

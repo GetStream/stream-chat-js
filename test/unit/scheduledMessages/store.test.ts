@@ -109,11 +109,14 @@ describe('scheduled message store', () => {
 
     it('does not bring back a sent message, whatever updated_at says', () => {
       const store = createStore();
+      const { conflictPolicy } = store;
       const sent = generateScheduledMessage({ status: 'sent', updated_at: at(1) });
-      store.resolveCanonicalEntity(sent);
+      conflictPolicy.resolveCanonicalEntity(sent, store.get(sent.id));
+
+      const lateEdit = generateScheduledMessage({ updated_at: at(9) });
 
       expect(
-        store.resolveCanonicalEntity(generateScheduledMessage({ updated_at: at(9) })),
+        conflictPolicy.resolveCanonicalEntity(lateEdit, store.get(lateEdit.id)),
       ).toBe(sent);
     });
 
