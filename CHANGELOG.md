@@ -1,3 +1,10 @@
+## [10.1.0](https://github.com/GetStream/stream-chat-js/compare/v10.0.2...v10.1.0) (2026-11-17)
+
+### Features
+
+* expose the channel's active member count in v10 (REACT-1376) ([#2001](https://github.com/GetStream/stream-chat-js/issues/2001)) ([99fea1c](https://github.com/GetStream/stream-chat-js/commit/99fea1c23cb4f490f38df457aa3f6e0527a4318f)), closes [#2002](https://github.com/GetStream/stream-chat-js/issues/2002) [GetStream/stream-chat-react#3413](https://github.com/GetStream/stream-chat-react/issues/3413)
+* support quiet hours for push notifications in v10 (REACT-1375) ([#1999](https://github.com/GetStream/stream-chat-js/issues/1999)) ([0f5f5c1](https://github.com/GetStream/stream-chat-js/commit/0f5f5c134eca1c5a4c7d4edf2d38b81345e1ab62)), closes [#2000](https://github.com/GetStream/stream-chat-js/issues/2000)
+
 ## [10.0.2](https://github.com/GetStream/stream-chat-js/compare/v10.0.1...v10.0.2) (2026-11-11)
 
 ### Bug Fixes
