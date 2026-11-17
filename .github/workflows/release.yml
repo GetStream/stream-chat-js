@@ -10,11 +10,15 @@ on:
 permissions:
   id-token: write # Required for OIDC
   contents: write
+  issues: write
+  pull-requests: write
 
 jobs:
   package_release:
     name: Release from "${{ github.ref_name }}" branch
     runs-on: ubuntu-latest
+    # Only master and release-v* may use this environment, and the npm trusted publisher requires it.
+    environment: npm-release
     # GH does not allow to limit branches in the workflow_dispatch settings so this here is a safety measure
     if: ${{ inputs.dry_run || github.ref_name == 'rc' || startsWith(github.ref_name, 'release') || startsWith(github.ref_name, 'master') }}
     env:
@@ -29,9 +33,7 @@ jobs:
 
       - name: Release
         env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-          # https://github.com/stream-ci-bot
-          GITHUB_TOKEN: ${{ secrets.DOCUSAURUS_GH_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_CONFIG_PROVENANCE: 'true'
         run: >
           yarn semantic-release
