@@ -35,9 +35,13 @@ describe('Reminder', () => {
       updated_at: new Date(data.updated_at),
       timeLeftMs: scheduleOffsetMs,
     });
-    expect(Math.floor((reminderState!.timeLeftMs as number) / 1000)).toBe(
-      Math.floor((remindAtDate.getTime() - now.getTime()) / 1000),
-    );
+    // `timeLeftMs` is read inside the constructor and `now` after it, so the two clock reads
+    // can fall on different sides of a whole second. Compare them with a tolerance.
+    expect(
+      Math.abs(
+        (reminderState!.timeLeftMs as number) - (remindAtDate.getTime() - now.getTime()),
+      ),
+    ).toBeLessThan(1000);
     expect(reminder.timer).toBeInstanceOf(ReminderTimer);
     expect(reminder.timer.timeout).toEqual(expect.any(Object));
   });
