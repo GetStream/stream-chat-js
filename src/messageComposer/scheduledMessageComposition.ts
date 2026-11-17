@@ -9,11 +9,9 @@ import {
 import { getScheduleBlockReason } from './middleware/messageComposer/scheduledMessage';
 import { CommandSearchSource } from './middleware/textComposer/commands';
 import {
-  resolveMentionedUsers,
-  resolveQuotedMessage,
   toScheduledMessageComposition,
   toScheduledMessagePayload,
-} from './scheduledMessage';
+} from '../scheduledMessages/composition';
 import { chatLoggerSystem } from '../logger';
 import type { Unsubscribe } from '@stream-io/state-store';
 import type { CoreNotificationType } from '../notifications';
@@ -293,9 +291,13 @@ export class ScheduledMessageComposition extends WithSubscriptions {
       show_in_channel: showReplyInChannel = false,
     } = message;
 
+    const quotedMessagePromise = quotedMessageId
+      ? composer.client.getMessageById(quotedMessageId)
+      : null;
+
     const [mentionedUsers, quotedMessage] = await Promise.all([
-      resolveMentionedUsers(composer.client, mentionedUserIds),
-      resolveQuotedMessage(composer.channel, quotedMessageId),
+      composer.client.getUsersByIds(mentionedUserIds),
+      quotedMessagePromise,
     ]);
 
     this.saveCompositionBeforeEdit();
