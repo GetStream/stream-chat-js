@@ -1677,7 +1677,7 @@ describe('Poll optimistic updates', () => {
 
 				// the removal succeeds and starts the timeout, the cast that follows is slow
 				const removal = poll.removeVote(removed.id, messageId);
-				poll.castVote(optionC, messageId);
+				const cast = poll.castVote(optionC, messageId);
 				await removal;
 				vi.advanceTimersByTime(3000);
 
@@ -1694,6 +1694,7 @@ describe('Poll optimistic updates', () => {
 
 				// the removal's event is lost too, so the failed vote stays shown until the timeout
 				slowRequest.reject(new Error('failed'));
+				await expect(cast).rejects.toThrow('failed');
 				await vi.advanceTimersByTimeAsync(0);
 				expect(poll.data.ownVotesByOptionId[optionC].id).toMatch(/^local-/);
 
