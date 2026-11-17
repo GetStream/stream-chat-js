@@ -8,7 +8,6 @@ export * from './linkPreviewsManager';
 export * from './LocationComposer';
 export * from './messageComposer';
 export * from './middleware';
-export { toScheduledMessagePreview } from './scheduledMessage';
 export * from './scheduledMessageComposition';
 export * from './pollComposer';
 export * from './textComposer';

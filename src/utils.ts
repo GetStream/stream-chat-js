@@ -69,6 +69,17 @@ export function isFunction(value: unknown): value is (...args: unknown[]) => unk
   );
 }
 
+export const pickFields = <T extends object, K extends keyof T>(
+  source: T,
+  fields: readonly K[],
+): Pick<T, K> =>
+  Object.fromEntries(
+    fields.filter((field) => field in source).map((field) => [field, source[field]]),
+  ) as Pick<T, K>;
+
+export const omitFields = <T extends object>(source: T, fields: ReadonlySet<string>) =>
+  Object.fromEntries(Object.entries(source).filter(([field]) => !fields.has(field)));
+
 export const chatCodes = {
   TOKEN_EXPIRED: 40,
   WS_CLOSED_SUCCESS: 1000,

@@ -1,17 +1,12 @@
 import { LOCAL_MESSAGE_FIELDS, RESERVED_UPDATED_MESSAGE_FIELDS } from '../constants';
-import { chatLoggerSystem } from '../logger';
-import { formatMessage } from '../utils';
+import { formatMessage, omitFields, pickFields } from '../utils';
 import { nsToDate } from '../utils/time';
-import type { Channel } from '../channel';
-import type { StreamChat } from '../client';
 import type {
   MessageRequest,
   ScheduledMessageContentResponse,
   ScheduledMessageResponse,
 } from '../gen/models';
-import type { DraftMessage, DraftResponse, LocalMessage, UserResponse } from '../types';
-
-const logger = chatLoggerSystem.getLogger('message-composer');
+import type { DraftMessage, DraftResponse, LocalMessage } from '../types';
 
 const SCHEDULED_MESSAGE_SERVER_FIELDS = ['id', 'mml'];
 
@@ -47,17 +42,6 @@ const STORED_FIELDS_REPLACED_ON_UPDATE: ReadonlySet<string> = new Set([
 const COMPOSED_FIELDS_DROPPED_ON_UPDATE: ReadonlySet<string> = new Set(
   [...SERVER_OWNED_FIELDS].filter((field) => !COMPOSER_OWNED_FIELDS.has(field)),
 );
-
-const omitFields = <T extends object>(source: T, fields: ReadonlySet<string>) =>
-  Object.fromEntries(Object.entries(source).filter(([field]) => !fields.has(field)));
-
-const pickFields = <T extends object, K extends keyof T>(
-  source: T,
-  fields: readonly K[],
-): Pick<T, K> =>
-  Object.fromEntries(
-    fields.filter((field) => field in source).map((field) => [field, source[field]]),
-  ) as Pick<T, K>;
 
 export const toScheduledMessageDraft = (
   scheduledMessage: ScheduledMessageResponse,
@@ -155,60 +139,4 @@ export const toScheduledMessagePreview = (
     updated_at: scheduled_at,
     user,
   });
-};
-
-export const resolveMentionedUsers = async (
-  client: StreamChat,
-  userIds: string[] = [],
-): Promise<UserResponse[]> => {
-  const knownUsers = client.state.users;
-  const missingUserIds = userIds.filter((userId) => !knownUsers[userId]);
-
-  const fetchedUsers: Record<string, UserResponse> = {};
-
-  if (missingUserIds.length) {
-    try {
-      const { users } = await client.queryUsers({
-        payload: { filter_conditions: { id: { $in: missingUserIds } } },
-      });
-      users.forEach((user) => (fetchedUsers[user.id] = user));
-    } catch (error) {
-      logger
-        .withExtraTags('resolveMentionedUsers')
-        .error('Resolving the mentioned users failed.', { error });
-    }
-  }
-
-  const mentionedUsers = userIds.map(
-    (userId): UserResponse =>
-      knownUsers[userId] ?? fetchedUsers[userId] ?? ({ id: userId } as UserResponse),
-  );
-
-  return mentionedUsers;
-};
-
-export const resolveQuotedMessage = async (
-  channel: Channel,
-  quotedMessageId?: string,
-): Promise<LocalMessage | null> => {
-  if (!quotedMessageId) return null;
-
-  const client = channel.getClient();
-  const storedMessage = client.messageStore.get(quotedMessageId);
-
-  if (storedMessage) return storedMessage;
-
-  try {
-    const { message } = await client.getMessage({ id: quotedMessageId });
-
-    const quotedMessage = formatMessage(message);
-
-    return quotedMessage;
-  } catch (error) {
-    logger
-      .withExtraTags('resolveQuotedMessage')
-      .error('Resolving the quoted message failed.', { error });
-
-    return null;
-  }
 };
