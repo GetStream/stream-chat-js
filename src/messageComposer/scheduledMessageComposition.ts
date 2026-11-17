@@ -3,11 +3,11 @@ import { WithSubscriptions } from '../utils/WithSubscriptions';
 import { CORE_NOTIFICATION_TYPE } from '../notifications';
 import {
   SCHEDULED_MESSAGE_STATUS,
+  ScheduledMessageBlockReason,
   ScheduledMessageCompositionEndReason,
   ScheduledMessageEventType,
 } from '../scheduledMessages/constants';
-import { getScheduleBlockReason } from './middleware/messageComposer/scheduledMessage';
-import { CommandSearchSource } from './middleware/textComposer/commands';
+import { getCurrentCommand } from './middleware/textComposer/commandUtils';
 import {
   toScheduledMessageComposition,
   toScheduledMessagePayload,
@@ -15,7 +15,6 @@ import {
 import { chatLoggerSystem } from '../logger';
 import type { Unsubscribe } from '@stream-io/state-store';
 import type { CoreNotificationType } from '../notifications';
-import type { ScheduledMessageBlockReason } from '../scheduledMessages/constants';
 import type { ScheduledMessageResponse } from '../gen/models';
 import type { DraftResponse } from '../types';
 import type { MessageComposer } from './messageComposer';
@@ -50,7 +49,6 @@ export class ScheduledMessageComposition extends WithSubscriptions {
   public readonly state: StateStore<ScheduledMessageCompositionState>;
   private readonly composer: MessageComposer;
   private restoreAfterEdit: ScheduledMessageEditRestore | null = null;
-  private scheduleCommandSearchSource: CommandSearchSource | undefined;
 
   constructor({ composer }: ScheduledMessageCompositionOptions) {
     super();
@@ -73,9 +71,23 @@ export class ScheduledMessageComposition extends WithSubscriptions {
   }
 
   get scheduleBlockReason(): ScheduledMessageBlockReason | undefined {
-    this.scheduleCommandSearchSource ??= new CommandSearchSource(this.composer.channel);
+    const { channel, locationComposer } = this.composer;
 
-    return getScheduleBlockReason(this.composer, this.scheduleCommandSearchSource);
+    if (!channel.scheduledMessagesEnabled) {
+      return ScheduledMessageBlockReason.Unavailable;
+    }
+
+    if (getCurrentCommand(this.composer)) {
+      return ScheduledMessageBlockReason.Command;
+    }
+
+    // A poll can be scheduled. A location cannot: a static one would be stale by the time it is
+    // sent, and a live one would have its sharing window counted from now.
+    if (locationComposer.validLocation) {
+      return ScheduledMessageBlockReason.SharedLocation;
+    }
+
+    return undefined;
   }
 
   get pausesDrafts(): boolean {
@@ -181,16 +193,9 @@ export class ScheduledMessageComposition extends WithSubscriptions {
     if (isFailedMessageStillThere) return;
 
     this.endEdit();
-    this.composer.client.notifications.addWarning({
-      message: 'The scheduled message can no longer be edited',
-      origin: {
-        emitter: 'MessageComposer',
-        context: { composer: this.composer },
-      },
-      options: {
-        type: CORE_NOTIFICATION_TYPE.scheduledMessageCompositionEnded,
-        metadata: { reason },
-      },
+    this.composer.notifyWarning('The scheduled message can no longer be edited', {
+      type: CORE_NOTIFICATION_TYPE.scheduledMessageCompositionEnded,
+      metadata: { reason },
     });
   };
 

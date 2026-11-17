@@ -1,5 +1,5 @@
 import { CORE_NOTIFICATION_TYPE } from '../notifications';
-import type { CoreNotificationType } from '../notifications';
+import type { CoreNotificationType, NotificationOptions } from '../notifications';
 import { AttachmentManager } from './attachmentManager';
 import { isResolvableUpload, isSendableAttachment } from './attachmentIdentity';
 import { CustomDataManager } from './CustomDataManager';
@@ -61,6 +61,7 @@ import {
   getMentionedUsersInText,
   stripCommandFromText,
 } from './middleware/textComposer/commandUtils';
+import { CommandSearchSource } from './middleware/textComposer/commands';
 import { ScheduledMessageComposition } from './scheduledMessageComposition';
 
 type UnregisterSubscriptions = Unsubscribe;
@@ -224,6 +225,7 @@ export class MessageComposer extends WithSubscriptions {
   customDataManager: CustomDataManager;
   readonly scheduledMessageComposition: ScheduledMessageComposition;
   private snapshots: MessageComposerSnapshot[] = [];
+  private _commandSearchSource?: CommandSearchSource;
   private effectHandlers: MessageComposerEffectHandlers;
   private readonly configController: ConfigController<
     MessageComposerConfig,
@@ -455,6 +457,10 @@ export class MessageComposer extends WithSubscriptions {
   get isCommandSendable() {
     const currentCommand = this.textComposer.command;
     return !currentCommand || this.validateCommandSendability(currentCommand).ready;
+  }
+
+  get commandSearchSource(): CommandSearchSource {
+    return (this._commandSearchSource ??= new CommandSearchSource(this.channel));
   }
 
   /** See {@link AttachmentManagerConfig.pendingUploadsEnabled}. */
@@ -1203,13 +1209,22 @@ export class MessageComposer extends WithSubscriptions {
     this.clear();
   };
 
+  private get notificationOrigin() {
+    return { emitter: 'MessageComposer' as const, context: { composer: this } };
+  }
+
+  notifyWarning = (message: string, options?: NotificationOptions) => {
+    this.client.notifications.addWarning({
+      message,
+      origin: this.notificationOrigin,
+      options,
+    });
+  };
+
   reportSubmitFailure = (type: CoreNotificationType, message: string, error: unknown) => {
     this.client.notifications.addError({
       message,
-      origin: {
-        emitter: 'MessageComposer',
-        context: { composer: this },
-      },
+      origin: this.notificationOrigin,
       options: {
         type,
         metadata: { reason: (error as Error).message },

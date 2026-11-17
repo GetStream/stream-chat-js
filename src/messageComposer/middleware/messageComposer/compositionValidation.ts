@@ -1,6 +1,5 @@
 import { textIsEmpty } from '../../textComposer';
 import type { Command } from '../../../types';
-import { CommandSearchSource } from '../textComposer/commands';
 import {
   getCommandByName,
   getCurrentCommand,
@@ -19,10 +18,12 @@ import type { MiddlewareHandlerParams } from '../../../middleware';
 
 const getDisabledRawCommand = (
   composer: MessageComposer,
-  searchSource: CommandSearchSource,
   text?: string,
 ): Command | undefined => {
-  const rawCommand = getCommandByName(searchSource, getRawCommandName(text));
+  const rawCommand = getCommandByName(
+    composer.commandSearchSource,
+    getRawCommandName(text),
+  );
   if (rawCommand && composer.isCommandDisabled(rawCommand)) {
     return rawCommand;
   }
@@ -30,59 +31,45 @@ const getDisabledRawCommand = (
 
 export const createCompositionValidationMiddleware = (
   composer: MessageComposer,
-  commandSearchSource?: CommandSearchSource,
-): MessageCompositionMiddleware => {
-  const effectiveCommandSearchSource =
-    commandSearchSource ?? new CommandSearchSource(composer.channel);
+): MessageCompositionMiddleware => ({
+  id: 'stream-io/message-composer-middleware/data-validation',
+  handlers: {
+    compose: async ({
+      state,
+      discard,
+      forward,
+    }: MiddlewareHandlerParams<MessageComposerMiddlewareState>) => {
+      const { maxLengthOnSend } = composer.config.text ?? {};
+      const inputText = state.message.text ?? '';
 
-  return {
-    id: 'stream-io/message-composer-middleware/data-validation',
-    handlers: {
-      compose: async ({
-        state,
-        discard,
-        forward,
-      }: MiddlewareHandlerParams<MessageComposerMiddlewareState>) => {
-        const { maxLengthOnSend } = composer.config.text ?? {};
-        const inputText = state.message.text ?? '';
+      const disabledRawCommand = getDisabledRawCommand(composer, inputText);
+      if (disabledRawCommand) {
+        notifyCommandDisabled(composer, disabledRawCommand);
+        return await discard();
+      }
 
-        const disabledRawCommand = getDisabledRawCommand(
+      const currentCommand = getCurrentCommand(composer, inputText);
+      if (
+        currentCommand &&
+        notifyCommandNotReady({
           composer,
-          effectiveCommandSearchSource,
-          inputText,
-        );
-        if (disabledRawCommand) {
-          notifyCommandDisabled(composer, disabledRawCommand);
-          return await discard();
-        }
+          sendability: composer.validateCommandSendability(currentCommand, inputText),
+        })
+      ) {
+        return await discard();
+      }
 
-        const currentCommand = getCurrentCommand(
-          composer,
-          effectiveCommandSearchSource,
-          inputText,
-        );
-        if (
-          currentCommand &&
-          notifyCommandNotReady({
-            composer,
-            sendability: composer.validateCommandSendability(currentCommand, inputText),
-          })
-        ) {
-          return await discard();
-        }
+      const hasExceededMaxLength =
+        typeof maxLengthOnSend === 'number' && inputText.length > maxLengthOnSend;
 
-        const hasExceededMaxLength =
-          typeof maxLengthOnSend === 'number' && inputText.length > maxLengthOnSend;
+      if (composer.compositionIsEmpty || hasExceededMaxLength) {
+        return await discard();
+      }
 
-        if (composer.compositionIsEmpty || hasExceededMaxLength) {
-          return await discard();
-        }
-
-        return await forward();
-      },
+      return await forward();
     },
-  };
-};
+  },
+});
 
 export const createDraftCompositionValidationMiddleware = (
   composer: MessageComposer,
