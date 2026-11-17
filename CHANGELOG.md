@@ -1,3 +1,10 @@
+## [10.0.2](https://github.com/GetStream/stream-chat-js/compare/v10.0.1...v10.0.2) (2026-11-11)
+
+### Bug Fixes
+
+* export parsed SDK version for feature detection ([#2012](https://github.com/GetStream/stream-chat-js/issues/2012)) ([e9a9d98](https://github.com/GetStream/stream-chat-js/commit/e9a9d9824ca3e8ef930c020192e7319b8117a591))
+* use v2 endpoint for unbanUser ([#2008](https://github.com/GetStream/stream-chat-js/issues/2008)) ([11edde3](https://github.com/GetStream/stream-chat-js/commit/11edde37da3cd25df1c74bd8b954d3d583efee62))
+
 ## [10.0.1](https://github.com/GetStream/stream-chat-js/compare/v10.0.0...v10.0.1) (2026-11-09)
 
 ### Bug Fixes
