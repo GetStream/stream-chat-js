@@ -1,7 +1,8 @@
+import { constants } from 'buffer';
 import crypto from 'crypto';
 import zlib from 'zlib';
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { StreamChat } from '../../src/client';
 import {
@@ -15,6 +16,7 @@ import {
   verifySignature,
   InvalidWebhookError,
   InvalidWebhookErrorMessages,
+  webhookConfig,
 } from '../../src/signing';
 
 const JSON_BODY = '{"type":"message.new","message":{"text":"the quick brown fox"}}';
@@ -108,6 +110,72 @@ describe('Webhook verification + parsing', () => {
       const bad = Buffer.concat([Buffer.from([0x1f, 0x8b]), Buffer.from([0, 0, 0])]);
       expect(() => gunzipPayload(bad)).toThrow(InvalidWebhookError);
       expect(() => gunzipPayload(bad)).toThrow(InvalidWebhookErrorMessages.gzipFailed);
+    });
+
+    describe('size limit', () => {
+      const defaultLimit = webhookConfig.maxPayloadBytes;
+
+      afterEach(() => {
+        webhookConfig.maxPayloadBytes = defaultLimit;
+      });
+
+      it('defaults to 10 MiB', () => {
+        expect(defaultLimit).toBe(10 * 1024 * 1024);
+      });
+
+      it('inflates a body of exactly the limit', () => {
+        expect(gunzipPayload(gzip(Buffer.alloc(defaultLimit))).length).toBe(defaultLimit);
+      });
+
+      it('rejects a gzip bomb before the signature check', () => {
+        const bomb = gzip(Buffer.alloc(defaultLimit + 1));
+        const message = `${InvalidWebhookErrorMessages.gzipFailed}: payload exceeds ${defaultLimit} bytes`;
+        expect(() => verifyAndParseWebhook(bomb, 'deadbeef', API_SECRET)).toThrow(
+          new InvalidWebhookError(message),
+        );
+        expect(() => parseSqs(base64(bomb))).toThrow(new InvalidWebhookError(message));
+      });
+
+      it('honours a custom limit', () => {
+        webhookConfig.maxPayloadBytes = JSON_BODY.length - 1;
+        expect(() => gunzipPayload(gzip(JSON_BODY))).toThrow(
+          `payload exceeds ${JSON_BODY.length - 1} bytes`,
+        );
+        webhookConfig.maxPayloadBytes = JSON_BODY.length;
+        expect(gunzipPayload(gzip(JSON_BODY)).toString('utf8')).toBe(JSON_BODY);
+      });
+
+      it.each([
+        [NaN, 'NaN'],
+        [0, '0'],
+        [-1, '-1'],
+        [Infinity, 'Infinity'],
+        ['5', '"5"'],
+      ])('rejects an invalid limit %s with a RangeError', (value, shown) => {
+        webhookConfig.maxPayloadBytes = value as number;
+        const run = () => gunzipPayload(gzip(JSON_BODY));
+        expect(run).toThrow(RangeError);
+        expect(run).toThrow(
+          `webhookConfig.maxPayloadBytes must be a positive integer, got ${shown}`,
+        );
+      });
+
+      it('clamps a limit above buffer.constants.MAX_LENGTH', () => {
+        webhookConfig.maxPayloadBytes = constants.MAX_LENGTH + 1;
+        expect(gunzipPayload(gzip(JSON_BODY)).toString('utf8')).toBe(JSON_BODY);
+      });
+
+      it('does not limit uncompressed bodies', () => {
+        webhookConfig.maxPayloadBytes = 1;
+        expect(gunzipPayload(JSON_BODY).toString('utf8')).toBe(JSON_BODY);
+      });
+
+      it('keeps the plain gzip failure for corrupt gzip', () => {
+        const bad = Buffer.concat([Buffer.from([0x1f, 0x8b]), Buffer.from([0, 0, 0])]);
+        expect(() => gunzipPayload(bad)).toThrow(
+          new InvalidWebhookError(InvalidWebhookErrorMessages.gzipFailed),
+        );
+      });
     });
   });
 

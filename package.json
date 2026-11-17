@@ -29,6 +29,7 @@
     }
   },
   "browser": {
+    "buffer": false,
     "crypto": false,
     "https": false,
     "jsonwebtoken": false,

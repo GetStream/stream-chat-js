@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import zlib from 'zlib';
+import buffer from 'buffer';
 import { decodeBase64, encodeBase64 } from './base64';
 import type { Event, UR } from './types';
 
@@ -150,6 +151,19 @@ export class InvalidWebhookError extends Error {
 }
 
 /**
+ * Webhook helper settings.
+ *
+ * `maxPayloadBytes` caps the decompressed size of a gzip webhook body
+ * (default 10 MiB). {@link gunzipPayload} runs before the signature
+ * check, so without a cap an unsigned gzip bomb could exhaust memory.
+ * Raise it if your events are larger. It must be a positive integer;
+ * values above `buffer.constants.MAX_LENGTH` are clamped to it.
+ */
+export const webhookConfig = {
+  maxPayloadBytes: 10 * 1024 * 1024,
+};
+
+/**
  * Returns `body` as a `Buffer`, gzip-decompressed when its first two
  * bytes match the gzip magic (`1f 8b`, per RFC 1952). When the body is
  * plain JSON (no compression, or middleware already decompressed), the
@@ -158,15 +172,34 @@ export class InvalidWebhookError extends Error {
  * Magic-byte detection (rather than relying on a header) keeps the
  * same handler correct when middleware - Express, Next.js, AWS Lambda
  * - auto-decompresses the request before your code sees it.
+ *
+ * @throws {InvalidWebhookError} When the body has the gzip magic but is
+ *   not valid gzip, or inflates to more than
+ *   `webhookConfig.maxPayloadBytes`.
+ * @throws {RangeError} When the body has the gzip magic and
+ *   `webhookConfig.maxPayloadBytes` is not a positive integer.
  */
 export function gunzipPayload(rawBody: string | Buffer): Buffer {
   const GZIP_MAGIC = Buffer.from([0x1f, 0x8b]);
 
   const body = Buffer.isBuffer(rawBody) ? rawBody : Buffer.from(rawBody);
   if (body.length >= 2 && body.subarray(0, 2).equals(GZIP_MAGIC)) {
+    const max = webhookConfig.maxPayloadBytes;
+    if (!Number.isInteger(max) || max < 1) {
+      const got = typeof max === 'string' ? JSON.stringify(max) : String(max);
+      throw new RangeError(
+        `webhookConfig.maxPayloadBytes must be a positive integer, got ${got}`,
+      );
+    }
+    const limit = Math.min(max, buffer.constants.MAX_LENGTH);
     try {
-      return zlib.gunzipSync(body);
-    } catch {
+      return zlib.gunzipSync(body, { maxOutputLength: limit });
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ERR_BUFFER_TOO_LARGE') {
+        throw new InvalidWebhookError(
+          `${InvalidWebhookErrorMessages.gzipFailed}: payload exceeds ${limit} bytes`,
+        );
+      }
       throw new InvalidWebhookError(InvalidWebhookErrorMessages.gzipFailed);
     }
   }
@@ -261,8 +294,8 @@ function verifyAndParse(payload: Buffer, signature: string, secret: string): Eve
  * @param rawBody Raw HTTP request body bytes Stream signed
  * @param signature Value of the `X-Signature` header
  * @param secret Your app's API secret
- * @throws {InvalidWebhookError} When the signature does not match or
- *   the gzip envelope is malformed.
+ * @throws {InvalidWebhookError} When the signature does not match, or
+ *   the gzip envelope is malformed or exceeds `webhookConfig.maxPayloadBytes`.
  */
 export function verifyAndParseWebhook(
   rawBody: string | Buffer,
