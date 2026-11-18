@@ -108,8 +108,6 @@ export {
   logChatPromiseExecution,
   localMessageToNewMessagePayload,
   formatMessage,
-  pickFields,
-  omitFields,
 } from './utils';
 export { FixedSizeQueueCache } from './utils/FixedSizeQueueCache';
 export {
