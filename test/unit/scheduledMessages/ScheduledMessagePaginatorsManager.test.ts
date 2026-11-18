@@ -292,6 +292,30 @@ describe('ScheduledMessagePaginatorsManager', () => {
       await dispatchEvent(client, generateEvent('scheduled_message.created', sm));
       expect(itemsOf(all)).toEqual([]);
     });
+
+    it('keeps handling events until the last consumer unregisters', async () => {
+      const { all, client, manager } = setup();
+      await all.toTail();
+      const whileShared = generateScheduledMessage();
+      const afterTeardown = generateScheduledMessage();
+
+      manager.registerSubscriptions();
+      manager.registerSubscriptions();
+
+      manager.unregisterSubscriptions();
+      await dispatchEvent(
+        client,
+        generateEvent('scheduled_message.created', whileShared),
+      );
+      expect(itemsOf(all)).toEqual([whileShared]);
+
+      manager.unregisterSubscriptions();
+      await dispatchEvent(
+        client,
+        generateEvent('scheduled_message.created', afterTeardown),
+      );
+      expect(itemsOf(all)).toEqual([whileShared]);
+    });
   });
 
   describe('ordering', () => {
