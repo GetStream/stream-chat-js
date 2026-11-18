@@ -338,28 +338,38 @@ describe('ScheduledMessagePaginatorsManager', () => {
       expect(itemsOf(all)).toEqual([failedSooner, scheduled, sending]);
     });
 
-    it('breaks scheduled_at ties by text', async () => {
+    it('breaks scheduled_at ties by created_at', async () => {
       const { all, manager } = setup();
       await all.toTail();
-      const pizza = generateScheduledMessage({
+      const earlier = generateScheduledMessage({
+        created_at: at(1),
         message: { custom: {}, text: 'Pizza tonight?' },
         scheduled_at: at(10),
       });
-      const lunch = generateScheduledMessage({
+      const later = generateScheduledMessage({
+        created_at: at(2),
         message: { custom: {}, text: 'Lunch at noon' },
         scheduled_at: at(10),
       });
 
-      [pizza, lunch].forEach(manager.ingest);
+      [later, earlier].forEach(manager.ingest);
 
-      expect(itemsOf(all)).toEqual([lunch, pizza]);
+      expect(itemsOf(all)).toEqual([earlier, later]);
     });
 
-    it('breaks scheduled_at and text ties by id', async () => {
+    it('breaks scheduled_at and created_at ties by id', async () => {
       const { all, manager } = setup();
       await all.toTail();
-      const b = generateScheduledMessage({ id: 'b', scheduled_at: at(10) });
-      const a = generateScheduledMessage({ id: 'a', scheduled_at: at(10) });
+      const b = generateScheduledMessage({
+        created_at: at(1),
+        id: 'b',
+        scheduled_at: at(10),
+      });
+      const a = generateScheduledMessage({
+        created_at: at(1),
+        id: 'a',
+        scheduled_at: at(10),
+      });
 
       [b, a].forEach(manager.ingest);
 

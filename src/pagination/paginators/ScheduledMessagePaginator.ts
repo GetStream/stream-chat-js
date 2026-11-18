@@ -40,13 +40,13 @@ const compareValues = <TValue extends number | string>(first: TValue, second: TV
   first < second ? -1 : first > second ? 1 : 0;
 
 // Earliest first. Failed messages need no rule of their own: they failed at their send time, so they
-// precede the pending ones. Messages due at the same time sort by text.
+// precede the pending ones. Ties break on `created_at` then `id`, both stable under edits.
 const defaultScheduledMessagesComparator = (
   first: ScheduledMessageResponse,
   second: ScheduledMessageResponse,
 ) =>
   compareValues<number>(first.scheduled_at, second.scheduled_at) ||
-  compareValues(first.message.text ?? '', second.message.text ?? '') ||
+  compareValues<number>(first.created_at, second.created_at) ||
   compareValues(first.id, second.id);
 
 /**
