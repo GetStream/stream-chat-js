@@ -81,8 +81,6 @@ export class ScheduledMessageComposition extends WithSubscriptions {
       return ScheduledMessageBlockReason.Command;
     }
 
-    // A poll can be scheduled. A location cannot: a static one would be stale by the time it is
-    // sent, and a live one would have its sharing window counted from now.
     if (locationComposer.validLocation) {
       return ScheduledMessageBlockReason.SharedLocation;
     }
