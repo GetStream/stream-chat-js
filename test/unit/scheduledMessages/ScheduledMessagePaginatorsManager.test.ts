@@ -478,6 +478,38 @@ describe('ScheduledMessagePaginatorsManager', () => {
       expect(itemsOf(all)).toEqual([failedOne]);
     });
 
+    it('drops an in-flight reload superseded by a filter change', async () => {
+      const { all, client } = setup();
+      const pending = generateScheduledMessage();
+      const stale = generateScheduledMessage({ scheduled_at: at(10) });
+      const failedOne = generateScheduledMessage({
+        scheduled_at: at(20),
+        status: 'failed',
+      });
+
+      vi.mocked(client.queryScheduledMessages).mockResolvedValueOnce(
+        queryResponse([pending]),
+      );
+      await all.toTail();
+
+      const slow = deferred<Awaited<ReturnType<typeof client.queryScheduledMessages>>>();
+      vi.mocked(client.queryScheduledMessages).mockReturnValueOnce(slow.promise);
+      const reloading = all.reload();
+
+      all.filter = { status: ['failed'] };
+
+      slow.resolve(queryResponse([stale]));
+      await reloading;
+
+      expect(all.items).toBeUndefined();
+
+      vi.mocked(client.queryScheduledMessages).mockResolvedValueOnce(
+        queryResponse([failedOne]),
+      );
+      await all.reload();
+      expect(itemsOf(all)).toEqual([failedOne]);
+    });
+
     it('loads the next page with the cursor of the previous one', async () => {
       const { all, client } = setup();
       const first = generateScheduledMessage({ scheduled_at: at(10) });

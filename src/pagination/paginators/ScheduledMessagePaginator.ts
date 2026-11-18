@@ -241,15 +241,24 @@ export class ScheduledMessagePaginator extends BasePaginator<
    * joins it.
    */
   reload = (): Promise<void> => {
-    this.reloadInFlight ??= this.reloadFirstPage().finally(() => {
-      this.reloadInFlight = undefined;
-    });
+    if (!this.reloadInFlight) {
+      const inFlight = this.reloadFirstPage().finally(() => {
+        if (this.reloadInFlight === inFlight) this.reloadInFlight = undefined;
+      });
+      this.reloadInFlight = inFlight;
+    }
     return this.reloadInFlight;
   };
 
   private reloadInFlight?: Promise<void>;
+  private reloadGeneration = 0;
+
+  private reloadWasSuperseded(generation: number) {
+    return generation !== this.reloadGeneration;
+  }
 
   private reloadFirstPage = async () => {
+    const generation = this.reloadGeneration;
     const isFirstLoad = !this.hasLoadedPage;
     const itemIdsAtRequest = this.getItemIds();
     if (isFirstLoad) this.state.partialNext({ isLoading: true });
@@ -260,7 +269,7 @@ export class ScheduledMessagePaginator extends BasePaginator<
         retryCount: this.config.retryCount,
       };
       const response = await this.fetchQueryResponseWithRetries(fetchParams);
-      if (!response) return;
+      if (!response || this.reloadWasSuperseded(generation)) return;
       const { items, tailward } = this.extractQueryPage(response);
       if (tailward) {
         this.replaceWithFirstPage({
@@ -273,12 +282,14 @@ export class ScheduledMessagePaginator extends BasePaginator<
       }
       applied = true;
     } finally {
-      const clearError = applied && this.lastQueryError;
-      if (isFirstLoad || clearError) {
-        this.state.partialNext({
-          ...(isFirstLoad ? { isLoading: false } : {}),
-          ...(clearError ? { lastQueryError: undefined } : {}),
-        });
+      if (!this.reloadWasSuperseded(generation)) {
+        const clearError = applied && this.lastQueryError;
+        if (isFirstLoad || clearError) {
+          this.state.partialNext({
+            ...(isFirstLoad ? { isLoading: false } : {}),
+            ...(clearError ? { lastQueryError: undefined } : {}),
+          });
+        }
       }
     }
   };
@@ -354,5 +365,7 @@ export class ScheduledMessagePaginator extends BasePaginator<
   public resetState() {
     super.resetState();
     this._itemIndex.clear();
+    this.reloadInFlight = undefined;
+    this.reloadGeneration += 1;
   }
 }
