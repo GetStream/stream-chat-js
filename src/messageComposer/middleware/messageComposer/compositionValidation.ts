@@ -18,12 +18,10 @@ import type { MiddlewareHandlerParams } from '../../../middleware';
 
 const getDisabledRawCommand = (
   composer: MessageComposer,
+  commandSearchSource: MessageComposer['commandSearchSource'],
   text?: string,
 ): Command | undefined => {
-  const rawCommand = getCommandByName(
-    composer.commandSearchSource,
-    getRawCommandName(text),
-  );
+  const rawCommand = getCommandByName(commandSearchSource, getRawCommandName(text));
   if (rawCommand && composer.isCommandDisabled(rawCommand)) {
     return rawCommand;
   }
@@ -31,6 +29,7 @@ const getDisabledRawCommand = (
 
 export const createCompositionValidationMiddleware = (
   composer: MessageComposer,
+  commandSearchSource: MessageComposer['commandSearchSource'] = composer.commandSearchSource,
 ): MessageCompositionMiddleware => ({
   id: 'stream-io/message-composer-middleware/data-validation',
   handlers: {
@@ -42,7 +41,11 @@ export const createCompositionValidationMiddleware = (
       const { maxLengthOnSend } = composer.config.text ?? {};
       const inputText = state.message.text ?? '';
 
-      const disabledRawCommand = getDisabledRawCommand(composer, inputText);
+      const disabledRawCommand = getDisabledRawCommand(
+        composer,
+        commandSearchSource,
+        inputText,
+      );
       if (disabledRawCommand) {
         notifyCommandDisabled(composer, disabledRawCommand);
         return await discard();
