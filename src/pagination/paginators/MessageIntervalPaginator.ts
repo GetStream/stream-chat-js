@@ -13,7 +13,6 @@ import type {
 } from './BasePaginator';
 import {
   BasePaginator,
-  EXHAUSTED_CURSOR,
   isLogicalInterval,
   type PaginationQueryReturnValue,
   type PaginationQueryShapeChangeIdentifier,
@@ -1569,7 +1568,7 @@ export class MessageIntervalPaginator extends BasePaginator<
     if (this.isActiveInterval(headAfterRequest)) {
       this.state.partialNext({
         hasMoreTail: false,
-        cursor: EXHAUSTED_CURSOR,
+        cursor: { headward: null, tailward: null },
       });
     }
   }

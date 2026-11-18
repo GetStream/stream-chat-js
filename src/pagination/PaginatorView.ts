@@ -1,10 +1,9 @@
 import { StateStore } from '@stream-io/state-store';
-
+import { WithSubscriptions } from '../utils/WithSubscriptions';
 import type { BasePaginator } from './paginators/BasePaginator';
 
 type Loader<T> = BasePaginator<T, any>['toTail'];
 type DebouncedLoader<T> = BasePaginator<T, any>['toTailDebounced'];
-import { WithSubscriptions } from '../utils/WithSubscriptions';
 
 export type PaginatorViewState<T> = {
   /**
