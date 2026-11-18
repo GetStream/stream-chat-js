@@ -135,11 +135,6 @@ export const ZERO_PAGE_CURSOR: PaginatorCursor = {
   tailward: undefined,
   headward: undefined,
 };
-/** Both directions exhausted: the loaded page is the whole list. */
-export const EXHAUSTED_CURSOR: PaginatorCursor = {
-  tailward: null,
-  headward: null,
-};
 
 type StateResetPolicy = 'auto' | 'yes' | 'no' | (string & {});
 
@@ -664,18 +659,10 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
     return this._pageSetWithoutQuery || this.isInitialized;
   }
 
-  /**
-   * Whether an item ingested into a loaded, empty, complete list starts its only interval. Off by
-   * default (the item waits in the logical head; `ChannelManager` re-queries such a list instead).
-   */
   protected get startsIntervalInEmptyCompleteList(): boolean {
     return false;
   }
 
-  /**
-   * A page loaded, no loaded interval holds an item and there is nothing more to load either way.
-   * Read from the intervals, not `items`, which lags inside a batch or behind the throttle.
-   */
   private get isLoadedEmptyAndComplete() {
     const { hasMoreHead, hasMoreTail } = this.state.getLatestValue();
     return (
@@ -684,6 +671,38 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
       !hasMoreTail &&
       this.itemIntervals.every((itv) => isLogicalInterval(itv) || !itv.itemIds.length)
     );
+  }
+
+  private placeEmptyCompleteFirstPage({
+    isFirstPage,
+    isHead,
+    isTail,
+    isSeparateInterval,
+    keepPreviousItems,
+    updateState,
+  }: {
+    isFirstPage: boolean | undefined;
+    isHead: boolean | undefined;
+    isTail: boolean | undefined;
+    isSeparateInterval: boolean | undefined;
+    keepPreviousItems: boolean | undefined;
+    updateState: boolean | undefined;
+  }): Interval | null {
+    const placesEmptyCompleteFirstPage =
+      this.startsIntervalInEmptyCompleteList &&
+      updateState &&
+      isFirstPage &&
+      !isSeparateInterval &&
+      !keepPreviousItems &&
+      isHead === true &&
+      isTail === true;
+
+    if (!placesEmptyCompleteFirstPage) return null;
+
+    const page = [...this.logicalHeadItems, ...this.logicalTailItems].sort(
+      this.sortComparator,
+    );
+    return this.ingestPage({ page, isHead: true, isTail: true });
   }
 
   get isOfflineSupportEnabled() {
@@ -2455,7 +2474,7 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
       // (logical head or tail, the head-anchored interval it slid out of, or nowhere if its page is
       // unloaded).
       if (this._itemIntervals.size === 0) {
-        // No pages yet: keep it in the logical head, unless the list is loaded, empty and complete.
+        // No pages yet: keep it in the logical head.
         targetInterval =
           this.startsIntervalInEmptyCompleteList && this.isLoadedEmptyAndComplete
             ? this.makeInterval({ page: [ingestedItem], isHead: true, isTail: true })
@@ -2463,7 +2482,6 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
                 id: LOGICAL_HEAD_INTERVAL_ID,
                 itemIds: [this.getItemId(ingestedItem)],
               };
-        // published below with the ingestion, which respects a batch and the throttle
         if (!this._activeIntervalId) {
           this.setActiveInterval(targetInterval, { updateState: false });
         }
@@ -2726,7 +2744,6 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
         newState.hasMoreHead = interval.hasMoreHead;
         newState.hasMoreTail = interval.hasMoreTail;
       } else if (isFirstPage && isLastPage) {
-        // an empty page makes no interval, but first-and-last means empty and complete
         newState.hasMoreHead = false;
         newState.hasMoreTail = false;
       }
@@ -3309,23 +3326,14 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
         isTail,
         targetIntervalId: isSeparateInterval ? undefined : this._activeIntervalId,
       }) ??
-      // an empty, complete first page: items live events ingested meanwhile wait in the logical
-      // intervals, and a paginator that starts an interval in such a list places them as the page
-      (this.startsIntervalInEmptyCompleteList &&
-      updateState &&
-      isFirstPage &&
-      !isSeparateInterval &&
-      !keepPreviousItems &&
-      isHead === true &&
-      isTail === true
-        ? this.ingestPage({
-            page: [...this.logicalHeadItems, ...this.logicalTailItems].sort(
-              this.sortComparator,
-            ),
-            isHead: true,
-            isTail: true,
-          })
-        : null);
+      this.placeEmptyCompleteFirstPage({
+        isFirstPage,
+        isHead,
+        isTail,
+        isSeparateInterval,
+        keepPreviousItems,
+        updateState,
+      });
     const intervalReachesHead =
       reachesHead ||
       (!!interval && this.inheritsHeadMark(interval, direction, headIntervalIds));

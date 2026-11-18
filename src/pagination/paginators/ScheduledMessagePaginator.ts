@@ -3,7 +3,7 @@ import type {
   PaginationQueryReturnValue,
   PaginatorOptions,
 } from './BasePaginator';
-import { BasePaginator, EXHAUSTED_CURSOR, ZERO_PAGE_CURSOR } from './BasePaginator';
+import { BasePaginator, ZERO_PAGE_CURSOR } from './BasePaginator';
 import { StoreBackedItemIndex } from '../../entityStore/StoreBackedItemIndex';
 import type { EntityStore, EntityStoreChangeBatch } from '../../entityStore/EntityStore';
 import type { StreamChat } from '../../client';
@@ -314,7 +314,9 @@ export class ScheduledMessagePaginator extends BasePaginator<
           if (!keptIds.has(id)) this._itemIndex.remove(id);
         });
         this.setItems({
-          cursor: tailward ? { headward: null, tailward } : EXHAUSTED_CURSOR,
+          cursor: tailward
+            ? { headward: null, tailward }
+            : { headward: null, tailward: null },
           isFirstPage: true,
           isLastPage: !tailward,
           valueOrFactory: [...page, ...takenSinceRequest].sort(this.sortComparator),
