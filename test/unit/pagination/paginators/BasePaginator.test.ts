@@ -1254,6 +1254,273 @@ describe('BasePaginator', () => {
       expect(paginator.cursor).toEqual({ tailward: 'next1', headward: 'prev1' });
     });
 
+    describe('an empty first page on a list with no items', () => {
+      const failFirstPage = async (paginator: Paginator) => {
+        const query = paginator.toTail();
+        await sleep(0);
+        paginator.queryReject(new Error('Failed'));
+        await query;
+      };
+
+      const resolveEmptyPage = async (
+        paginator: Paginator,
+        params: PaginationQueryParams<QueryShape>,
+      ) => {
+        const query = paginator.executeQuery({ direction: 'tailward', ...params });
+        await sleep(0);
+        paginator.queryResolve({ items: [] });
+        await query;
+      };
+
+      it.each([
+        [
+          'a refresh keeping the items',
+          { keepPreviousItems: true, reset: 'yes' as const },
+        ],
+        [
+          'a stored-only refresh keeping the items',
+          {
+            keepPreviousItems: true,
+            reset: 'yes' as const,
+            silent: true,
+            updateState: false,
+          },
+        ],
+      ])(
+        'leaves a list whose first page failed loaded and empty: %s',
+        async (_, params) => {
+          const paginator = new Paginator();
+          await failFirstPage(paginator);
+          expect(paginator.isInitialized).toBe(true);
+          expect(paginator.items).toBeUndefined();
+
+          await resolveEmptyPage(paginator, params);
+
+          expect(paginator.items).toEqual([]);
+          expect(paginator.isLoading).toBe(false);
+          expect(paginator.lastQueryError).toBeUndefined();
+        },
+      );
+
+      it('leaves a never-queried list loaded and empty after a query keeping the items', async () => {
+        const paginator = new Paginator();
+
+        await resolveEmptyPage(paginator, { keepPreviousItems: true });
+
+        expect(paginator.items).toEqual([]);
+        expect(paginator.isLoading).toBe(false);
+      });
+
+      it('keeps the loaded items of a list that has them on an empty refresh keeping the items', async () => {
+        const paginator = new Paginator();
+        const firstPage = paginator.toTail();
+        await sleep(0);
+        paginator.queryResolve({ items: [{ id: 'id1' }] });
+        await firstPage;
+
+        await resolveEmptyPage(paginator, { keepPreviousItems: true, reset: 'yes' });
+
+        expect(paginator.items).toEqual([{ id: 'id1' }]);
+      });
+
+      it('keeps the loaded items of a list that has them on an empty next page', async () => {
+        const paginator = new Paginator({ pageSize: 1 });
+        const firstPage = paginator.toTail();
+        await sleep(0);
+        paginator.queryResolve({ items: [{ id: 'id1' }] });
+        await firstPage;
+
+        await resolveEmptyPage(paginator, {});
+
+        expect(paginator.items).toEqual([{ id: 'id1' }]);
+      });
+
+      it('leaves a list without items unpublished after a stored-only first page with items', async () => {
+        const paginator = new Paginator();
+
+        const query = paginator.executeQuery({
+          direction: 'tailward',
+          keepPreviousItems: true,
+          reset: 'yes',
+          silent: true,
+          updateState: false,
+        });
+        await sleep(0);
+        paginator.queryResolve({ items: [{ id: 'x' }] });
+        await query;
+
+        expect(paginator.items).toBeUndefined();
+      });
+
+      it('keeps the loaded items of a list that has them on an empty stored-only refresh', async () => {
+        const paginator = new Paginator();
+        const firstPage = paginator.toTail();
+        await sleep(0);
+        paginator.queryResolve({ items: [{ id: 'a' }] });
+        await firstPage;
+
+        const refresh = paginator.executeQuery({
+          direction: 'tailward',
+          keepPreviousItems: true,
+          reset: 'yes',
+          updateState: false,
+        });
+        await sleep(0);
+        paginator.queryResolve({ items: [] });
+        await refresh;
+
+        expect(paginator.items).toEqual([{ id: 'a' }]);
+      });
+
+      it("leaves a list without items unloaded after an empty stored-only page at the caller's shape", async () => {
+        const paginator = new Paginator();
+
+        const query = paginator.executeQuery({
+          claimsActiveInterval: true,
+          queryShape: { ...defaultNextQueryShape, filters: { id: 'elsewhere' } },
+          updateState: false,
+        });
+        await sleep(0);
+        paginator.queryResolve({ items: [] });
+        await query;
+
+        expect(paginator.items).toBeUndefined();
+      });
+
+      it('leaves a list without items to the query that superseded the stored-only one', async () => {
+        const paginator = new Paginator();
+        const storedOnly = paginator.executeQuery({
+          direction: 'tailward',
+          keepPreviousItems: true,
+          reset: 'yes',
+          silent: true,
+          updateState: false,
+        });
+        await sleep(0);
+        const resolveStoredOnly = paginator.queryResolve;
+        // a reload claims the active interval after the stored-only query did
+        const reload = paginator.toTail({ reset: 'yes' });
+        await sleep(0);
+        const resolveReload = paginator.queryResolve;
+
+        resolveStoredOnly({ items: [] });
+        await storedOnly;
+        expect(paginator.items).toBeUndefined();
+
+        resolveReload({ items: [{ id: 'id1' }] });
+        await reload;
+        expect(paginator.items).toEqual([{ id: 'id1' }]);
+      });
+    });
+
+    describe('a query running when the state is reset', () => {
+      it('drops the page the query returns', async () => {
+        const paginator = new Paginator();
+        const query = paginator.toTail();
+        await sleep(0);
+
+        paginator.resetState();
+        paginator.queryResolve({ items: [{ id: 'id1' }] });
+        const result = await query;
+
+        expect(result).toBeUndefined();
+        expect(paginator.items).toBeUndefined();
+        expect(paginator.isInitialized).toBe(false);
+        expect(paginator.isLoading).toBe(false);
+      });
+
+      it('drops the error the query fails with', async () => {
+        const paginator = new Paginator({ throwErrors: true });
+        const query = paginator.toTail();
+        await sleep(0);
+
+        paginator.resetState();
+        paginator.queryReject(new Error('Failed'));
+
+        await expect(query).resolves.toBeUndefined();
+        expect(paginator.lastQueryError).toBeUndefined();
+        expect(paginator.isInitialized).toBe(false);
+      });
+
+      it('sends no further attempt after the reset', async () => {
+        vi.useFakeTimers();
+        try {
+          const paginator = new Paginator({ retryCount: 2, throwErrors: true });
+          const query = paginator.toTail();
+          await vi.advanceTimersByTimeAsync(0);
+          paginator.queryReject(new Error('Failed'));
+          await vi.advanceTimersByTimeAsync(0);
+
+          paginator.resetState();
+          await vi.advanceTimersByTimeAsync(5000);
+
+          await expect(query).resolves.toBeUndefined();
+          expect(paginator.mockClientQuery).toHaveBeenCalledTimes(1);
+          expect(paginator.lastQueryError).toBeUndefined();
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+
+      it('drops the error of the last attempt running when the state is reset', async () => {
+        vi.useFakeTimers();
+        try {
+          const paginator = new Paginator({ retryCount: 1, throwErrors: true });
+          const query = paginator.toTail();
+          await vi.advanceTimersByTimeAsync(0);
+          paginator.queryReject(new Error('Failed'));
+          await vi.advanceTimersByTimeAsync(DEFAULT_QUERY_CHANNELS_MS_BETWEEN_RETRIES);
+          expect(paginator.mockClientQuery).toHaveBeenCalledTimes(2);
+
+          paginator.resetState();
+          paginator.queryReject(new Error('Failed again'));
+          await vi.advanceTimersByTimeAsync(DEFAULT_QUERY_CHANNELS_MS_BETWEEN_RETRIES);
+
+          await expect(query).resolves.toBeUndefined();
+          expect(paginator.mockClientQuery).toHaveBeenCalledTimes(2);
+          expect(paginator.lastQueryError).toBeUndefined();
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+
+      it('drops the error the offline preload fails with', async () => {
+        const paginator = new Paginator({ throwErrors: true });
+        let rejectPreload: (error: Error) => void = () => undefined;
+        paginator.preloadFirstPageFromOfflineDb = () =>
+          new Promise((_, reject) => {
+            rejectPreload = reject;
+          });
+        const query = paginator.toTail();
+        await sleep(0);
+
+        paginator.resetState();
+        rejectPreload(new Error('Failed'));
+
+        await expect(query).resolves.toBeUndefined();
+        expect(paginator.mockClientQuery).not.toHaveBeenCalled();
+        expect(paginator.isLoading).toBe(false);
+      });
+
+      it('leaves the state to a query started after the reset', async () => {
+        const paginator = new Paginator();
+        const ignoredQuery = paginator.toTail();
+        await sleep(0);
+        const resolveIgnored = paginator.queryResolve;
+        paginator.resetState();
+        const current = paginator.toTail();
+        await sleep(0);
+
+        paginator.queryResolve({ items: [{ id: 'current' }] });
+        await current;
+        resolveIgnored({ items: [{ id: 'ignored' }] });
+        await ignoredQuery;
+
+        expect(paginator.items).toEqual([{ id: 'current' }]);
+        expect(paginator.isLoading).toBe(false);
+      });
+    });
+
     it('throws error if enabled', async () => {
       const paginator = new Paginator({
         initialCursor: ZERO_PAGE_CURSOR,

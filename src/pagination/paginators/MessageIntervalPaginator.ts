@@ -876,6 +876,7 @@ export class MessageIntervalPaginator extends BasePaginator<
       this.claimActiveInterval();
       this.showLoadedInterval(interval);
     } else {
+      const checkWasStateResetDuringQuery = this.makeStateResetWatcher();
       const result = await this.executeQuery({
         claimsActiveInterval: true,
         // Always send a limit: the replies endpoint ignores `id_around` without one.
@@ -885,6 +886,8 @@ export class MessageIntervalPaginator extends BasePaginator<
       });
       // a later claim decides the active interval, and the page stays stored
       if (result?.isSuperseded) return false;
+      // a reset ignored the query: not a failed jump
+      if (checkWasStateResetDuringQuery()) return false;
       localMessage = this.getItem(messageId);
       if (!localMessage || !result || !result.targetInterval) {
         this.channel.getClient().notifications.addError({
@@ -957,6 +960,7 @@ export class MessageIntervalPaginator extends BasePaginator<
    */
   jumpToTheLatestMessage = async (options?: JumpToMessageOptions): Promise<boolean> => {
     if (!this.latestHeadInterval) {
+      const checkWasStateResetDuringQuery = this.makeStateResetWatcher();
       const result = await this.executeQuery({
         claimsActiveInterval: true,
         queryShape: { limit: this.pageSize },
@@ -964,6 +968,8 @@ export class MessageIntervalPaginator extends BasePaginator<
       });
       // a later claim decides the active interval, and the page stays stored
       if (result?.isSuperseded) return false;
+      // a reset ignored the query: not a failed jump
+      if (checkWasStateResetDuringQuery()) return false;
     }
 
     const latestMessageId = this.latestHeadInterval?.itemIds.slice(-1)[0];
