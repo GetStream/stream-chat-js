@@ -1,5 +1,3 @@
-import { identityConflictPolicy } from './EntityConflictPolicy';
-import type { EntityConflictPolicy } from './EntityConflictPolicy';
 import type { Unsubscribe } from '@stream-io/state-store';
 
 /**
@@ -64,13 +62,6 @@ export type EntityStoreOptions<T> = {
    * {@link EntityStore.clear}, and holders only receive notifications.
    */
   releaseOnLastUnlink?: boolean;
-  /**
-   * Decides, on every `upsert`, whether an incoming copy replaces the stored one and whether a copy
-   * removes its entity (keeping a tombstone so a later stale copy cannot bring it back). Defaults to
-   * always replacing and never removing; read by the store and its lists through
-   * {@link EntityStore.conflictPolicy}.
-   */
-  conflictPolicy?: EntityConflictPolicy<T>;
 };
 
 /**
@@ -110,7 +101,6 @@ export class EntityStore<T> {
   private readonly getEntityId: (entity: T) => string;
   private readonly onRelease?: (entity: T) => void;
   private readonly releaseOnLastUnlink: boolean;
-  private readonly policy: EntityConflictPolicy<T>;
 
   private transactionDepth = 0;
   private pendingChanged = new Map<EntityStoreSubscriber, Set<string>>();
@@ -118,7 +108,6 @@ export class EntityStore<T> {
   private pendingFlushIds?: Set<string>;
 
   constructor({
-    conflictPolicy,
     getEntityId,
     onRelease,
     releaseOnLastUnlink = true,
@@ -126,11 +115,6 @@ export class EntityStore<T> {
     this.getEntityId = getEntityId;
     this.onRelease = onRelease;
     this.releaseOnLastUnlink = releaseOnLastUnlink;
-    this.policy = conflictPolicy ?? identityConflictPolicy<T>();
-  }
-
-  get conflictPolicy(): EntityConflictPolicy<T> {
-    return this.policy;
   }
 
   /**
@@ -263,11 +247,6 @@ export class EntityStore<T> {
   upsert(entity: T, subscriber?: EntityStoreSubscriber): void {
     const id = this.getEntityId(entity);
     const previous = this.byId.get(id);
-    if (this.policy.resolveCanonicalEntity(entity, previous) !== entity) return;
-    if (this.policy.removesEntity(entity)) {
-      this.dropEntry(id, { release: true, writer: subscriber });
-      return;
-    }
     // No-op on an unchanged reference, like `StateStore.next`.
     if (previous === entity) return;
     this.byId.set(id, entity);
@@ -425,7 +404,6 @@ export class EntityStore<T> {
   clear(): void {
     const holdersById = this.subscribers;
     this.subscribers = new Map();
-    this.policy.clear();
     this.pendingChanged.clear();
     this.pendingFlushIds = undefined;
     const runner = new RunnerWithErrorCollector();

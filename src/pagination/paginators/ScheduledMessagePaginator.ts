@@ -49,16 +49,12 @@ const defaultScheduledMessagesComparator = (
   compareValues<number>(first.created_at, second.created_at) ||
   compareValues(first.id, second.id);
 
-/**
- * The current user's scheduled messages, earliest `scheduled_at` first. Every copy it
- * takes is resolved against the shared store first (see `shouldReplaceScheduledMessage`).
- */
+/** The current user's scheduled messages, earliest `scheduled_at` first. */
 export class ScheduledMessagePaginator extends BasePaginator<
   ScheduledMessageResponse,
   QueryScheduledMessagesRequest
 > {
   private readonly client: StreamChat;
-  private readonly store: EntityStore<ScheduledMessageResponse>;
   private readonly _id: string;
   private _filter: ScheduledMessagesFilter;
 
@@ -86,7 +82,6 @@ export class ScheduledMessagePaginator extends BasePaginator<
     );
 
     this.client = client;
-    this.store = entityStore;
     this._id = id ?? `scheduled-message-paginator-${generateUUIDv4()}`;
     this._filter = filter;
     this.sortComparator = defaultScheduledMessagesComparator;
@@ -161,25 +156,15 @@ export class ScheduledMessagePaginator extends BasePaginator<
   }
 
   public filterQueryResults(items: ScheduledMessageResponse[]) {
-    const { conflictPolicy } = this.store;
-    const latestItems = items.map((item) =>
-      conflictPolicy.resolveCanonicalEntity(item, this.store.get(item.id)),
-    );
-
-    return latestItems.filter((item) => this.matchesFilter(item));
+    return items.filter((item) => this.matchesFilter(item));
   }
 
   public ingestItem(item: ScheduledMessageResponse): boolean {
-    const latest = this.store.conflictPolicy.resolveCanonicalEntity(
-      item,
-      this.store.get(item.id),
-    );
+    // the list already holds this copy and placed it when it was stored (`onEntitiesChanged` places
+    // copies other lists store): nothing to place
+    if (this.getItem(item.id) === item) return false;
 
-    // the list already holds the copy that wins and placed it when it was stored (`onEntitiesChanged`
-    // places copies other lists store): nothing to place
-    if (this.getItem(latest.id) === latest) return false;
-
-    return this.placeItem(latest);
+    return this.placeItem(item);
   }
 
   /** Places `item` by the list's filter and order: moves it, or takes it out when it no longer matches. */
