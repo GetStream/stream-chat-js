@@ -6,13 +6,20 @@ import type {
 } from '../EventHandlerPipeline';
 import type {
   DeleteScheduledMessageResponse,
+  MessageRequest,
   SendMessageRequest,
   SendMessageResponse,
   SendScheduledMessageNowResponse,
   UpdateScheduledMessageRequest,
   UpdateScheduledMessageResponse,
 } from '../gen/models';
-import type { EventPayload, EventType, StreamResponse } from '../types';
+import type {
+  EventPayload,
+  EventType,
+  LocalMessage,
+  SendMessageOptions,
+  StreamResponse,
+} from '../types';
 import type { ScheduledMessagePaginator } from '../pagination/paginators/ScheduledMessagePaginator';
 import type { ScheduledMessagePaginatorsManager } from './ScheduledMessagePaginatorsManager';
 
@@ -57,6 +64,17 @@ export type ScheduledMessageRequestFn<TParams, TResponse> = (
   params: TParams,
   defaultRequest: DefaultScheduledMessageRequest<TParams, TResponse>,
 ) => Promise<StreamResponse<TResponse>>;
+
+export type ScheduleMessageParams = {
+  message: MessageRequest;
+  options?: SendMessageOptions;
+  localMessage?: LocalMessage;
+};
+
+export type UpdateScheduledMessageParams = {
+  request: UpdateScheduledMessageRequest;
+  localMessage?: LocalMessage;
+};
 
 export type ScheduledMessageIdRequestParams = {
   id: string;

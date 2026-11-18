@@ -270,7 +270,7 @@ export class ScheduledMessageComposition extends WithSubscriptions {
 
     try {
       const { scheduled_message: scheduledMessage } =
-        await composer.channel.scheduledMessageOperations.schedule({
+        await composer.channel.messageOperations.scheduleMessage({
           localMessage,
           message,
           options: sendOptions,
@@ -323,10 +323,11 @@ export class ScheduledMessageComposition extends WithSubscriptions {
     );
 
     try {
-      const scheduledMessage = await composer.channel.scheduledMessageOperations.update(
-        editedScheduledMessage.id,
-        { localMessage: composition.localMessage, request: { message } },
-      );
+      const scheduledMessage =
+        await composer.channel.messageOperations.updateScheduledMessage(
+          editedScheduledMessage.id,
+          { localMessage: composition.localMessage, request: { message } },
+        );
 
       this.endEdit();
 

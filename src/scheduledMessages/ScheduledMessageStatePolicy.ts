@@ -31,7 +31,8 @@ export class ScheduledMessageStatePolicy {
   }
 
   failure(kind: ScheduledMessageOperationKind, id: string | undefined, error: unknown) {
-    if (kind === 'schedule' || !id || !isScheduledMessageNotFoundError(error)) return;
+    if (kind === 'schedule' || kind === 'sendNow') return;
+    if (!id || !isScheduledMessageNotFoundError(error)) return;
 
     const stored = this.ctx.get(id);
     if (stored) {

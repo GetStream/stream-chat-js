@@ -884,10 +884,6 @@ describe("a channel's scheduled messages", () => {
           'deleteScheduledMessage',
           (channel: Channel, id: string) => channel.deleteScheduledMessage(id),
         ],
-        [
-          'sendScheduledMessageNow',
-          (channel: Channel, id: string) => channel.sendScheduledMessageNow(id),
-        ],
       ] as const)('is removed from the lists when %s gets a 404', async (method, act) => {
         const { channel, client, sm } = setupWithMessage();
         vi.spyOn(client, method).mockRejectedValue(notFoundError);
@@ -899,12 +895,21 @@ describe("a channel's scheduled messages", () => {
 
       it('is not brought back by a late event', async () => {
         const { channel, client, sm } = setupWithMessage();
-        vi.spyOn(client, 'sendScheduledMessageNow').mockRejectedValue(notFoundError);
+        vi.spyOn(client, 'deleteScheduledMessage').mockRejectedValue(notFoundError);
 
-        await expect(channel.sendScheduledMessageNow(sm.id)).rejects.toBe(notFoundError);
+        await expect(channel.deleteScheduledMessage(sm.id)).rejects.toBe(notFoundError);
         client.dispatchEvent(generateEvent('scheduled_message.updated', sm));
 
         expect(listed(channel)).toEqual([]);
+      });
+
+      it('stays listed when sendScheduledMessageNow gets a 404', async () => {
+        const { channel, client, sm } = setupWithMessage();
+        vi.spyOn(client, 'sendScheduledMessageNow').mockRejectedValue(notFoundError);
+
+        await expect(channel.sendScheduledMessageNow(sm.id)).rejects.toBe(notFoundError);
+
+        expect(listed(channel)).toEqual([sm]);
       });
 
       it('stays listed when the request fails for another reason', async () => {
