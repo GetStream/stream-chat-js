@@ -616,6 +616,21 @@ describe('MessageComposer scheduled messages', () => {
   });
 
   describe('edit mode', () => {
+    it('does not send a pending scheduled edit as a normal message', async () => {
+      const { channel, composer } = setup();
+      const scheduledMessage = generateScheduledMessage();
+      const sendSpy = vi.spyOn(channel, 'sendMessage');
+      await composer.scheduledMessageComposition.editScheduledMessage(scheduledMessage);
+
+      const result = await composer.send();
+
+      expect(result).toBe('nothing-to-send');
+      expect(sendSpy).not.toHaveBeenCalled();
+      expect(composer.scheduledMessageComposition.editedScheduledMessage).toBe(
+        scheduledMessage,
+      );
+    });
+
     it('pre-fills the composer from the scheduled message', async () => {
       const { client, composer } = setup();
       const quoted = {

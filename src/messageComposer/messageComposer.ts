@@ -1238,6 +1238,8 @@ export class MessageComposer extends WithSubscriptions {
    * reported through `client.notifications`.
    */
   send = async (): Promise<MessageComposerSubmitResult> => {
+    if (this.hasEditInProgress) return 'nothing-to-send';
+
     const composition = await this.compose();
     if (!composition?.message) return 'nothing-to-send';
 
