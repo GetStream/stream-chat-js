@@ -446,25 +446,19 @@ describe('MessageComposer scheduled messages', () => {
       );
     });
 
-    it('waits for uploads in progress when pending uploads are allowed', async () => {
+    it('settles a pending upload through the operations layer before scheduling', async () => {
       const { client, composer } = setup({ pendingUploadsEnabled: true });
       const sendSpy = mockScheduledSend(client, generateScheduledMessage());
+      vi.spyOn(client.uploadManager, 'upload').mockResolvedValue({
+        file: 'https://cdn.example.com/a.png',
+      } as never);
       composer.attachmentManager.state.partialNext({
         attachments: [uploadAttachment('uploading')],
       });
 
-      const scheduling = composer.scheduledMessageComposition.schedule(scheduledAt);
-      await Promise.resolve();
+      const result = await composer.scheduledMessageComposition.schedule(scheduledAt);
 
-      expect(sendSpy).not.toHaveBeenCalled();
-
-      composer.attachmentManager.state.partialNext({
-        attachments: [uploadAttachment('finished')],
-      });
-
-      await expect(scheduling).resolves.toEqual(
-        expect.objectContaining({ status: 'scheduled' }),
-      );
+      expect(result).toEqual(expect.objectContaining({ status: 'scheduled' }));
       expect(sentRequest(sendSpy)).toEqual(
         expect.objectContaining({
           message: expect.objectContaining({
@@ -480,6 +474,9 @@ describe('MessageComposer scheduled messages', () => {
       const { client, composer } = setup({ pendingUploadsEnabled: true });
       const sendSpy = mockScheduledSend(client, generateScheduledMessage());
       const addErrorSpy = vi.spyOn(client.notifications, 'addError');
+      vi.spyOn(client.uploadManager, 'upload').mockRejectedValue(
+        new Error('upload failed'),
+      );
       composer.textComposer.setText('see you tomorrow');
       composer.attachmentManager.state.partialNext({
         attachments: [uploadAttachment('failed')],
@@ -500,25 +497,7 @@ describe('MessageComposer scheduled messages', () => {
       );
     });
 
-    it('fails when an upload in progress fails while waiting', async () => {
-      const { client, composer } = setup({ pendingUploadsEnabled: true });
-      const sendSpy = mockScheduledSend(client, generateScheduledMessage());
-      composer.attachmentManager.state.partialNext({
-        attachments: [uploadAttachment('uploading')],
-      });
-
-      const scheduling = composer.scheduledMessageComposition.schedule(scheduledAt);
-      composer.attachmentManager.state.partialNext({
-        attachments: [uploadAttachment('failed')],
-      });
-
-      await expect(scheduling).resolves.toEqual(
-        expect.objectContaining({ status: 'failed' }),
-      );
-      expect(sendSpy).not.toHaveBeenCalled();
-    });
-
-    it('includes an attachment whose real upload finishes while scheduling', async () => {
+    it('joins the composer upload in flight and sends the resolved url', async () => {
       const { channel, client } = setup();
       const composer = channel.messageComposer;
       composer.updateConfig({ attachments: { pendingUploadsEnabled: true } });
@@ -530,6 +509,7 @@ describe('MessageComposer scheduled messages', () => {
       client.appSettingsPromise = Promise.resolve(appSettings as never);
       vi.spyOn(client, 'getAppSettings').mockResolvedValue(appSettings as never);
       const sendSpy = mockScheduledSend(client, generateScheduledMessage());
+      const uploadSpy = vi.spyOn(client.uploadManager, 'upload');
       let finishUpload: () => void = () => undefined;
       vi.spyOn(composer.attachmentManager, 'doUploadRequest').mockImplementation(
         () =>
@@ -546,10 +526,14 @@ describe('MessageComposer scheduled messages', () => {
       );
 
       const scheduling = composer.scheduledMessageComposition.schedule(scheduledAt);
+      await vi.waitFor(() => expect(uploadSpy).toHaveBeenCalledTimes(2));
       finishUpload();
       await uploading;
       await scheduling;
 
+      expect(uploadSpy.mock.calls[1][0]).toEqual(
+        expect.objectContaining({ id: uploadSpy.mock.calls[0][0].id }),
+      );
       expect(sentRequest(sendSpy)).toEqual(
         expect.objectContaining({
           message: expect.objectContaining({
@@ -819,9 +803,12 @@ describe('MessageComposer scheduled messages', () => {
       expect(composer.draftId).toBe('draft-1');
     });
 
-    it('waits for uploads in progress before saving the edit', async () => {
+    it('settles a pending upload before saving the edit', async () => {
       const { client, composer } = setup({ pendingUploadsEnabled: true });
       const updateSpy = mockScheduledUpdate(client, generateScheduledMessage());
+      vi.spyOn(client.uploadManager, 'upload').mockResolvedValue({
+        file: 'https://cdn.example.com/a.png',
+      } as never);
       await composer.scheduledMessageComposition.editScheduledMessage(
         generateScheduledMessage(),
       );
@@ -829,16 +816,9 @@ describe('MessageComposer scheduled messages', () => {
         attachments: [uploadAttachment('uploading')],
       });
 
-      const updating = composer.scheduledMessageComposition.update();
-      await Promise.resolve();
-      expect(updateSpy).not.toHaveBeenCalled();
-      composer.attachmentManager.state.partialNext({
-        attachments: [uploadAttachment('finished')],
-      });
+      const result = await composer.scheduledMessageComposition.update();
 
-      await expect(updating).resolves.toEqual(
-        expect.objectContaining({ status: 'scheduled' }),
-      );
+      expect(result).toEqual(expect.objectContaining({ status: 'scheduled' }));
       expect(updatedMessage(updateSpy)).toEqual(
         expect.objectContaining({
           attachments: [
@@ -852,6 +832,9 @@ describe('MessageComposer scheduled messages', () => {
       const { client, composer } = setup({ pendingUploadsEnabled: true });
       const updateSpy = mockScheduledUpdate(client, generateScheduledMessage());
       const addErrorSpy = vi.spyOn(client.notifications, 'addError');
+      vi.spyOn(client.uploadManager, 'upload').mockRejectedValue(
+        new Error('upload failed'),
+      );
       const scheduledMessage = generateScheduledMessage();
       await composer.scheduledMessageComposition.editScheduledMessage(scheduledMessage);
       composer.attachmentManager.state.partialNext({
@@ -1218,10 +1201,20 @@ describe('MessageComposer scheduled messages', () => {
       );
     });
 
-    it('does not schedule when cancelled while uploads finish', async () => {
+    it('does not abort a triggered reschedule when the edit is cancelled while settling', async () => {
       const { channel, client, composer } = setup({ pendingUploadsEnabled: true });
-      const sendSpy = mockScheduledSend(client, generateScheduledMessage({ id: 'sm-2' }));
-      const deleteSpy = vi.spyOn(channel, 'deleteScheduledMessage');
+      const scheduledMessage = generateScheduledMessage({ id: 'sm-2' });
+      const sendSpy = mockScheduledSend(client, scheduledMessage);
+      vi.spyOn(channel, 'deleteScheduledMessage').mockResolvedValue({
+        scheduled_message: generateFailedMessage(),
+      } as never);
+      let finishUpload: (result: { file: string }) => void = () => undefined;
+      const uploadSpy = vi.spyOn(client.uploadManager, 'upload').mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            finishUpload = resolve;
+          }) as never,
+      );
       composer.textComposer.setText('my draft');
       await composer.scheduledMessageComposition.editScheduledMessage(
         generateFailedMessage(),
@@ -1231,13 +1224,15 @@ describe('MessageComposer scheduled messages', () => {
       });
 
       const scheduling = composer.scheduledMessageComposition.schedule(scheduledAt);
+      await vi.waitFor(() => expect(uploadSpy).toHaveBeenCalled());
       composer.scheduledMessageComposition.cancelEdit();
-      composer.attachmentManager.state.partialNext({ attachments: [] });
+      finishUpload({ file: 'https://cdn.example.com/a.png' });
 
-      await expect(scheduling).resolves.toEqual({ status: 'nothing-to-send' });
-      expect(sendSpy).not.toHaveBeenCalled();
-      expect(deleteSpy).not.toHaveBeenCalled();
-      expect(composer.textComposer.text).toBe('my draft');
+      await expect(scheduling).resolves.toEqual({
+        scheduledMessage,
+        status: 'scheduled',
+      });
+      expect(sendSpy).toHaveBeenCalled();
     });
 
     it('restores the earlier composition when cancelled', async () => {

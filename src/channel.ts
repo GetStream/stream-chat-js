@@ -550,11 +550,12 @@ export class Channel extends ChannelApi {
   }
 
   async scheduleMessage(request: SendMessageRequest) {
-    return await this.scheduledMessageOperations.schedule(request);
+    const { message, ...options } = request;
+    return await this.scheduledMessageOperations.schedule({ message, options });
   }
 
   async updateScheduledMessage(id: string, request: UpdateScheduledMessageRequest) {
-    return await this.scheduledMessageOperations.update(id, request);
+    return await this.scheduledMessageOperations.update(id, { request });
   }
 
   async deleteScheduledMessage(id: string) {

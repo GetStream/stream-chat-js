@@ -14,7 +14,6 @@ import {
 } from '../scheduledMessages/composition';
 import { chatLoggerSystem } from '../logger';
 import type { Unsubscribe } from '@stream-io/state-store';
-import type { CoreNotificationType } from '../notifications';
 import type { ScheduledMessageResponse } from '../gen/models';
 import type { DraftResponse } from '../types';
 import type { MessageComposer } from './messageComposer';
@@ -152,13 +151,6 @@ export class ScheduledMessageComposition extends WithSubscriptions {
       );
   };
 
-  private reportFailedUploads = (type: CoreNotificationType, message: string) => {
-    if (!this.composer.attachmentManager.failedUploadsCount) return undefined;
-    const error = new Error('Some attachments failed to upload');
-    this.composer.reportSubmitFailure(type, message, error);
-    return error;
-  };
-
   private refreshEditedScheduledMessage = ({
     scheduled_message: incoming,
   }: {
@@ -220,71 +212,6 @@ export class ScheduledMessageComposition extends WithSubscriptions {
     return () => this.unregisterSubscriptions();
   };
 
-  public schedule = async (scheduledAt: Date): Promise<ScheduledMessageSubmitResult> => {
-    const { composer } = this;
-
-    if (composer.hasEditInProgress) return { status: 'nothing-to-send' };
-
-    if (this.scheduleBlockReason) {
-      await composer.compose({
-        sendOptions: { scheduled_at: scheduledAt },
-        scheduling: true,
-      });
-      return { status: 'blocked' };
-    }
-
-    const { failedScheduledMessage } = this;
-
-    await composer.waitForUploadsInProgress();
-
-    const compositionChanged =
-      composer.hasEditInProgress ||
-      this.failedScheduledMessage !== failedScheduledMessage;
-
-    if (compositionChanged) return { status: 'nothing-to-send' };
-
-    const uploadError = this.reportFailedUploads(
-      CORE_NOTIFICATION_TYPE.scheduledMessageCreateFailed,
-      'Failed to schedule the message',
-    );
-    if (uploadError) return { error: uploadError, status: 'failed' };
-
-    const composition = await composer.compose({
-      sendOptions: { scheduled_at: scheduledAt },
-      scheduling: true,
-    });
-
-    if (!composition?.message) return { status: 'nothing-to-send' };
-
-    const { message, sendOptions } = composition;
-
-    try {
-      const { scheduled_message: scheduledMessage } =
-        await composer.channel.scheduleMessage({
-          ...sendOptions,
-          message,
-        });
-
-      if (failedScheduledMessage) {
-        this.endEdit();
-        this.removeFailedScheduledMessage(failedScheduledMessage);
-      } else {
-        composer.releaseSubmittedComposition();
-      }
-
-      return scheduledMessage
-        ? { scheduledMessage, status: 'scheduled' }
-        : { status: 'sent' };
-    } catch (error) {
-      composer.reportSubmitFailure(
-        CORE_NOTIFICATION_TYPE.scheduledMessageCreateFailed,
-        'Failed to schedule the message',
-        error,
-      );
-      return { error, status: 'failed' };
-    }
-  };
-
   public editScheduledMessage = async (scheduledMessage: ScheduledMessageResponse) => {
     const { composer } = this;
     const { message } = scheduledMessage;
@@ -317,6 +244,58 @@ export class ScheduledMessageComposition extends WithSubscriptions {
     composer.textComposer.setMentionedUsers(mentionedUsers);
   };
 
+  public schedule = async (scheduledAt: Date): Promise<ScheduledMessageSubmitResult> => {
+    const { composer } = this;
+
+    if (composer.hasEditInProgress) return { status: 'nothing-to-send' };
+
+    if (this.scheduleBlockReason) {
+      await composer.compose({
+        sendOptions: { scheduled_at: scheduledAt },
+        scheduling: true,
+      });
+      return { status: 'blocked' };
+    }
+
+    const { failedScheduledMessage } = this;
+
+    const composition = await composer.compose({
+      sendOptions: { scheduled_at: scheduledAt },
+      scheduling: true,
+    });
+
+    if (!composition?.message) return { status: 'nothing-to-send' };
+
+    const { localMessage, message, sendOptions } = composition;
+
+    try {
+      const { scheduled_message: scheduledMessage } =
+        await composer.channel.scheduledMessageOperations.schedule({
+          localMessage,
+          message,
+          options: sendOptions,
+        });
+
+      if (failedScheduledMessage) {
+        this.endEdit();
+        this.removeFailedScheduledMessage(failedScheduledMessage);
+      } else {
+        composer.releaseSubmittedComposition();
+      }
+
+      return scheduledMessage
+        ? { scheduledMessage, status: 'scheduled' }
+        : { status: 'sent' };
+    } catch (error) {
+      composer.reportSubmitFailure(
+        CORE_NOTIFICATION_TYPE.scheduledMessageCreateFailed,
+        'Failed to schedule the message',
+        error,
+      );
+      return { error, status: 'failed' };
+    }
+  };
+
   public update = async (): Promise<ScheduledMessageSubmitResult> => {
     const { composer } = this;
     const { editedScheduledMessage } = this;
@@ -330,21 +309,13 @@ export class ScheduledMessageComposition extends WithSubscriptions {
       return { status: 'blocked' };
     }
 
-    await composer.waitForUploadsInProgress();
+    const composition = await composer.compose({ scheduling: true });
+
+    if (!composition?.message) return { status: 'nothing-to-send' };
 
     if (this.editedScheduledMessage?.id !== editedScheduledMessage.id) {
       return { status: 'nothing-to-send' };
     }
-
-    const uploadError = this.reportFailedUploads(
-      CORE_NOTIFICATION_TYPE.scheduledMessageUpdateFailed,
-      'Failed to update the scheduled message',
-    );
-    if (uploadError) return { error: uploadError, status: 'failed' };
-
-    const composition = await composer.compose({ scheduling: true });
-
-    if (!composition?.message) return { status: 'nothing-to-send' };
 
     const message = toScheduledMessagePayload(
       composition.message,
@@ -352,9 +323,9 @@ export class ScheduledMessageComposition extends WithSubscriptions {
     );
 
     try {
-      const scheduledMessage = await composer.channel.updateScheduledMessage(
+      const scheduledMessage = await composer.channel.scheduledMessageOperations.update(
         editedScheduledMessage.id,
-        { message },
+        { localMessage: composition.localMessage, request: { message } },
       );
 
       this.endEdit();

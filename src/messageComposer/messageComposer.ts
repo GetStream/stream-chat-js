@@ -1317,21 +1317,4 @@ export class MessageComposer extends WithSubscriptions {
       throw error;
     }
   };
-
-  waitForUploadsInProgress = () => {
-    const { attachmentManager } = this;
-
-    if (!this.allowsPendingUploads || !attachmentManager.uploadsInProgressCount) {
-      return Promise.resolve();
-    }
-
-    return new Promise<void>((resolve) => {
-      const unsubscribe = attachmentManager.state.subscribe(() => {
-        if (attachmentManager.uploadsInProgressCount) return;
-
-        unsubscribe();
-        resolve();
-      });
-    });
-  };
 }
