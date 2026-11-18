@@ -6,7 +6,6 @@ export type MessageComposerMiddlewareState = {
   message: MessageRequest;
   localMessage: LocalMessage;
   sendOptions: SendMessageOptions;
-  scheduling?: boolean;
 };
 
 export type MessageComposerMiddlewareValue =

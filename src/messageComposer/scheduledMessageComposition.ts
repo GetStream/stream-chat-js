@@ -12,6 +12,7 @@ import {
   toScheduledMessageComposition,
   toScheduledMessagePayload,
 } from '../scheduledMessages/composition';
+import { nsToDate } from '../utils/time';
 import { chatLoggerSystem } from '../logger';
 import type { Unsubscribe } from '@stream-io/state-store';
 import type { ScheduledMessageResponse } from '../gen/models';
@@ -250,10 +251,7 @@ export class ScheduledMessageComposition extends WithSubscriptions {
     if (composer.hasEditInProgress) return { status: 'nothing-to-send' };
 
     if (this.scheduleBlockReason) {
-      await composer.compose({
-        sendOptions: { scheduled_at: scheduledAt },
-        scheduling: true,
-      });
+      await composer.compose({ sendOptions: { scheduled_at: scheduledAt } });
       return { status: 'blocked' };
     }
 
@@ -261,7 +259,6 @@ export class ScheduledMessageComposition extends WithSubscriptions {
 
     const composition = await composer.compose({
       sendOptions: { scheduled_at: scheduledAt },
-      scheduling: true,
     });
 
     if (!composition?.message) return { status: 'nothing-to-send' };
@@ -304,12 +301,16 @@ export class ScheduledMessageComposition extends WithSubscriptions {
       return { status: 'nothing-to-send' };
     }
 
+    const sendOptions = {
+      scheduled_at: nsToDate(editedScheduledMessage.scheduled_at),
+    };
+
     if (this.scheduleBlockReason) {
-      await composer.compose({ scheduling: true });
+      await composer.compose({ sendOptions });
       return { status: 'blocked' };
     }
 
-    const composition = await composer.compose({ scheduling: true });
+    const composition = await composer.compose({ sendOptions });
 
     if (!composition?.message) return { status: 'nothing-to-send' };
 

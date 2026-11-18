@@ -130,7 +130,6 @@ export type MessageComposerInitStateOptions = {
 
 export type MessageComposerComposeOptions = {
   sendOptions?: SendMessageOptions;
-  scheduling?: boolean;
 };
 
 export type MessageComposerOptions = {
@@ -1016,10 +1015,7 @@ export class MessageComposer extends WithSubscriptions {
     this.clear();
   };
 
-  compose = async ({
-    sendOptions = {},
-    scheduling = false,
-  }: MessageComposerComposeOptions = {}): Promise<
+  compose = async ({ sendOptions = {} }: MessageComposerComposeOptions = {}): Promise<
     MessageComposerMiddlewareValue['state'] | undefined
   > => {
     const created_at = this.editedMessage?.created_at ?? nowNs();
@@ -1050,7 +1046,6 @@ export class MessageComposer extends WithSubscriptions {
           updated_at: created_at,
         } as LocalMessage,
         sendOptions,
-        scheduling,
       },
     });
 
