@@ -78,7 +78,7 @@ export class ScheduledMessagePaginator extends BasePaginator<
           }),
         ...paginatorOptions,
       },
-      { pageSize: SCHEDULED_MESSAGES_PAGE_SIZE },
+      { newItemsAnchorBySortPosition: true, pageSize: SCHEDULED_MESSAGES_PAGE_SIZE },
     );
 
     this.client = client;
@@ -104,10 +104,6 @@ export class ScheduledMessagePaginator extends BasePaginator<
 
   get cid() {
     return this.filter.cid;
-  }
-
-  protected override get startsIntervalInEmptyCompleteList() {
-    return true;
   }
 
   public getItemId(item: ScheduledMessageResponse): string {
