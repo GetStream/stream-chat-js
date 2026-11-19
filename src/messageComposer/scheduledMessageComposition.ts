@@ -71,7 +71,7 @@ export class ScheduledMessageComposition extends WithSubscriptions {
   }
 
   get scheduleBlockReason(): ScheduledMessageBlockReason | undefined {
-    const { channel, locationComposer } = this.composer;
+    const { channel } = this.composer;
 
     if (!channel.scheduledMessagesEnabled) {
       return ScheduledMessageBlockReason.Unavailable;
@@ -79,10 +79,6 @@ export class ScheduledMessageComposition extends WithSubscriptions {
 
     if (getCurrentCommand(this.composer)) {
       return ScheduledMessageBlockReason.Command;
-    }
-
-    if (locationComposer.validLocation) {
-      return ScheduledMessageBlockReason.SharedLocation;
     }
 
     return undefined;
