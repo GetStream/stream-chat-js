@@ -6,7 +6,7 @@ import type {
   ScheduledMessageContentResponse,
   ScheduledMessageResponse,
 } from '../gen/models';
-import type { DraftMessage, DraftResponse, LocalMessage } from '../types';
+import type { DraftMessage, DraftResponse, LocalMessage, UserResponse } from '../types';
 
 const SCHEDULED_MESSAGE_SERVER_FIELDS = ['id', 'mml', 'shared_location'];
 
@@ -98,6 +98,7 @@ export const toScheduledMessagePreview = (
     custom = {},
     mentioned_channel = false,
     mentioned_here = false,
+    mentioned_users: mentionedUserIds = [],
     parent_id,
     poll_id,
     quoted_message_id,
@@ -117,7 +118,7 @@ export const toScheduledMessagePreview = (
     latest_reactions: [],
     mentioned_channel,
     mentioned_here,
-    mentioned_users: [],
+    mentioned_users: mentionedUserIds.map((id) => ({ id }) as UserResponse),
     own_reactions: [],
     parent_id,
     pinned: false,

@@ -1526,6 +1526,16 @@ describe('MessageComposer scheduled messages', () => {
       );
     });
 
+    it('carries the mentioned user ids as stub users', () => {
+      const preview = toScheduledMessagePreview(
+        generateScheduledMessage({
+          message: { text: 'hi', mentioned_users: ['u1', 'u2'] } as never,
+        }),
+      );
+
+      expect(preview.mentioned_users).toEqual([{ id: 'u1' }, { id: 'u2' }]);
+    });
+
     it('fills defaults for the fields the scheduled message leaves out', () => {
       const preview = toScheduledMessagePreview(
         generateScheduledMessage({ message: { text: 'plain' } as never }),
