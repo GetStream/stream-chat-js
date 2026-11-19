@@ -181,6 +181,13 @@ export abstract class PaginatorsManager<
     });
   }
 
+  /**
+   * Starts syncing the registered lists with the client's WS events. Nothing keeps them in sync
+   * until this is called, so an integration has to call it once a user is connected and call the
+   * returned unsubscribe (or {@link unregisterSubscriptions}) on teardown. The Stream UI SDKs do
+   * this for you; a pure-LLC integration must do it itself. Ref-counted, so several holders can
+   * share one manager and only the last unsubscribe tears the subscriptions down.
+   */
   registerSubscriptions(): Unsubscribe {
     if (!this.hasSubscriptions) {
       this.addUnsubscribeFunction(
