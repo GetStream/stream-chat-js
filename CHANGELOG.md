@@ -1,3 +1,13 @@
+## [10.2.0](https://github.com/GetStream/stream-chat-js/compare/v10.1.1...v10.2.0) (2026-11-19)
+
+### Bug Fixes
+
+* **MessagePaginator:** drop a pending focus signal when another call takes over the shown interval ([#2033](https://github.com/GetStream/stream-chat-js/issues/2033)) ([a916255](https://github.com/GetStream/stream-chat-js/commit/a916255c2101147c0ec8f17d5aa7046c50e14942))
+
+### Features
+
+* **pagination:** expose the direction of the running query as loadingDirection ([#2034](https://github.com/GetStream/stream-chat-js/issues/2034)) ([4054392](https://github.com/GetStream/stream-chat-js/commit/4054392d2b283c5fd39e35f7b829187e7b91f9a4))
+
 ## [10.1.1](https://github.com/GetStream/stream-chat-js/compare/v10.1.0...v10.1.1) (2026-11-19)
 
 ### Bug Fixes
