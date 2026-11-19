@@ -121,7 +121,7 @@ If the feature changes how a message is composed or submitted, add a middleware 
 
 ## Worked example: scheduled messages
 
-The scheduled messages feature (stream-chat-js PR 1990) was first built as its own service, then rebuilt on the existing ones in commit `79b2d11d` (PR 2013, spec in `specs/scheduled-message-lists/spec.md`). The walkthrough leads to the second design. This code lives on PR 1990's branch, `feat/cha-5934-scheduled-messages-v10`, not on master; read it with `git show 79b2d11d:<path>`.
+The scheduled messages feature (stream-chat-js [PR 1990](https://github.com/GetStream/stream-chat-js/pull/1990)) was first built as its own service, then rebuilt on the existing ones in commit `79b2d11d` ([PR 2013](https://github.com/GetStream/stream-chat-js/pull/2013), spec in `specs/scheduled-message-lists/spec.md`). The walkthrough leads to the second design. This code lives on PR 1990's branch, `feat/cha-5934-scheduled-messages-v10`, not on master; read it with `git show 79b2d11d:<path>`.
 
 | Step | Answer |
 | --- | --- |
@@ -147,7 +147,7 @@ Steps 5–8, 12 and 13 are in the next table; for step 13, the scheduled-message
 | One client config key, `client.scheduledMessages.paginator`, for all lists. | The per-parent config slice. | `channel.scheduledMessagesPaginator`; registered lists take `paginatorOptions`. |
 | `getRequestHandlers(cid)` on the manager reading a channel's config. | The channel's own `requestHandlers`. | The channel reads its own `configState`. |
 | `editedScheduledMessage` plus `failedScheduledMessage`, and `rescheduleFailedMessage` / `cancelRescheduleFailedMessage`. | — (two fields for one concept) | One field; "failed" is derived from its status. |
-| The React side (stream-chat-react PR 3383) filtered by channel/thread scope inside its hooks. | — (scope logic outside the SDK) | `ScheduledMessagesView` in the LLC; the React side (PR 3426) only reads it. |
+| The React side (stream-chat-react [PR 3383](https://github.com/GetStream/stream-chat-react/pull/3383)) filtered by channel/thread scope inside its hooks. | — (scope logic outside the SDK) | `ScheduledMessagesView` in the LLC; the React side ([PR 3426](https://github.com/GetStream/stream-chat-react/pull/3426)) only reads it. |
 
 ## Check a design or a diff
 
@@ -166,6 +166,8 @@ Stop and rework when any of these is true:
 - The UI SDK would have to filter or merge SDK lists itself.
 
 ## Design note template
+
+Every source from outside this repo that the note cites (the spec, a PR, a ticket, another app's page, UI SDK or server code) is a Markdown link to its URL.
 
 ```markdown
 # <Feature>: design
