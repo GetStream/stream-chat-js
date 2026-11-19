@@ -17,7 +17,11 @@ import { chatLoggerSystem } from '../logger';
 import type { Unsubscribe } from '@stream-io/state-store';
 import type { ScheduledMessageResponse } from '../gen/models';
 import type { DraftResponse } from '../types';
-import type { MessageComposer } from './messageComposer';
+import type {
+  MessageComposer,
+  MessageComposerSnapshot,
+  MessageComposerState,
+} from './messageComposer';
 
 const logger = chatLoggerSystem.getLogger('message-composer');
 
@@ -30,6 +34,11 @@ const END_REASON_BY_SCHEDULED_MESSAGE_EVENT = {
 type ScheduledMessageEndEventType = keyof typeof END_REASON_BY_SCHEDULED_MESSAGE_EVENT;
 
 type ScheduledMessageEditRestore = () => void;
+
+type ScheduledSubmitRestorePoint = {
+  snapshot: MessageComposerSnapshot;
+  state: MessageComposerState;
+};
 
 export type ScheduledMessageSubmitResult = {
   status: 'scheduled' | 'sent' | 'nothing-to-send' | 'blocked' | 'failed';
@@ -265,6 +274,20 @@ export class ScheduledMessageComposition extends WithSubscriptions {
 
     const { localMessage, message, sendOptions } = composition;
 
+    const hasPendingUpload = composer.attachmentManager.uploadsInProgressCount > 0;
+    const releaseBeforeRequest = !failedScheduledMessage && !hasPendingUpload;
+
+    let restorePoint: ScheduledSubmitRestorePoint | null = null;
+
+    if (releaseBeforeRequest) {
+      restorePoint = {
+        snapshot: composer.getSnapshot(),
+        state: composer.state.getLatestValue(),
+      };
+
+      composer.releaseSubmittedComposition();
+    }
+
     try {
       const { scheduled_message: scheduledMessage } =
         await composer.channel.messageOperations.scheduleMessage({
@@ -276,19 +299,25 @@ export class ScheduledMessageComposition extends WithSubscriptions {
       if (failedScheduledMessage) {
         this.endEdit();
         this.removeFailedScheduledMessage(failedScheduledMessage);
-      } else {
+      } else if (hasPendingUpload) {
         composer.releaseSubmittedComposition();
       }
 
-      return scheduledMessage
-        ? { scheduledMessage, status: 'scheduled' }
-        : { status: 'sent' };
+      if (!scheduledMessage) return { status: 'sent' };
+
+      return { scheduledMessage, status: 'scheduled' };
     } catch (error) {
+      if (restorePoint && composer.compositionIsEmpty) {
+        composer.restoreSnapshot(restorePoint.snapshot);
+        composer.state.next(restorePoint.state);
+      }
+
       composer.reportSubmitFailure(
         CORE_NOTIFICATION_TYPE.scheduledMessageCreateFailed,
         'Failed to schedule the message',
         error,
       );
+
       return { error, status: 'failed' };
     }
   };
