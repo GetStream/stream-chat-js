@@ -724,7 +724,7 @@ describe('MessageComposer scheduled messages', () => {
       expect(composer.scheduledMessageComposition.editedScheduledMessage).toBe(
         scheduledMessage,
       );
-      expect(composer.quotedMessage).toBeNull();
+      expect(composer.quotedMessage).toEqual({ id: 'quoted-3' });
       expect(composer.textComposer.mentionedUsers).toEqual([
         expect.objectContaining({ id: 'unknown' }),
       ]);
@@ -1125,6 +1125,23 @@ describe('MessageComposer scheduled messages', () => {
 
       expect(result).toEqual({ status: 'nothing-to-send' });
       expect(updateSpy).not.toHaveBeenCalled();
+    });
+
+    it('keeps the parent_id when rescheduling a failed thread reply', async () => {
+      const { client, composer } = setup();
+      const failedReply = generateFailedMessage({
+        message: { custom: {}, parent_id: 'parent-1', text: 'see you tomorrow' },
+      });
+      const sendSpy = mockScheduledSend(client, generateScheduledMessage({ id: 'sm-2' }));
+      await composer.scheduledMessageComposition.editScheduledMessage(failedReply);
+
+      await composer.scheduledMessageComposition.schedule(scheduledAt);
+
+      expect(sentRequest(sendSpy)).toEqual(
+        expect.objectContaining({
+          message: expect.objectContaining({ parent_id: 'parent-1' }),
+        }),
+      );
     });
 
     it('schedules a new message and deletes the failed one', async () => {

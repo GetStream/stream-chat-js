@@ -13,10 +13,14 @@ import {
   toScheduledMessagePayload,
 } from '../scheduledMessages/composition';
 import { nsToDate } from '../utils/time';
+import {
+  resolveMessageById,
+  resolveUsersByIds,
+} from '../scheduledMessages/editResolvers';
 import { chatLoggerSystem } from '../logger';
 import type { Unsubscribe } from '@stream-io/state-store';
 import type { ScheduledMessageResponse } from '../gen/models';
-import type { DraftResponse } from '../types';
+import type { DraftResponse, LocalMessage } from '../types';
 import type {
   MessageComposer,
   MessageComposerSnapshot,
@@ -232,13 +236,19 @@ export class ScheduledMessageComposition extends WithSubscriptions {
     } = message;
 
     const quotedMessagePromise = quotedMessageId
-      ? composer.client.getMessageById(quotedMessageId)
+      ? resolveMessageById(composer.client, quotedMessageId)
       : null;
 
-    const [mentionedUsers, quotedMessage] = await Promise.all([
-      composer.client.getUsersByIds(mentionedUserIds),
+    const [mentionedUsers, loadedQuotedMessage] = await Promise.all([
+      resolveUsersByIds(composer.client, mentionedUserIds),
       quotedMessagePromise,
     ]);
+
+    let quotedMessage = loadedQuotedMessage;
+
+    if (!quotedMessage && quotedMessageId) {
+      quotedMessage = { id: quotedMessageId } as LocalMessage;
+    }
 
     this.saveCompositionBeforeEdit();
 
@@ -272,7 +282,16 @@ export class ScheduledMessageComposition extends WithSubscriptions {
 
     if (!composition?.message) return { status: 'nothing-to-send' };
 
-    const { localMessage, message, sendOptions } = composition;
+    const { localMessage, sendOptions } = composition;
+
+    let message = composition.message;
+
+    if (failedScheduledMessage) {
+      message = {
+        ...message,
+        parent_id: failedScheduledMessage.message.parent_id,
+      };
+    }
 
     const hasPendingUpload = composer.attachmentManager.uploadsInProgressCount > 0;
     const releaseBeforeRequest = !failedScheduledMessage && !hasPendingUpload;

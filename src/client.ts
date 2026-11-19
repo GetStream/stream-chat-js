@@ -1347,45 +1347,6 @@ export class StreamChat extends ChatApi {
     return data;
   }
 
-  async getUsersByIds(userIds: string[] = []): Promise<UserResponse[]> {
-    const knownUsers = this.state.users;
-    const missingUserIds = userIds.filter((userId) => !knownUsers[userId]);
-    const fetchedUsers: Record<string, UserResponse> = {};
-
-    if (missingUserIds.length) {
-      try {
-        const { users } = await this.queryUsers({
-          payload: { filter_conditions: { id: { $in: missingUserIds } } },
-        });
-        users.forEach((user) => (fetchedUsers[user.id] = user));
-      } catch (error) {
-        logger.withExtraTags('getUsersByIds').error('Resolving the users failed.', {
-          error,
-        });
-      }
-    }
-
-    return userIds.map(
-      (userId) =>
-        knownUsers[userId] ?? fetchedUsers[userId] ?? ({ id: userId } as UserResponse),
-    );
-  }
-
-  async getMessageById(id: string): Promise<LocalMessage | null> {
-    const storedMessage = this.messageStore.get(id);
-    if (storedMessage) return storedMessage;
-
-    try {
-      const { message } = await this.getMessage({ id });
-      return formatMessage(message);
-    } catch (error) {
-      logger.withExtraTags('getMessageById').error('Resolving the message failed.', {
-        error,
-      });
-      return null;
-    }
-  }
-
   /**
    * Stops watching a channel on this client's connection. It carries no `watch` flag, but it waits
    * for the connection ID like a watching request (through a handshake or reconnect, until the
