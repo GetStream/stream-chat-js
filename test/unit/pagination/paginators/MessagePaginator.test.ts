@@ -2391,6 +2391,52 @@ describe('MessagePaginator', () => {
         expect(paginator.hasMoreTail).toBe(true);
       });
 
+      // A list scrolls to the focused message when it renders: kept, the jump's target would be
+      // scrolled to in the newest window, where it is not, instead of the message just sent.
+      it("and drops the focus of the jump it replaces when it is the current user's own send", async () => {
+        (channel as unknown as { userId: string }).userId = 'me';
+        const paginator = new MessagePaginator({ channel, itemIndex });
+        loadJumpedWindow(paginator);
+        await paginator.jumpToMessage('m2');
+        expect(paginator.messageFocusSignal.getLatestValue().signal?.messageId).toBe(
+          'm2',
+        );
+
+        paginator.ingestItem({
+          ...msg('m20', '20'),
+          status: 'sending',
+          user: { id: 'me' },
+        });
+
+        expect(paginator.items?.map((m) => m.id)).toEqual(['m20']);
+        expect(paginator.messageFocusSignal.getLatestValue().signal).toBe(null);
+      });
+
+      it('and keeps the focus of the jump when the message is not shown', async () => {
+        const paginator = new MessagePaginator({ channel, itemIndex });
+        loadJumpedWindow(paginator);
+        await paginator.jumpToMessage('m2');
+
+        paginator.ingestItem(msg('m20', '20'));
+
+        expect(paginator.items?.map((m) => m.id)).toEqual(['m1', 'm2', 'm3']);
+        expect(paginator.messageFocusSignal.getLatestValue().signal?.messageId).toBe(
+          'm2',
+        );
+      });
+
+      it('and drops the focus of an earlier jump when jumping to the latest message', async () => {
+        const paginator = new MessagePaginator({ channel, itemIndex });
+        loadJumpedWindow(paginator);
+        paginator.ingestItem(msg('m20', '20'));
+        await paginator.jumpToMessage('m2');
+
+        expect(await paginator.jumpToTheLatestMessage()).toBe(true);
+
+        expect(paginator.items?.map((m) => m.id)).toEqual(['m20']);
+        expect(paginator.messageFocusSignal.getLatestValue().signal).toBe(null);
+      });
+
       it('and stays shown when a jump requested before the send comes back', async () => {
         (channel as unknown as { userId: string }).userId = 'me';
         const paginator = new MessagePaginator({ channel, itemIndex });
