@@ -280,6 +280,12 @@ export type PaginatorState<T> = {
   hasMoreHead: boolean;
   hasMoreTail: boolean;
   isLoading: boolean;
+  /**
+   * The direction of the running query while it loads a page at an edge of the loaded items
+   * (`toHead()`, `toTail()`). `undefined` while no query runs, and for a query that loads no such
+   * page: a first page, a refresh, or a page at a query shape the caller gives (a jump).
+   */
+  loadingDirection?: PaginationDirection;
   items: T[] | undefined;
   lastQueryError?: Error;
   cursor?: PaginatorCursor;
@@ -606,6 +612,12 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
       cursor: this.config.initialCursor,
       offset: this.config.initialOffset ?? 0,
     });
+    // A query has a loading direction only while it loads: every path that ends a query clears it.
+    this.state.addPreprocessor((next) => {
+      if (!next.isLoading && next.loadingDirection !== undefined) {
+        next.loadingDirection = undefined;
+      }
+    });
     // Called directly: `onChanged` fires on changes, not on the initial build.
     this.rebuildStatePublishThrottles(this.config.stateThrottleMs);
     this.intervalViews = new StateStore<PaginatorIntervalViews<T>>({
@@ -645,6 +657,11 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
     return this.state.getLatestValue().isLoading;
   }
 
+  /** See {@link PaginatorState.loadingDirection}. */
+  get loadingDirection() {
+    return this.state.getLatestValue().loadingDirection;
+  }
+
   /**
    * True once a query has run or a non-empty interval was loaded without one (`setItems`, or a
    * subclass calling `recordLoadedIntervalQueryShape`). Cleared by `resetState`.
@@ -678,6 +695,7 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
       hasMoreHead: true,
       hasMoreTail: true,
       isLoading: false,
+      loadingDirection: undefined,
       items: undefined,
       lastQueryError: undefined,
       cursor: this.config.initialCursor,
@@ -3180,8 +3198,13 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
       }
     } else if (!silent) {
       // A next page, or a refresh keeping the items: loading shows without blanking the list, and
-      // the page merges into the loaded intervals in `placeQueryPage`.
-      this.state.partialNext({ isLoading: true });
+      // the page merges into the loaded intervals in `placeQueryPage`. Only a next page loads at an
+      // edge of the loaded items; a page at the caller's shape has no known place.
+      const loadsAtEdge = !isFirstPage && !forcedQueryShape;
+      this.state.partialNext({
+        isLoading: true,
+        loadingDirection: loadsAtEdge ? direction : undefined,
+      });
     }
 
     // a page at the caller's shape has no known place relative to the active interval

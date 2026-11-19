@@ -3647,6 +3647,25 @@ describe('MessagePaginator', () => {
       expect(paginator.hasMoreTail).toBe(false);
     });
 
+    it('reports the tailward loading direction while the older page loads', async () => {
+      const { paginator, m1 } = setupLoadedHead({ isTail: false });
+      paginator.reconcileNewestMessages([m1, m('m2', '02')]);
+      let resolveOlderPage: (value: { messages: MessageResponse[] }) => void = () =>
+        undefined;
+      (channel.getReplies as ReturnType<typeof vi.fn>).mockReturnValue(
+        new Promise((resolve) => {
+          resolveOlderPage = resolve;
+        }),
+      );
+
+      const query = paginator.toTail();
+      expect(paginator.loadingDirection).toBe('tailward');
+
+      resolveOlderPage({ messages: [] });
+      await query;
+      expect(paginator.loadingDirection).toBeUndefined();
+    });
+
     it('reconciles in-place edits and appends new messages without a query', () => {
       const { paginator, m1, m2 } = setupLoadedHead({ isTail: true });
       // While offline: m3 was edited and m4/m5 arrived; the hydrated newest window carries both.

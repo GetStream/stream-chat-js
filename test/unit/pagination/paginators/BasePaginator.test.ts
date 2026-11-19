@@ -1764,6 +1764,144 @@ describe('BasePaginator', () => {
     });
   });
 
+  describe('loadingDirection', () => {
+    const loadFirstPage = async (paginator: Paginator) => {
+      const query = paginator.toTail();
+      await sleep(0);
+      paginator.queryResolve({
+        items: [{ id: 'id1' }],
+        tailward: 'next1',
+        headward: 'prev1',
+      });
+      await query;
+    };
+
+    it('is undefined while no query runs', async () => {
+      const paginator = new Paginator({ initialCursor: ZERO_PAGE_CURSOR });
+      expect(paginator.loadingDirection).toBeUndefined();
+      await loadFirstPage(paginator);
+      expect(paginator.loadingDirection).toBeUndefined();
+    });
+
+    it('is undefined while the first page loads, also when toTail() loads it', async () => {
+      const paginator = new Paginator({ initialCursor: ZERO_PAGE_CURSOR });
+      void paginator.toTail();
+      await sleep(0);
+      expect(paginator.isLoading).toBe(true);
+      expect(paginator.loadingDirection).toBeUndefined();
+    });
+
+    it.each([
+      ['toTail', 'tailward'],
+      ['toHead', 'headward'],
+    ] as const)(
+      "is %s()'s direction while it loads a next page, and undefined once the page is placed",
+      async (method, direction) => {
+        const paginator = new Paginator({ initialCursor: ZERO_PAGE_CURSOR });
+        await loadFirstPage(paginator);
+
+        const query = paginator[method]();
+        expect(paginator.isLoading).toBe(true);
+        expect(paginator.loadingDirection).toBe(direction);
+
+        paginator.queryResolve({
+          items: [{ id: 'id2' }],
+          tailward: 'next2',
+          headward: 'prev2',
+        });
+        await query;
+        expect(paginator.isLoading).toBe(false);
+        expect(paginator.loadingDirection).toBeUndefined();
+      },
+    );
+
+    it('is cleared when the query fails', async () => {
+      const paginator = new Paginator({ initialCursor: ZERO_PAGE_CURSOR });
+      await loadFirstPage(paginator);
+
+      const query = paginator.toTail();
+      expect(paginator.loadingDirection).toBe('tailward');
+      paginator.queryReject(new Error('Failed'));
+      await query;
+
+      expect(paginator.lastQueryError?.message).toBe('Failed');
+      expect(paginator.loadingDirection).toBeUndefined();
+    });
+
+    it('is cleared when the query fails with throwErrors set', async () => {
+      const paginator = new Paginator({
+        initialCursor: ZERO_PAGE_CURSOR,
+        throwErrors: true,
+      });
+      await loadFirstPage(paginator);
+
+      const query = paginator.toTail();
+      expect(paginator.loadingDirection).toBe('tailward');
+      paginator.queryReject(new Error('Failed'));
+
+      await expect(query).rejects.toThrow('Failed');
+      expect(paginator.loadingDirection).toBeUndefined();
+    });
+
+    it('is cleared when the state is reset during the query', async () => {
+      const paginator = new Paginator({ initialCursor: ZERO_PAGE_CURSOR });
+      await loadFirstPage(paginator);
+
+      void paginator.toTail();
+      expect(paginator.loadingDirection).toBe('tailward');
+      paginator.resetState();
+
+      expect(paginator.loadingDirection).toBeUndefined();
+    });
+
+    it('stays undefined when a query dropped by a reset resolves later', async () => {
+      const paginator = new Paginator({ initialCursor: ZERO_PAGE_CURSOR });
+      await loadFirstPage(paginator);
+
+      const query = paginator.toTail();
+      paginator.resetState();
+      paginator.queryResolve({
+        items: [{ id: 'id2' }],
+        tailward: 'next2',
+        headward: 'prev2',
+      });
+      await query;
+
+      expect(paginator.isLoading).toBe(false);
+      expect(paginator.loadingDirection).toBeUndefined();
+    });
+
+    it('is not published by a silent next page, which publishes no loading', async () => {
+      const paginator = new Paginator({ initialCursor: ZERO_PAGE_CURSOR });
+      await loadFirstPage(paginator);
+
+      void paginator.toTail({ silent: true });
+      expect(paginator.isLoading).toBe(false);
+      expect(paginator.loadingDirection).toBeUndefined();
+    });
+
+    it('is undefined for a refresh that keeps the items', async () => {
+      const paginator = new Paginator({ initialCursor: ZERO_PAGE_CURSOR });
+      await loadFirstPage(paginator);
+
+      void paginator.executeQuery({ keepPreviousItems: true, reset: 'yes' });
+      expect(paginator.isLoading).toBe(true);
+      expect(paginator.loadingDirection).toBeUndefined();
+    });
+
+    it('is undefined for a page at a query shape the caller gives, even with a direction', async () => {
+      const paginator = new Paginator({ initialCursor: ZERO_PAGE_CURSOR });
+      await loadFirstPage(paginator);
+
+      void paginator.executeQuery({
+        direction: 'tailward',
+        queryShape: defaultNextQueryShape,
+      });
+      expect(paginator.isLoading).toBe(true);
+      expect(paginator.loadingDirection).toBeUndefined();
+    });
+  });
+
   describe('item management', () => {
     const item1: TestItem = {
       id: 'id1',
