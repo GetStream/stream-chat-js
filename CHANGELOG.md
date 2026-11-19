@@ -1,3 +1,10 @@
+## [10.1.1](https://github.com/GetStream/stream-chat-js/compare/v10.1.0...v10.1.1) (2026-11-19)
+
+### Bug Fixes
+
+* **LiveLocationManager:** keep tracking shares when loading the active live locations fails ([#2017](https://github.com/GetStream/stream-chat-js/issues/2017)) ([e92517a](https://github.com/GetStream/stream-chat-js/commit/e92517a1a778de3c162114063818e0d4423891c0))
+* **pagination:** settle empty first pages and reset channel lists on query change ([#2027](https://github.com/GetStream/stream-chat-js/issues/2027)) ([f3f41b3](https://github.com/GetStream/stream-chat-js/commit/f3f41b372431b326753d7ec5510d5684e0abf760))
+
 ## [10.1.0](https://github.com/GetStream/stream-chat-js/compare/v10.0.2...v10.1.0) (2026-11-17)
 
 ### Features
