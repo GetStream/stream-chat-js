@@ -215,6 +215,15 @@ export type PlaceQueryPageParams<T, Q> = QueryPagePlacement<Q> & {
   results: PaginationQueryReturnValue<T> | null;
 };
 
+type EmptyCompleteFirstPagePlacement = {
+  isFirstPage: boolean;
+  isHead: boolean;
+  isTail: boolean;
+  isSeparateInterval: boolean;
+  keepPreviousItems: boolean;
+  updateState: boolean;
+};
+
 /**
  * What the preparing step of the query pipeline hands to the next ones (see
  * `BasePaginator.executeQuery`): the parameters for fetching and for placing the page, and the
@@ -680,22 +689,15 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
     isSeparateInterval,
     keepPreviousItems,
     updateState,
-  }: {
-    isFirstPage: boolean | undefined;
-    isHead: boolean | undefined;
-    isTail: boolean | undefined;
-    isSeparateInterval: boolean | undefined;
-    keepPreviousItems: boolean | undefined;
-    updateState: boolean | undefined;
-  }): Interval | null {
+  }: EmptyCompleteFirstPagePlacement): Interval | null {
     const placesEmptyCompleteFirstPage =
       this.startsIntervalInEmptyCompleteList &&
       updateState &&
       isFirstPage &&
       !isSeparateInterval &&
       !keepPreviousItems &&
-      isHead === true &&
-      isTail === true;
+      isHead &&
+      isTail;
 
     if (!placesEmptyCompleteFirstPage) return null;
 
@@ -3328,10 +3330,10 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
       }) ??
       this.placeEmptyCompleteFirstPage({
         isFirstPage,
-        isHead,
-        isTail,
+        isHead: !!isHead,
+        isTail: !!isTail,
         isSeparateInterval,
-        keepPreviousItems,
+        keepPreviousItems: !!keepPreviousItems,
         updateState,
       });
     const intervalReachesHead =
