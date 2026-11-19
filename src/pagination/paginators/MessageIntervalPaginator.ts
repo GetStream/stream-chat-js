@@ -1862,6 +1862,16 @@ export class MessageIntervalPaginator extends BasePaginator<
     this.messageFocusSignal.next({ signal: null });
   };
 
+  /**
+   * Also drops the focus signal of an earlier jump. Whatever claims the active interval decides what
+   * is shown, so the earlier target must not be scrolled to or highlighted there. A jump claims
+   * before it emits its own signal, so it keeps that one.
+   */
+  protected override claimActiveInterval(): number {
+    this.clearMessageFocusSignal();
+    return super.claimActiveInterval();
+  }
+
   clearStateAndCache() {
     this.resetState();
     this._itemIndex.clear();
