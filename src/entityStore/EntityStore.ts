@@ -373,22 +373,17 @@ export class EntityStore<T> {
     this.dropEntry(id, { release: false });
   }
 
-  private dropEntry(
-    id: string,
-    { release, writer }: { release: boolean; writer?: EntityStoreSubscriber },
-  ) {
+  private dropEntry(id: string, { release }: { release: boolean }) {
     if (!this.byId.has(id)) return;
     const entity = this.byId.get(id) as T;
     const holders = this.subscribers.get(id);
-    this.markDirty(id, writer);
+    this.markDirty(id);
     this.subscribers.delete(id);
     this.pendingFlushIds?.delete(id);
     const runner = new RunnerWithErrorCollector();
     if (holders) {
-      for (const holder of holders) {
-        if (holder === writer) continue;
+      for (const holder of holders)
         runner.run(() => holder.onEntityRemoved?.(id, entity));
-      }
     }
     this.byId.delete(id);
     if (release) runner.run(() => this.onRelease?.(entity));
