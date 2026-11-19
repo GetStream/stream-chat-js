@@ -11,6 +11,7 @@ import { StateStore } from '@stream-io/state-store';
 import { ConfigController } from './configuration/ConfigController';
 import { applyInstanceConfiguration } from './configuration/utils/applyInstanceConfiguration';
 import { WithSubscriptions } from './utils/WithSubscriptions';
+import { chatLoggerSystem } from './logger';
 import type { StreamChat } from './client';
 import type { Unsubscribe } from '@stream-io/state-store';
 import type {
@@ -26,13 +27,18 @@ export type WatchLocation = (handler: WatchLocationHandler) => Unsubscribe;
 type DeviceIdGenerator = () => string;
 type MessageId = string;
 
+const logger = chatLoggerSystem.getLogger('live-location-manager');
+
 export type ScheduledLiveLocationSharing = SharedLiveLocationResponse & {
   stopSharingTimeout: ReturnType<typeof setTimeout> | null;
 };
 
 export type LiveLocationManagerState = {
+  /** Whether the user's active live locations have been loaded from the server. */
   ready: boolean;
   messages: Map<MessageId, ScheduledLiveLocationSharing>;
+  /** Error of the last failed load of the active live locations. Cleared by a successful load. */
+  lastQueryError?: Error;
 };
 
 /** `setTimeout` silently clamps a longer delay to 1 ms, so longer waits are armed in steps. */
@@ -94,6 +100,14 @@ export class LiveLocationManager extends WithSubscriptions {
   private getDeviceId: DeviceIdGenerator;
   private _deviceId: string;
   private watchLocation: WatchLocation;
+  /** The in-flight load of the active live locations, shared by concurrent callers. */
+  private stateInitPromise?: Promise<void>;
+  /**
+   * Ids of live-location messages removed from `state.messages` (stopped, deleted, expired) while
+   * `getUserLiveLocations()` is in flight. The response may predate the removal, so its entries
+   * for these ids are skipped instead of being tracked again.
+   */
+  private unregisteredDuringLoad = new Set<MessageId>();
 
   private readonly configController: ConfigController<LiveLocationManagerConfig>;
   private unsubscribeConfiguration?: Unsubscribe;
@@ -171,9 +185,18 @@ export class LiveLocationManager extends WithSubscriptions {
     this.configController.initialize(config);
   }
 
+  /**
+   * Registers the event subscriptions, then loads the user's active live locations. Registration
+   * runs before the first `await`, so each `init()` pairs with one `unregisterSubscriptions()`
+   * whether or not the load has finished.
+   *
+   * Never rejects. A failed load is stored in `state.lastQueryError` and the subscriptions stay
+   * registered, so shares started later are still tracked. The next `init()`, position update or
+   * `connection.recovered` event retries the load.
+   */
   public async init() {
-    await this.assureStateInit();
     this.registerSubscriptions();
+    await this.assureStateInit();
   }
 
   public registerSubscriptions = () => {
@@ -219,24 +242,44 @@ export class LiveLocationManager extends WithSubscriptions {
     return this._deviceId;
   }
 
-  private async assureStateInit() {
-    if (this.stateIsReady) return;
-    const { active_live_locations } = await this.client.getUserLiveLocations();
-    this.state.next({
-      messages: new Map(
-        active_live_locations.filter(isTrackableLocation).map((location) => [
-          location.message_id,
-          {
+  /** Loads the active live locations unless already loaded. Never rejects. */
+  private assureStateInit(): Promise<void> {
+    if (this.stateIsReady) return Promise.resolve();
+
+    this.stateInitPromise ??= this.loadState().finally(() => {
+      this.stateInitPromise = undefined;
+      this.unregisteredDuringLoad.clear();
+    });
+    return this.stateInitPromise;
+  }
+
+  private async loadState() {
+    try {
+      const { active_live_locations } = await this.client.getUserLiveLocations();
+      this.state.next((currentValue) => {
+        // Events received while the request was in flight are at least as recent as the snapshot:
+        // shares they registered are kept as they are, and shares they unregistered stay out.
+        const messages = new Map(currentValue.messages);
+        for (const location of active_live_locations.filter(isTrackableLocation)) {
+          if (
+            messages.has(location.message_id) ||
+            this.unregisteredDuringLoad.has(location.message_id)
+          )
+            continue;
+          messages.set(location.message_id, {
             ...location,
             stopSharingTimeout: this.scheduleStopSharing(
               location.message_id,
               location.end_at,
             ),
-          },
-        ]),
-      ),
-      ready: true,
-    });
+          });
+        }
+        return { ...currentValue, messages, ready: true, lastQueryError: undefined };
+      });
+    } catch (error) {
+      logger.warn('Failed to load the active live locations', error);
+      this.state.partialNext({ lastQueryError: error as Error });
+    }
   }
 
   private subscribeTargetMessagesChange() {
@@ -319,11 +362,13 @@ export class LiveLocationManager extends WithSubscriptions {
           if (event.type === 'live_location_sharing.started') {
             this.registerMessage(event.message);
           } else if (event.type === 'message.updated') {
-            const isRegistered = this.messages.has(event.message.id);
-            if (isRegistered && !isValidLiveLocationMessage(event.message)) {
+            // A share stopped on another device arrives here with an `end_at` in the past.
+            // Unregistered even when not tracked yet, so a load in flight does not re-add it.
+            if (isValidLiveLocationMessage(event.message)) {
+              this.registerMessage(event.message);
+            } else {
               this.unregisterMessages([event.message.id]);
             }
-            this.registerMessage(event.message);
           } else {
             this.unregisterMessages([event.message.id]);
           }
@@ -333,6 +378,10 @@ export class LiveLocationManager extends WithSubscriptions {
         if (!event.live_location) return;
 
         this.unregisterMessages([event.live_location?.message_id]);
+      }),
+      // Retries a failed load once the connection is back. No-op once the state is loaded.
+      this.client.on('connection.recovered', () => {
+        void this.assureStateInit();
       }),
     ];
 
@@ -392,6 +441,9 @@ export class LiveLocationManager extends WithSubscriptions {
   }
 
   private unregisterMessages(messageIds: string[]) {
+    if (this.stateInitPromise) {
+      messageIds.forEach((messageId) => this.unregisteredDuringLoad.add(messageId));
+    }
     const messages = this.messages;
     const removedMessages = new Set(messageIds);
     const newMessages = new Map(
