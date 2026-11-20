@@ -826,7 +826,7 @@ Non-breaking; land any time. Breaking simplifications are in [section 1](#fix-be
 - **Where:** `src/client.ts:1839-1844`, `src/types.ts:59-68` (`APIResponse`)
 - **What:** `unbanUser` still calls v1 `DELETE /moderation/ban` returning the legacy `APIResponse` envelope, while ban, mute and unmute moved to V2 `client.moderation.*`, which already has `unban`. `APIResponse`'s own comment says to delete it with these methods. RN V10 calls `client.unbanUser(id)` (`useMessageActionHandlers.ts:216`).
 - **Suggested change:** Route through `this.moderation.unban({ target_user_id, ...options })` while keeping the `unbanUser(targetUserID, options?)` signature (non-breaking, any time). Deleting `APIResponse` is a v9 break, decided with the [restated types](#lo-restated-types).
-- **Status:** mostly done. `unbanUser` now calls `this.moderation.unban({ target_user_id, channel_cid })`, with `channel_cid` built from `type` / `id`. The exception is `remove_future_channels_ban: true`, which still goes to v1: the V2 `/unban` controller forwards only `channel_cid` to its `UnbanAction`, although that action supports the flag. The v1 path can go once the backend accepts the flag on V2. `APIResponse` stays, as the return type.
+- **Status:** done. `unbanUser` calls `this.moderation.unban({ target_user_id, channel_cid, remove_future_channels_ban })`, with `channel_cid` built from `type` / `id`; the v1 fallback for `remove_future_channels_ban` went once the spec gained the flag on V2. With a channel, V2 removes the channel creator's future channels ban (where the V2 ban keys it), where v1 removed the caller's, so a non-creator moderator's unban now actually removes it. `APIResponse` stays, as the return type.
 
 <a id="offline-cache-key"></a>
 

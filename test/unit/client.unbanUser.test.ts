@@ -56,13 +56,13 @@ describe('unbanUser', () => {
         shadow: true,
         client_id: 'c',
         connection_id: 'x',
-        remove_future_channels_ban: false,
       });
 
       expect(unbanCall()).toMatchObject({
         queryParams: { target_user_id: 'bob', channel_cid: undefined },
         body: {},
       });
+      expect(unbanCall().queryParams).not.toHaveProperty('shadow');
     });
 
     it('keeps options.target_user_id taking precedence, as before', async () => {
@@ -71,14 +71,19 @@ describe('unbanUser', () => {
       expect(unbanCall().queryParams).toMatchObject({ target_user_id: 'alice' });
     });
 
-    it('falls back to v1 for remove_future_channels_ban, which V2 does not accept', async () => {
-      await client.unbanUser('bob', { remove_future_channels_ban: true });
-
-      expect(sendRequest).not.toHaveBeenCalled();
-      expect(legacyDelete).toHaveBeenCalledWith(`${client.baseURL}/moderation/ban`, {
+    it('sends remove_future_channels_ban to the V2 endpoint', async () => {
+      await client.unbanUser('bob', {
+        type: 'messaging',
+        id: 'general',
         remove_future_channels_ban: true,
-        target_user_id: 'bob',
       });
+
+      expect(unbanCall().queryParams).toEqual({
+        target_user_id: 'bob',
+        channel_cid: 'messaging:general',
+        remove_future_channels_ban: true,
+      });
+      expect(legacyDelete).not.toHaveBeenCalled();
     });
   });
 
