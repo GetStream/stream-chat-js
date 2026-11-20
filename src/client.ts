@@ -67,6 +67,7 @@ import { ThreadManager } from './thread_manager';
 import { DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE } from './constants';
 import { PollManager } from './poll_manager';
 import { EntityStore } from './entityStore/EntityStore';
+import { TombstoneConflictPolicy } from './entityStore/EntityConflictPolicy';
 import { ChannelManager } from './ChannelManager';
 import {
   ConnectionIdManager,
@@ -77,7 +78,12 @@ import {
 import { MessageDeliveryReporter } from './messageDelivery';
 import { NotificationManager } from './notifications';
 import { ReminderManager } from './reminders';
-import { ScheduledMessagePaginatorsManager } from './scheduledMessages';
+import {
+  isRemovedScheduledMessage,
+  ScheduledMessagePaginatorsManager,
+  shouldReplaceScheduledMessage,
+} from './scheduledMessages';
+import { getScheduledMessageFromEvent } from './scheduledMessages/eventHandlers';
 import type { AbstractOfflineDB } from './offline-support';
 import { FixedSizeQueueCache } from './utils/FixedSizeQueueCache';
 import { isEqual } from './utils/mergeWith/mergeWithCore';
@@ -333,6 +339,11 @@ export class StreamChat extends ChatApi {
     });
     this.scheduledMessageStore = new EntityStore<ScheduledMessageResponse>({
       getEntityId: ({ id }) => id,
+      conflictPolicy: new TombstoneConflictPolicy<ScheduledMessageResponse>({
+        getEntityId: ({ id }) => id,
+        isTombstone: isRemovedScheduledMessage,
+        shouldReplace: shouldReplaceScheduledMessage,
+      }),
     });
     this.channelManager = new ChannelManager({ client: this });
     this.threads = new ThreadManager({ client: this });
@@ -969,6 +980,17 @@ export class StreamChat extends ChatApi {
     if (event.received_at == null) event.received_at = nowNs();
 
     const postListenerCallbacks = this._handleClientEvent(event as WSEvent);
+    // A sent or deleted scheduled message becomes a tombstone even when no list holds it, e.g. in a
+    // channel not loaded yet: a queryChannels response read before the event can't list it again.
+    const scheduledMessage = getScheduledMessageFromEvent(
+      event as Parameters<typeof getScheduledMessageFromEvent>[0],
+    );
+    if (
+      scheduledMessage &&
+      this.scheduledMessageStore.conflictPolicy.removesEntity(scheduledMessage)
+    ) {
+      this.scheduledMessageStore.upsert(scheduledMessage);
+    }
 
     const cid = (event as Extract<Event, { cid?: any }>).cid;
     const channel = cid ? this.channelManager.get(cid) : undefined;
