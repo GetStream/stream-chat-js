@@ -2339,6 +2339,46 @@ describe('Threads 2.0', () => {
           thread.unregisterSubscriptions();
         });
 
+        it('preserves mark_groups and own_marks of a reply on "message.updated"', () => {
+          const thread = createTestThread();
+          subscribeThread(thread);
+          const messageId = uuidv4();
+          const mark_groups = {
+            played: {
+              count: 1,
+              latest_by: [{ user_id: 'other-user', created_at: nowNs() }],
+            },
+          };
+          const own_marks = [{ type: 'played', created_at: nowNs() }];
+          thread.messagePaginator.ingestItem(
+            formatMessage(
+              generateMsg({
+                cid: thread.channel.cid,
+                id: messageId,
+                parent_id: thread.id,
+                mark_groups,
+                own_marks,
+              }) as MessageResponse,
+            ),
+          );
+
+          // The event message never carries the mark fields.
+          client.dispatchEvent({
+            type: 'message.updated',
+            message: generateMsg({
+              id: messageId,
+              parent_id: thread.id,
+              own_reactions: [],
+            }) as MessageResponse,
+          });
+
+          const reply = thread.messagePaginator.getItem(messageId);
+          expect(reply?.mark_groups).to.deep.equal(mark_groups);
+          expect(reply?.own_marks).to.deep.equal(own_marks);
+
+          thread.unregisterSubscriptions();
+        });
+
         (['user.messages.deleted', 'user.deleted'] as const).forEach((eventType) => {
           it(`soft-deletes a banned user's replies in the thread paginator on "${eventType}"`, () => {
             const thread = createTestThread();

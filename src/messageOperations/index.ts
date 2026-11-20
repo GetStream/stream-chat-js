@@ -3,6 +3,7 @@ export { createMessageOperations } from './createMessageOperations';
 export { MessageOperationStatePolicy } from './MessageOperationStatePolicy';
 export { applyReactionLocally } from './applyReactionLocally';
 export { reflectReactionEvent } from './reflectReactionEvent';
+export { reflectMessageMarkEvent } from './reflectMessageMarkEvent';
 export type { OptimisticOutcome } from './MessageOperationStatePolicy';
 export type {
   DefaultOperationRequest,
