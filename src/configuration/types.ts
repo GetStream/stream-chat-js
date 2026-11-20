@@ -86,6 +86,7 @@ export type ChannelDeclarativeConfig = {
   messagePaginator?: DeclarativeMessagePaginatorConfig;
   pinnedMessagesPaginator?: ImportedDeclarativePaginatorConfig;
   requestHandlers?: ChannelConfig['requestHandlers'];
+  scheduledMessagesPaginator?: ImportedDeclarativePaginatorConfig;
   /** Typing indicators, ANDed with the channel type's `typing_events`. */
   typingEvents?: Partial<ChannelConfig['typingEvents']>;
   /** Read receipts, ANDed with the channel type's `read_events`. */
@@ -94,6 +95,7 @@ export type ChannelDeclarativeConfig = {
   replies?: Partial<ChannelConfig['replies']>;
   /** Message reminders, ANDed with the channel type's `user_message_reminders`. */
   userMessageReminders?: Partial<ChannelConfig['userMessageReminders']>;
+  scheduledMessages?: Partial<ChannelConfig['scheduledMessages']>;
   /** Delivery receipts, ANDed with the channel type's `delivery_events`. */
   deliveryEvents?: Partial<ChannelConfig['deliveryEvents']>;
   // `commands` is absent: the server owns the list.

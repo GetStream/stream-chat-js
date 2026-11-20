@@ -7,7 +7,6 @@ import {
   createCompositionValidationMiddleware,
   createDraftCompositionValidationMiddleware,
 } from '../../../../../src/messageComposer/middleware/messageComposer/compositionValidation';
-import { CommandSearchSource } from '../../../../../src/messageComposer/middleware/textComposer/commands';
 import {
   AttachmentLoadingState,
   LocalImageAttachment,
@@ -48,15 +47,10 @@ const setupMiddleware = (
       composition: custom.editedMessage,
     });
 
-  const commandSearchSource = new CommandSearchSource(messageComposer.channel);
-
   return {
-    commandSearchSource,
+    commandSearchSource: messageComposer.commandSearchSource,
     messageComposer,
-    validationMiddleware: createCompositionValidationMiddleware(
-      messageComposer,
-      commandSearchSource,
-    ),
+    validationMiddleware: createCompositionValidationMiddleware(messageComposer),
   };
 };
 
@@ -290,7 +284,7 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
     );
   });
 
-  it('should resolve raw commands through the provided command search source', async () => {
+  it('should resolve raw commands through the command search source', async () => {
     const validator = vi.fn(({ command }) =>
       command.name === 'custom'
         ? {
@@ -326,7 +320,7 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
     );
   });
 
-  it('should initialize a default command search source when none is provided', async () => {
+  it('should resolve raw commands from the channel command list', async () => {
     const validator = vi.fn(({ command }) =>
       command.name === 'custom'
         ? {
