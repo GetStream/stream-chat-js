@@ -63,6 +63,14 @@ export class StoreBackedItemIndex<T> implements ItemIndexApi<T> {
 
   setOne(item: T) {
     const id = this.getEntityId(item);
+    const policy = this.store.conflictPolicy;
+    const isCanonical = policy.resolveCanonicalEntity(item, this.store.get(id)) === item;
+    if (!isCanonical && !this.store.has(id)) return;
+    if (isCanonical && policy.removesEntity(item)) {
+      this.memberIds.delete(id);
+      this.store.upsert(item, this.holder);
+      return;
+    }
     this.store.link(id, this.holder);
     this.memberIds.add(id);
     this.store.upsert(item, this.holder);
