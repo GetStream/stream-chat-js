@@ -111,6 +111,11 @@ export type QueryChannelsResponseWithChannels = Omit<
 
 export type BlockedUsersState = { userIds: string[] };
 
+export type UnreadCountsState = {
+  totalUnreadCount: number;
+  unreadChannelsCount: number;
+};
+
 export type ChannelConfigsState = {
   configs: Configs;
 };
@@ -192,6 +197,7 @@ export class StreamChat extends ChatApi {
    */
   readonly channelServerConfigsStore: StateStore<ChannelConfigsState>;
   blockedUsers: StateStore<BlockedUsersState>;
+  readonly unreadCountsStore: StateStore<UnreadCountsState>;
   setUserPromise: ConnectAPIResponse | null;
   state: ClientState;
   tokenManager: TokenManager;
@@ -284,6 +290,10 @@ export class StreamChat extends ChatApi {
       configs: {},
     });
     this.blockedUsers = new StateStore<BlockedUsersState>({ userIds: [] });
+    this.unreadCountsStore = new StateStore<UnreadCountsState>({
+      totalUnreadCount: 0,
+      unreadChannelsCount: 0,
+    });
 
     this.moderation = new Moderation(this);
 
@@ -764,6 +774,7 @@ export class StreamChat extends ChatApi {
     }
     this.state = new ClientState({ client: this });
     this.threads.resetState();
+    this.unreadCountsStore.partialNext({ totalUnreadCount: 0, unreadChannelsCount: 0 });
     // Channel mutes are per-user: stale ones would resolve `muted` filters against the previous
     // user.
     this.mutedChannels = [];
@@ -1144,6 +1155,19 @@ export class StreamChat extends ChatApi {
     }
   };
 
+  private _reflectUnreadChannelCounts(event: WSEvent) {
+    const patch: Partial<UnreadCountsState> = {};
+    if ('total_unread_count' in event && typeof event.total_unread_count === 'number') {
+      patch.totalUnreadCount = event.total_unread_count;
+    }
+    if ('unread_channels' in event && typeof event.unread_channels === 'number') {
+      patch.unreadChannelsCount = event.unread_channels;
+    }
+    if (Object.keys(patch).length > 0) {
+      this.unreadCountsStore.partialNext(patch);
+    }
+  }
+
   _handleClientEvent(event: WSEvent) {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const client = this;
@@ -1171,7 +1195,13 @@ export class StreamChat extends ChatApi {
       client.channelManager.reflectMutedChannels();
       client.mutedUsers = event.me.mutes;
       client.blockedUsers.partialNext({ userIds: event.me.blocked_user_ids ?? [] });
+      client.unreadCountsStore.partialNext({
+        totalUnreadCount: event.me.total_unread_count,
+        unreadChannelsCount: event.me.unread_channels,
+      });
     }
+
+    this._reflectUnreadChannelCounts(event);
 
     if (event.type === 'notification.message_new' && event.channel) {
       const { channel } = event;
