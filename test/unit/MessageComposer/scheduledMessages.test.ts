@@ -497,7 +497,7 @@ describe('MessageComposer scheduled messages', () => {
       );
     });
 
-    it('joins the composer upload in flight and sends the resolved url', async () => {
+    const startComposerUpload = async () => {
       const { channel, client } = setup();
       const composer = channel.messageComposer;
       composer.updateConfig({ attachments: { pendingUploadsEnabled: true } });
@@ -508,7 +508,6 @@ describe('MessageComposer scheduled messages', () => {
       const appSettings = { app: { file_upload_config: {}, image_upload_config: {} } };
       client.appSettingsPromise = Promise.resolve(appSettings as never);
       vi.spyOn(client, 'getAppSettings').mockResolvedValue(appSettings as never);
-      const sendSpy = mockScheduledSend(client, generateScheduledMessage());
       const uploadSpy = vi.spyOn(client.uploadManager, 'upload');
       let finishUpload: () => void = () => undefined;
       vi.spyOn(composer.attachmentManager, 'doUploadRequest').mockImplementation(
@@ -524,6 +523,19 @@ describe('MessageComposer scheduled messages', () => {
       await vi.waitFor(() =>
         expect(composer.attachmentManager.uploadsInProgressCount).toBe(1),
       );
+      return {
+        client,
+        composer,
+        finishUpload: () => finishUpload(),
+        uploadSpy,
+        uploading,
+      };
+    };
+
+    it('joins the composer upload in flight and sends the resolved url', async () => {
+      const { client, composer, finishUpload, uploadSpy, uploading } =
+        await startComposerUpload();
+      const sendSpy = mockScheduledSend(client, generateScheduledMessage());
 
       const scheduling = composer.scheduledMessageComposition.schedule(scheduledAt);
       await vi.waitFor(() => expect(uploadSpy).toHaveBeenCalledTimes(2));
@@ -543,6 +555,60 @@ describe('MessageComposer scheduled messages', () => {
           }),
         }),
       );
+    });
+
+    it('releases the composition before the request while an upload is in flight', async () => {
+      const { client, composer, finishUpload, uploadSpy, uploading } =
+        await startComposerUpload();
+      const scheduledMessage = generateScheduledMessage();
+      mockScheduledSend(client, scheduledMessage);
+
+      const scheduling = composer.scheduledMessageComposition.schedule(scheduledAt);
+      await vi.waitFor(() => expect(uploadSpy).toHaveBeenCalledTimes(2));
+
+      expect(composer.compositionIsEmpty).toBe(true);
+      expect(composer.attachmentManager.attachments).toEqual([]);
+
+      composer.textComposer.setText('typed meanwhile');
+      finishUpload();
+      await uploading;
+
+      await expect(scheduling).resolves.toEqual({
+        scheduledMessage,
+        status: 'scheduled',
+      });
+      expect(composer.textComposer.text).toBe('typed meanwhile');
+      expect(composer.attachmentManager.attachments).toEqual([]);
+    });
+
+    it('restores the composition with the interrupted upload failed when scheduling fails', async () => {
+      const { client, composer, finishUpload, uploadSpy, uploading } =
+        await startComposerUpload();
+      let rejectSend: (error: Error) => void = () => undefined;
+      const sendSpy = vi.spyOn(client, 'sendMessage').mockImplementation(
+        () =>
+          new Promise((_, reject) => {
+            rejectSend = reject;
+          }) as never,
+      );
+
+      const scheduling = composer.scheduledMessageComposition.schedule(scheduledAt);
+      await vi.waitFor(() => expect(uploadSpy).toHaveBeenCalledTimes(2));
+      finishUpload();
+      await uploading;
+      await vi.waitFor(() => expect(sendSpy).toHaveBeenCalled());
+      rejectSend(new Error('network'));
+
+      await expect(scheduling).resolves.toEqual({
+        error: expect.any(Error),
+        status: 'failed',
+      });
+      expect(composer.textComposer.text).toBe('photo');
+      expect(composer.attachmentManager.attachments).toEqual([
+        expect.objectContaining({
+          localMetadata: expect.objectContaining({ uploadState: 'failed' }),
+        }),
+      ]);
     });
 
     it('does nothing while a scheduled message is being edited', async () => {

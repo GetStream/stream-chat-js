@@ -51,7 +51,7 @@ export const createCompositionValidationMiddleware = (
         return await discard();
       }
 
-      const currentCommand = getCurrentCommand(composer, inputText);
+      const currentCommand = getCurrentCommand(composer, inputText, commandSearchSource);
       if (
         currentCommand &&
         notifyCommandNotReady({

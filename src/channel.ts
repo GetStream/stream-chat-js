@@ -545,6 +545,19 @@ export class Channel extends ChannelApi {
     runDetached(paginator.reload(), { context: 'reloadScheduledMessages' });
   }
 
+  ensureScheduledMessagesLoaded() {
+    const paginator = this.scheduledMessagesPaginator;
+    if (
+      this.pendingDisposal ||
+      !this.scheduledMessagesEnabled ||
+      paginator.hasLoadedPage ||
+      paginator.isLoading
+    ) {
+      return;
+    }
+    runDetached(paginator.reload(), { context: 'ensureScheduledMessagesLoaded' });
+  }
+
   async scheduleMessage(request: SendMessageRequest) {
     const { message, ...options } = request;
     return await this.messageOperations.scheduleMessage({ message, options });

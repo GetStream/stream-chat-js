@@ -293,14 +293,11 @@ export class ScheduledMessageComposition extends WithSubscriptions {
       };
     }
 
-    const hasPendingUpload = composer.attachmentManager.uploadsInProgressCount > 0;
-    const releaseBeforeRequest = !failedScheduledMessage && !hasPendingUpload;
-
     let restorePoint: ScheduledSubmitRestorePoint | null = null;
 
-    if (releaseBeforeRequest) {
+    if (!failedScheduledMessage) {
       restorePoint = {
-        snapshot: composer.getSnapshot(),
+        snapshot: composer.getSnapshotKeepingUploads(),
         state: composer.state.getLatestValue(),
       };
 
@@ -318,8 +315,6 @@ export class ScheduledMessageComposition extends WithSubscriptions {
       if (failedScheduledMessage) {
         this.endEdit();
         this.removeFailedScheduledMessage(failedScheduledMessage);
-      } else if (hasPendingUpload) {
-        composer.releaseSubmittedComposition();
       }
 
       if (!scheduledMessage) return { status: 'sent' };

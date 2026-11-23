@@ -18,7 +18,6 @@ import {
   sanitizeOutgoingAttachments,
 } from '../utils';
 import { dateToNs } from '../utils/time';
-import { withoutConcurrency } from '../utils/concurrency';
 import { MessageOperationStatePolicy } from './MessageOperationStatePolicy';
 import { ScheduledMessageStatePolicy } from '../scheduledMessages/ScheduledMessageStatePolicy';
 import type { ScheduledMessageOperationKind } from '../scheduledMessages/ScheduledMessageStatePolicy';
@@ -388,24 +387,19 @@ export class MessageOperations {
     return { ...message, attachments: settled };
   }
 
-  private runScheduled<R extends { scheduled_message?: ScheduledMessageResponse }>(
+  private async runScheduled<R extends { scheduled_message?: ScheduledMessageResponse }>(
     kind: ScheduledMessageOperationKind,
     id: string | undefined,
     doRequest: () => Promise<R>,
   ): Promise<R> {
-    return withoutConcurrency(
-      `stream-chat/send-message/${this.ctx.channel.cid}`,
-      async () => {
-        try {
-          const response = await doRequest();
-          this.scheduledPolicy.success(kind, response.scheduled_message);
-          return response;
-        } catch (error) {
-          this.scheduledPolicy.failure(kind, id, error);
-          throw error;
-        }
-      },
-    );
+    try {
+      const response = await doRequest();
+      this.scheduledPolicy.success(kind, response.scheduled_message);
+      return response;
+    } catch (error) {
+      this.scheduledPolicy.failure(kind, id, error);
+      throw error;
+    }
   }
 
   async scheduleMessage({
@@ -413,21 +407,23 @@ export class MessageOperations {
     message,
     options,
   }: ScheduleMessageParams): Promise<StreamResponse<SendMessageResponse>> {
-    const settledMessage = localMessage
-      ? await this.withSettledScheduledUploads(localMessage, message)
-      : message;
+    return await this.runScheduled('schedule', undefined, () =>
+      this.sequenceRequests('schedule', async () => {
+        const settledMessage = localMessage
+          ? await this.withSettledScheduledUploads(localMessage, message)
+          : message;
 
-    const request: SendMessageRequest = {
-      ...options,
-      message: sanitizeOutgoingAttachments(settledMessage),
-    };
+        const request: SendMessageRequest = {
+          ...options,
+          message: sanitizeOutgoingAttachments(settledMessage),
+        };
 
-    return this.runScheduled('schedule', undefined, () =>
-      this.resolveScheduledRequest(
-        this.scheduledRequestHandlers.scheduleMessageRequest,
-        (params) => this.ctx.channel.sendMessage(params),
-        request,
-      ),
+        return await this.resolveScheduledRequest(
+          this.scheduledRequestHandlers.scheduleMessageRequest,
+          (params) => this.ctx.channel.sendMessage(params),
+          request,
+        );
+      }),
     );
   }
 

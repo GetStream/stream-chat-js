@@ -448,7 +448,7 @@ describe('MessageOperations — what the ordering gate must not block', () => {
 describe('keepSendOrderWhilePendingUploadsAllowed', () => {
   const composer = (allowsPendingUploads: boolean) => ({ allowsPendingUploads }) as never;
 
-  it.each(['send', 'retry'] as const)(
+  it.each(['send', 'retry', 'schedule'] as const)(
     'queues a %s while pending uploads are allowed',
     async (kind) => {
       const order: string[] = [];

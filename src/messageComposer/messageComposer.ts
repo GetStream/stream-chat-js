@@ -671,7 +671,12 @@ export class MessageComposer extends WithSubscriptions {
   };
 
   getSnapshot = (): MessageComposerSnapshot => ({
+    ...this.getSnapshotKeepingUploads(),
     attachmentManager: this.attachmentManager.getSnapshot(),
+  });
+
+  getSnapshotKeepingUploads = (): MessageComposerSnapshot => ({
+    attachmentManager: this.attachmentManager.getSnapshotKeepingUploads(),
     customDataManager: this.customDataManager.getSnapshot(),
     linkPreviewsManager: this.linkPreviewsManager.getSnapshot(),
     locationComposer: this.locationComposer.getSnapshot(),
