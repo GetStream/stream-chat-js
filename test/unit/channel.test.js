@@ -8478,3 +8478,242 @@ describe('Channel.data ownCapabilities', () => {
 		expect(ownCapabilities()).toBe(before);
 	});
 });
+
+describe('message marks (CHA-6554)', () => {
+	const now = convertDateToTimestamp(new Date().toISOString());
+	let client;
+	let channel;
+
+	const seed = (message) => {
+		channel.messagePaginator.ingestPage({
+			page: [formatMessage(message)],
+			isHead: true,
+			isTail: true,
+			setActive: true,
+		});
+	};
+	const markEvent = (message_id, user_id, type = 'played') => ({
+		type: 'message.mark_added',
+		cid: channel.cid,
+		channel_type: channel.type,
+		channel_id: channel.id,
+		created_at: now,
+		message_id,
+		user: { id: user_id },
+		mark: { type, message_id, user_id, created_at: now },
+	});
+
+	beforeEach(async () => {
+		client = await getClientWithUser({ id: 'me' });
+		channel = client.channelManager.ensure({ type: 'messaging', id: 'marks' });
+		channel.initialized = true;
+	});
+
+	afterEach(() => {
+		vi.resetAllMocks();
+	});
+
+	describe('sendMessageMark', () => {
+		it('calls the generated createMessageMark with the path params and the request', async () => {
+			vi.spyOn(client, 'createMessageMark').mockResolvedValue({
+				created: true,
+				mark: { type: 'played', message_id: 'm1', user_id: 'me', created_at: now },
+			});
+
+			const response = await channel.sendMessageMark({ id: 'm1' }, { type: 'played' });
+
+			expect(client.createMessageMark).toHaveBeenCalledTimes(1);
+			expect(client.createMessageMark).toHaveBeenCalledWith(
+				{ id: 'm1' },
+				{ type: 'played' },
+			);
+			expect(response.created).to.equal(true);
+			expect(response.mark.type).to.equal('played');
+		});
+	});
+
+	describe('markMessagePlayed', () => {
+		const response = {
+			created: true,
+			mark: { type: 'played', message_id: 'm1', user_id: 'me', created_at: now },
+		};
+
+		it('sends the played mark once for another user message', async () => {
+			vi.spyOn(client, 'createMessageMark').mockResolvedValue(response);
+			const message = generateMsg({ id: 'm1', user: { id: 'alice' } });
+
+			expect(await channel.markMessagePlayed(message)).to.equal(response);
+			expect(await channel.markMessagePlayed(message)).to.equal(null);
+
+			expect(client.createMessageMark).toHaveBeenCalledTimes(1);
+			expect(client.createMessageMark).toHaveBeenCalledWith(
+				{ id: 'm1' },
+				{ type: 'played' },
+			);
+			expect(channel.messagePaginator.getItem('m1')).to.be.undefined;
+		});
+
+		it('sends nothing for the own message, a played message, or without the capability', async () => {
+			vi.spyOn(client, 'createMessageMark').mockResolvedValue(response);
+
+			await channel.markMessagePlayed(generateMsg({ id: 'm1', user: { id: 'me' } }));
+			await channel.markMessagePlayed(
+				generateMsg({
+					id: 'm2',
+					user: { id: 'alice' },
+					own_marks: [{ type: 'played', created_at: now }],
+				}),
+			);
+			channel.data = { ...channel.data, own_capabilities: ['send-message'] };
+			await channel.markMessagePlayed(generateMsg({ id: 'm3', user: { id: 'alice' } }));
+
+			expect(client.createMessageMark).not.toHaveBeenCalled();
+		});
+
+		it('sends again after a failed request', async () => {
+			const error = new Error('offline');
+			vi.spyOn(client, 'createMessageMark')
+				.mockRejectedValueOnce(error)
+				.mockResolvedValueOnce(response);
+			const message = generateMsg({ id: 'm1', user: { id: 'alice' } });
+
+			await expect(channel.markMessagePlayed(message)).rejects.toThrow(error);
+			expect(await channel.markMessagePlayed(message)).to.equal(response);
+			expect(client.createMessageMark).toHaveBeenCalledTimes(2);
+		});
+
+		it('queues the mark while offline and does not queue it again', async () => {
+			const offlineDb = new MockOfflineDB({ client });
+			client.setOfflineDBApi(offlineDb);
+			// Uninitialized mock DB holds no tasks.
+			offlineDb.state.partialNext({ initialized: true, userId: client.userId });
+			const task = {
+				channelId: channel.id,
+				channelType: channel.type,
+				messageId: 'm1',
+				payload: [{ id: 'm1' }, { type: 'played' }],
+				type: 'send-message-mark',
+			};
+			// `queueTask` stores the task and rethrows; the direct request fails offline too.
+			const queueTask = vi
+				.spyOn(client.offlineDb, 'queueTask')
+				.mockRejectedValue(new Error('connection lost'));
+			vi.spyOn(client.offlineDb, 'getPendingTasks').mockResolvedValue([
+				{ id: 1, ...task },
+			]);
+			vi.spyOn(client, 'createMessageMark').mockRejectedValue(new Error('network down'));
+			const message = generateMsg({ id: 'm1', user: { id: 'alice' } });
+
+			await expect(channel.markMessagePlayed(message)).rejects.toThrow('network down');
+			expect(await channel.markMessagePlayed(message)).to.equal(null);
+
+			expect(queueTask).toHaveBeenCalledTimes(1);
+			expect(queueTask).toHaveBeenCalledWith({ task });
+			expect(client.createMessageMark).toHaveBeenCalledTimes(1);
+		});
+	});
+
+	describe('message.mark_added', () => {
+		it('adds a marker to mark_groups of the own message once, newest first', () => {
+			seed(generateMsg({ id: 'own', cid: channel.cid, user: { id: 'me' } }));
+
+			channel._handleChannelEvent(markEvent('own', 'alice'));
+			channel._handleChannelEvent(markEvent('own', 'alice')); // the same mark from a second device
+			channel._handleChannelEvent(markEvent('own', 'bob'));
+
+			const { mark_groups } = channel.messagePaginator.getItem('own');
+			expect(mark_groups.played.count).to.equal(2);
+			expect(mark_groups.played.latest_by.map((m) => m.user_id)).to.deep.equal([
+				'bob',
+				'alice',
+			]);
+		});
+
+		it('adds the own mark to own_marks of another user message once', () => {
+			seed(generateMsg({ id: 'theirs', cid: channel.cid, user: { id: 'alice' } }));
+
+			channel._handleChannelEvent(markEvent('theirs', 'me'));
+			channel._handleChannelEvent(markEvent('theirs', 'me'));
+
+			const message = channel.messagePaginator.getItem('theirs');
+			expect(message.own_marks).to.deep.equal([{ type: 'played', created_at: now }]);
+			expect(message.mark_groups).to.be.undefined;
+		});
+
+		it('ignores a mark by another user on another user message, and unknown messages', () => {
+			seed(generateMsg({ id: 'theirs', cid: channel.cid, user: { id: 'alice' } }));
+
+			channel._handleChannelEvent(markEvent('theirs', 'bob'));
+			channel._handleChannelEvent(markEvent('missing', 'bob'));
+
+			const message = channel.messagePaginator.getItem('theirs');
+			expect(message.own_marks).to.be.undefined;
+			expect(message.mark_groups).to.be.undefined;
+			expect(client.messageStore.has('missing')).to.equal(false);
+		});
+	});
+
+	describe('events that replace the message keep the local marks', () => {
+		const mark_groups = {
+			played: { count: 1, latest_by: [{ user_id: 'alice', created_at: now }] },
+		};
+		const own_marks = [{ type: 'played', created_at: now }];
+
+		it('carries mark_groups and own_marks onto message.updated and message.deleted', () => {
+			const message = generateMsg({
+				id: 'm1',
+				cid: channel.cid,
+				user: { id: 'me' },
+				mark_groups,
+				own_marks,
+			});
+			seed(message);
+			// events don't carry marks
+			const { mark_groups: _g, own_marks: _o, ...withoutMarks } = message;
+
+			['message.updated', 'message.deleted'].forEach((type) => {
+				channel._handleChannelEvent({
+					type,
+					message: { ...withoutMarks, own_reactions: [] },
+				});
+				const stored = client.messageStore.get('m1');
+				expect(stored.mark_groups).to.deep.equal(mark_groups);
+				expect(stored.own_marks).to.deep.equal(own_marks);
+			});
+		});
+
+		it('carries mark_groups and own_marks across reaction.new and reaction.deleted', () => {
+			const message = generateMsg({
+				id: 'm1',
+				cid: channel.cid,
+				user: { id: 'me' },
+				mark_groups,
+				own_marks,
+			});
+			seed(message);
+			const { mark_groups: _g, own_marks: _o, ...withoutMarks } = message;
+			const reaction = {
+				type: 'like',
+				message_id: 'm1',
+				user_id: 'alice',
+				user: { id: 'alice' },
+				created_at: now,
+			};
+
+			channel._handleChannelEvent({
+				type: 'reaction.new',
+				message: { ...withoutMarks },
+				reaction,
+			});
+			expect(client.messageStore.get('m1').mark_groups).to.deep.equal(mark_groups);
+
+			channel._handleChannelEvent({
+				type: 'reaction.deleted',
+				message: { ...withoutMarks },
+				reaction,
+			});
+			expect(client.messageStore.get('m1').mark_groups).to.deep.equal(mark_groups);
+			expect(client.messageStore.get('m1').own_marks).to.deep.equal(own_marks);
+		});
+	});
+});

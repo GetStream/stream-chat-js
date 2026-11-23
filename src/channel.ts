@@ -1,12 +1,16 @@
 import { ChannelState, ChannelWatchStatus } from './channel_state';
 import { isEqual } from './utils/mergeWith/mergeWithCore';
 import { CooldownTimer } from './CooldownTimer';
-import { queueOrRun } from './offline-support/queueableOperations';
+import { isQueuedForReplay, queueOrRun } from './offline-support/queueableOperations';
 import { MessageComposer } from './messageComposer';
 import { MessageReceiptsTracker } from './messageDelivery';
 import type { ReadStoreReconcileMeta } from './messageDelivery';
 import { MessagePaginator, PinnedMessagePaginator } from './pagination/paginators';
-import { createMessageOperations, reflectReactionEvent } from './messageOperations';
+import {
+  createMessageOperations,
+  reflectMessageMarkEvent,
+  reflectReactionEvent,
+} from './messageOperations';
 import type { MessageOperations } from './messageOperations';
 import type { OperationRequestFn } from './messageOperations/types';
 import {
@@ -215,6 +219,8 @@ export class Channel extends ChannelApi {
    * `watch()` with these options has nothing to send. Cleared when the watch ends.
    */
   private _lastWatchOptions?: ChannelGetOrCreateRequest;
+  /** The messages {@link Channel.markMessagePlayed} sent a mark for, so a replay sends nothing. */
+  private _playedMarksSent = new Set<string>();
   push_preferences?: Gen_ChannelPushPreferencesResponse;
   private readonly configController: ConfigController<ChannelConfig>;
   public readonly messageComposer: MessageComposer;
@@ -462,6 +468,65 @@ export class Channel extends ChannelApi {
 
   async sendReaction(...args: Parameters<ChatApi['sendReaction']>) {
     return await this.getClient().sendReaction(...args);
+  }
+
+  /**
+   * Marks a message for the current user, for instance `played` when the user played a voice note.
+   * A mark is written once: a repeat returns `created: false`, and the author's own mark is a no-op.
+   * Each written mark is announced with one `message.mark_added` event to the author and the marker.
+   * With offline support, a mark that fails for lack of a connection is queued and sent on reconnect.
+   *
+   * @param args - `({ id }, { type })`: the message ID and the mark type, for instance `'played'`.
+   */
+  async sendMessageMark(...args: Parameters<ChatApi['createMessageMark']>) {
+    return await queueOrRun({
+      channel: this,
+      client: this.getClient(),
+      task: {
+        channelId: this.id,
+        channelType: this.type,
+        messageId: args[0].id,
+        payload: args,
+        type: 'send-message-mark',
+      },
+    });
+  }
+
+  /**
+   * Marks a message `played` for the current user, for instance when the user starts its voice note.
+   * Sends nothing for the user's own message, for a message the user already marked, or without the
+   * `send-message-mark` capability, and sends once per message until a request fails. A mark the
+   * offline queue holds counts as sent. The message changes only when `message.mark_added` arrives,
+   * as with read state.
+   *
+   * @param message - The played message.
+   * @returns The server response, or `null` when no request went out.
+   */
+  async markMessagePlayed(message: LocalMessage | MessageResponse) {
+    const userId = this.getClient().userId;
+    const ownCapabilities = this.data?.own_capabilities;
+    if (
+      !userId ||
+      message.user?.id === userId ||
+      message.own_marks?.some(({ type }) => type === 'played') ||
+      (Array.isArray(ownCapabilities) &&
+        !ownCapabilities.includes('send-message-mark')) ||
+      this._playedMarksSent.has(message.id)
+    ) {
+      return null;
+    }
+
+    this._playedMarksSent.add(message.id);
+    try {
+      return await this.sendMessageMark({ id: message.id }, { type: 'played' });
+    } catch (error) {
+      if (
+        !(await isQueuedForReplay(this.getClient(), message.id, ['send-message-mark']))
+      ) {
+        this._playedMarksSent.delete(message.id);
+      }
+      throw error;
+    }
   }
 
   async deleteReaction(...args: Parameters<ChatApi['deleteReaction']>) {
@@ -2668,6 +2733,11 @@ export class Channel extends ChannelApi {
           channel.data = newChannelData;
         }
         break;
+      case 'message.mark_added':
+        if (event.mark) {
+          reflectMessageMarkEvent(this.getClient(), event.mark);
+        }
+        break;
       case 'reaction.new':
       case 'reaction.updated':
       case 'reaction.deleted':
@@ -2866,6 +2936,13 @@ export class Channel extends ChannelApi {
     const message = this.messagePaginator.getItem(event.message.id);
     if (message) {
       event.message.own_reactions = message.own_reactions;
+      // Events don't carry marks; keep the local ones.
+      if (event.message.mark_groups === undefined && message.mark_groups !== undefined) {
+        event.message.mark_groups = message.mark_groups;
+      }
+      if (event.message.own_marks === undefined && message.own_marks !== undefined) {
+        event.message.own_marks = message.own_marks;
+      }
     }
   }
 
