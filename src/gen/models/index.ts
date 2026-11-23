@@ -637,6 +637,22 @@ export interface Attachment {
   actions?: Array<Action>;
   fields?: Array<Field>;
   giphy?: Images;
+  voice_transcript?: AttachmentTranscriptResponse;
+}
+
+export interface AttachmentTranscriptResponse {
+  /**
+   * Why the recording could not be transcribed: unsupported_format, too_large, blocked_url, fetch_failed or invalid_response
+   */
+  error?: string;
+  /**
+   * Transcribed text of the recording
+   */
+  text?: string;
+  /**
+   * Languages detected in the recording
+   */
+  languages?: Array<TranscriptLanguageResponse>;
 }
 
 export interface AutomodDetailsResponse {
@@ -1177,6 +1193,10 @@ export interface ChannelConfigOverrides {
    */
   user_message_reminders?: boolean;
   /**
+   * Enables or disables transcription of voice recordings
+   */
+  voice_transcription?: boolean;
+  /**
    * List of commands that channel supports
    */
   commands?: Array<string>;
@@ -1218,6 +1238,7 @@ export interface ChannelConfigWithInfo {
   uploads: boolean;
   url_enrichment: boolean;
   user_message_reminders: boolean;
+  voice_transcription: boolean;
   commands: Array<Command>;
   blocklist?: string;
   /**
@@ -2665,6 +2686,10 @@ export interface ConfigOverridesRequest {
    * Enable/disable user message reminders
    */
   user_message_reminders?: boolean;
+  /**
+   * Enable/disable transcription of voice recordings in this channel
+   */
+  voice_transcription?: boolean;
   /**
    * List of available commands
    */
@@ -4250,6 +4275,7 @@ export interface GetOGResponse {
   actions?: Array<Action>;
   fields?: Array<Field>;
   giphy?: Images;
+  voice_transcript?: AttachmentTranscriptResponse;
 }
 
 export interface GetOrCreateChannelDefaults {
@@ -11070,6 +11096,13 @@ export interface Thresholds {
   explicit?: LabelThresholds;
   spam?: LabelThresholds;
   toxic?: LabelThresholds;
+}
+
+export interface TranscriptLanguageResponse {
+  /**
+   * Language code, e.g. en
+   */
+  code: string;
 }
 
 export interface TranslateMessageRequest {

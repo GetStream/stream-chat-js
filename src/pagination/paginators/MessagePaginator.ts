@@ -411,13 +411,18 @@ export class MessagePaginator extends MessageIntervalPaginator {
   /**
    * A message the paginator does not hold yet, at or after {@link latestMessageAt} (as known before
    * it arrives), while no loaded interval reaches the newest message. It is then the newest message,
-   * so it starts the newest interval, as a page holding it would (see {@link pageReachesHead}).
+   * so it starts the newest interval, as a page holding it would (see {@link pageReachesHead}). In a
+   * channel whose newest page was loaded empty, with no newest message time known, any message is
+   * the newest.
    */
   private isNewNewestMessage(message: LocalMessage): boolean {
     if (this.anchoredHeadItem !== undefined || this.getItem(message.id)) return false;
     const latestMessageAt = this.latestMessageAt;
+    if (latestMessageAt === null) {
+      return this.items?.length === 0 && !this.hasMoreHead;
+    }
     const createdAt = getMessageCreatedAtTimestamp(message);
-    return latestMessageAt !== null && createdAt !== null && createdAt >= latestMessageAt;
+    return createdAt !== null && createdAt >= latestMessageAt;
   }
 
   /**
@@ -717,6 +722,7 @@ export class MessagePaginator extends MessageIntervalPaginator {
       });
 
       if (!inferredLastReadMessageId) {
+        const checkWasStateResetDuringQuery = this.makeStateResetWatcher();
         const result = await this.executeQuery({
           claimsActiveInterval: true,
           queryShape: {
@@ -728,6 +734,8 @@ export class MessagePaginator extends MessageIntervalPaginator {
         });
         // a later claim decides the active interval, and the page stays stored
         if (result?.isSuperseded) return false;
+        // a reset ignored the query: not a failed jump
+        if (checkWasStateResetDuringQuery()) return false;
         if (result) {
           ({
             firstUnreadMessageId: inferredFirstUnreadMessageId,

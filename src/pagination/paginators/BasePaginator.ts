@@ -174,8 +174,10 @@ export type PaginationQueryParams<Q> = {
   silent?: boolean;
   /**
    * Whether the page's interval becomes the active one and the state is published. Default: true.
-   * Otherwise the page is only stored; one landing in the active interval is still published. Even
-   * with it, the paginator's own page can be only stored (see `BasePaginator.isPageOnlyStored`).
+   * With `false` the page is only stored. It is still published when it lands in the active
+   * interval, or when it is an empty first page of a list without items (not at a caller's
+   * `queryShape`, not superseded by a later claim). With `true` the paginator's own page can still
+   * be only stored (see `BasePaginator.isPageOnlyStored`).
    */
   updateState?: boolean;
 };
@@ -224,6 +226,8 @@ type PreparedQuery<Q> = {
   fetchParams: PaginationQueryParams<Q>;
   offlinePreloadPromise?: Promise<void>;
   placeParams: QueryPagePlacement<Q>;
+  /** Whether `resetState()` ran while the query ran (see `BasePaginator.makeStateResetWatcher`). */
+  checkWasStateResetDuringQuery: () => boolean;
 };
 
 export type ExecuteQueryReturnValue<T> = {
@@ -276,6 +280,12 @@ export type PaginatorState<T> = {
   hasMoreHead: boolean;
   hasMoreTail: boolean;
   isLoading: boolean;
+  /**
+   * The direction of the running query while it loads a page at an edge of the loaded items
+   * (`toHead()`, `toTail()`). `undefined` while no query runs, and for a query that loads no such
+   * page: a first page, a refresh, or a page at a query shape the caller gives (a jump).
+   */
+  loadingDirection?: PaginationDirection;
   items: T[] | undefined;
   lastQueryError?: Error;
   cursor?: PaginatorCursor;
@@ -527,6 +537,8 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
   protected _itemIndex: ItemIndexApi<T>;
 
   protected _executeQueryDebounced!: DebouncedExecQueryFunction<Q>;
+  /** How many times `resetState()` ran, which tells the work started before a reset apart. */
+  private _stateResetCount = 0;
   /** Last effective query shape produced by the subclass for the most recent request. */
   protected _lastQueryShape?: Q;
   /** Set by `setItems`, which loads a page (even an empty one) without a query. */
@@ -600,6 +612,12 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
       cursor: this.config.initialCursor,
       offset: this.config.initialOffset ?? 0,
     });
+    // A query has a loading direction only while it loads: every path that ends a query clears it.
+    this.state.addPreprocessor((next) => {
+      if (!next.isLoading && next.loadingDirection !== undefined) {
+        next.loadingDirection = undefined;
+      }
+    });
     // Called directly: `onChanged` fires on changes, not on the initial build.
     this.rebuildStatePublishThrottles(this.config.stateThrottleMs);
     this.intervalViews = new StateStore<PaginatorIntervalViews<T>>({
@@ -639,6 +657,11 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
     return this.state.getLatestValue().isLoading;
   }
 
+  /** See {@link PaginatorState.loadingDirection}. */
+  get loadingDirection() {
+    return this.state.getLatestValue().loadingDirection;
+  }
+
   /**
    * True once a query has run or a non-empty interval was loaded without one (`setItems`, or a
    * subclass calling `recordLoadedIntervalQueryShape`). Cleared by `resetState`.
@@ -672,6 +695,7 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
       hasMoreHead: true,
       hasMoreTail: true,
       isLoading: false,
+      loadingDirection: undefined,
       items: undefined,
       lastQueryError: undefined,
       cursor: this.config.initialCursor,
@@ -976,7 +1000,8 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
   /**
    * The last step of the query pipeline (see {@link executeQuery}): applies what a response holds
    * besides its page, once the page is placed with `placeParams`. Runs once for every response that
-   * arrived, also when extracting or placing its page failed. Does nothing by default.
+   * arrived, also when placing its page failed or a reset made it ignored (see
+   * {@link executeQuery}). Does nothing by default.
    */
   protected applyQueryResponseRest(
     _response: R,
@@ -2887,38 +2912,50 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
 
   /**
    * {@link fetchQueryResponse} with the paginator's retries. Once every attempt failed, the last
-   * error is recorded as `lastQueryError` (unless offline support is on and items are loaded), and
-   * thrown with `throwErrors` set, after ending the query; otherwise it returns `null`, for the
-   * caller to end the query.
+   * error is reported (see {@link reportFailedFetch}). After a `resetState()`
+   * (`checkWasStateResetDuringQuery`), it stops retrying and returns `null` without reporting.
    */
   protected async fetchQueryResponseWithRetries(
     params: PaginationQueryParams<Q> = {},
+    {
+      checkWasStateResetDuringQuery = () => false,
+    }: { checkWasStateResetDuringQuery?: () => boolean } = {},
   ): Promise<R | null> {
-    const remainingRetries = params.retryCount ?? 0;
-    try {
-      return await this.fetchQueryResponse(params);
-    } catch (e) {
-      if (remainingRetries > 0) {
-        await sleep(DEFAULT_QUERY_CHANNELS_MS_BETWEEN_RETRIES);
-        return await this.fetchQueryResponseWithRetries({
-          ...params,
-          retryCount: remainingRetries - 1,
-        });
+    let remainingRetries = params.retryCount ?? 0;
+    while (true) {
+      try {
+        return await this.fetchQueryResponse({ ...params, retryCount: remainingRetries });
+      } catch (e) {
+        // the attempt belongs to the state the reset cleared, and so would a retry
+        if (checkWasStateResetDuringQuery()) return null;
+        if (remainingRetries > 0) {
+          remainingRetries -= 1;
+          await sleep(DEFAULT_QUERY_CHANNELS_MS_BETWEEN_RETRIES);
+          if (checkWasStateResetDuringQuery()) return null;
+          continue;
+        }
+        return this.reportFailedFetch(e as Error);
       }
-
-      // run only once all retries are exhausted
-      const isOfflineSupportEnabledWithItems =
-        this.isOfflineSupportEnabled && (this.items ?? []).length > 0;
-      if (!isOfflineSupportEnabledWithItems) {
-        this.state.partialNext({ lastQueryError: e as Error });
-      }
-
-      if (this.config.throwErrors) {
-        this.state.partialNext({ isLoading: false });
-        throw e;
-      }
-      return null;
     }
+  }
+
+  /**
+   * Handles a query whose attempts all failed: sets `lastQueryError` (unless offline support is on
+   * and items are loaded). With `throwErrors`, ends loading and throws; otherwise returns `null`
+   * and the caller ends the query.
+   */
+  private reportFailedFetch(e: Error): null {
+    const isOfflineSupportEnabledWithItems =
+      this.isOfflineSupportEnabled && (this.items ?? []).length > 0;
+    if (!isOfflineSupportEnabledWithItems) {
+      this.state.partialNext({ lastQueryError: e });
+    }
+
+    if (this.config.throwErrors) {
+      this.state.partialNext({ isLoading: false });
+      throw e;
+    }
+    return null;
   }
 
   /**
@@ -2937,9 +2974,13 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
    * as `lastQueryError` (a failed fetch not while offline support is on and items are loaded), and
    * rejects the call only with `throwErrors` set.
    *
-   * Resolves to `undefined` when the query cannot run now (see {@link canExecuteQuery}), and to
-   * what the placing step returned otherwise, whose `targetInterval` is `null` when no page was
-   * placed, with `isSuperseded`.
+   * If `resetState()` runs while the query runs, the query is ignored: it places no page, records
+   * no error and throws nothing, also with `throwErrors`. The queries started after the reset own
+   * the state. Its response's other data is still applied ({@link applyQueryResponseRest}).
+   *
+   * Resolves to `undefined` when the query cannot run now (see {@link canExecuteQuery}) or its
+   * results were ignored, and to what the placing step returned otherwise, whose `targetInterval`
+   * is `null` when no page was placed, with `isSuperseded`.
    *
    * @param params - Query parameters.
    * @param params.claimsActiveInterval - Whether the query claims the active interval.
@@ -2971,10 +3012,18 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
     fetchParams,
     offlinePreloadPromise,
     placeParams,
+    checkWasStateResetDuringQuery,
   }: PreparedQuery<Q>): Promise<ExecuteQueryReturnValue<T> | undefined> {
     if (offlinePreloadPromise) await offlinePreloadPromise;
+    if (checkWasStateResetDuringQuery()) return undefined;
 
-    const response = await this.fetchQueryResponseWithRetries(fetchParams);
+    const response = await this.fetchQueryResponseWithRetries(fetchParams, {
+      checkWasStateResetDuringQuery,
+    });
+    if (checkWasStateResetDuringQuery()) {
+      if (response !== null) this.applyResponseRestOfIgnoredQuery(response, placeParams);
+      return undefined;
+    }
     if (response === null) return this.placeQueryPage({ ...placeParams, results: null });
 
     // Every step after the fetch runs, whichever fails: the rest of a response that arrived is
@@ -2998,6 +3047,21 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
   }
 
   /**
+   * {@link applyQueryResponseRest} for a query a reset made ignored (see {@link executeQuery}).
+   * An ignored query reports nothing, so an error here is swallowed.
+   */
+  private applyResponseRestOfIgnoredQuery(
+    response: R,
+    placeParams: QueryPagePlacement<Q>,
+  ) {
+    try {
+      this.applyQueryResponseRest(response, placeParams);
+    } catch {
+      // reported neither in the state nor to the caller
+    }
+  }
+
+  /**
    * Ends a query whose step after the fetch failed: records the error as `lastQueryError` and
    * throws it with `throwErrors` set (see {@link executeQuery}). Otherwise returns what the query
    * placed with the error in its state, so a caller committing that state keeps the error.
@@ -3013,6 +3077,15 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
       stateCandidate: { ...placed?.stateCandidate, ...stateUpdate },
       targetInterval: placed?.targetInterval ?? null,
     };
+  }
+
+  /**
+   * Returns a function telling whether `resetState()` ran since this call. Work started before a
+   * reset uses it to ignore its results instead of writing them into the reset state.
+   */
+  protected makeStateResetWatcher(): () => boolean {
+    const resetCount = this._stateResetCount;
+    return () => resetCount !== this._stateResetCount;
   }
 
   /**
@@ -3050,6 +3123,7 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
     updateState = true,
   }: PaginationQueryParams<Q>): PreparedQuery<Q> | undefined {
     if (!this.canExecuteQuery({ direction, reset })) return undefined;
+    const checkWasStateResetDuringQuery = this.makeStateResetWatcher();
     const claims =
       claimsActiveInterval ??
       this.decidesActiveInterval({ queryShape: forcedQueryShape, reset, updateState });
@@ -3106,19 +3180,31 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
         publishStateBeforeFirstQuery(undefined);
       } else {
         offlinePreloadPromise = (async () => {
-          const items = await this.preloadFirstPageFromOfflineDb({
-            direction,
-            queryShape,
-            reset,
-            retryCount,
-          });
+          let items: T[] | undefined;
+          try {
+            items = await this.preloadFirstPageFromOfflineDb({
+              direction,
+              queryShape,
+              reset,
+              retryCount,
+            });
+          } catch (error) {
+            if (checkWasStateResetDuringQuery()) return;
+            throw error;
+          }
+          if (checkWasStateResetDuringQuery()) return;
           publishStateBeforeFirstQuery(items ?? stateBeforeFirstQuery.items);
         })();
       }
     } else if (!silent) {
       // A next page, or a refresh keeping the items: loading shows without blanking the list, and
-      // the page merges into the loaded intervals in `placeQueryPage`.
-      this.state.partialNext({ isLoading: true });
+      // the page merges into the loaded intervals in `placeQueryPage`. Only a next page loads at an
+      // edge of the loaded items; a page at the caller's shape has no known place.
+      const loadsAtEdge = !isFirstPage && !forcedQueryShape;
+      this.state.partialNext({
+        isLoading: true,
+        loadingDirection: loadsAtEdge ? direction : undefined,
+      });
     }
 
     // a page at the caller's shape has no known place relative to the active interval
@@ -3140,6 +3226,7 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
         requestedPageSize: this.getRequestedPageSize(queryShape),
         updateState,
       },
+      checkWasStateResetDuringQuery,
     };
   }
 
@@ -3189,6 +3276,55 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
     );
   }
 
+  /**
+   * Whether an empty page (from the server or after `filterQueryResults`) keeps the loaded items
+   * instead of blanking them: on a `keepPreviousItems` refresh or a next page, when `items` is
+   * defined (`hasResults`). With `items` undefined there is nothing to keep, so the page sets `[]`.
+   */
+  private emptyPageKeepsLoadedItems({
+    isFirstPage,
+    keepPreviousItems,
+  }: Pick<QueryPagePlacement<Q>, 'isFirstPage' | 'keepPreviousItems'>): boolean {
+    return this.hasResults && (!!keepPreviousItems || !isFirstPage);
+  }
+
+  /**
+   * Whether placing a page publishes its whole state: with `updateState`, or when the paginator's
+   * own `updateState: false` query settles a list without items
+   * ({@link emptyPageSettlesListWithoutItems}). Otherwise {@link publishStoredPage} publishes only
+   * what the stored page changed.
+   */
+  private commitsPlacedState(
+    placement: QueryPagePlacement<Q>,
+    page: T[],
+    { endsQuery }: { endsQuery: boolean },
+  ): boolean {
+    return (
+      placement.updateState !== false ||
+      (endsQuery && this.emptyPageSettlesListWithoutItems(placement, page))
+    );
+  }
+
+  /**
+   * Whether an empty, only-stored first page sets a list without items (`items` undefined) to
+   * `[]`. Storing an empty page leaves nothing a later publish could show, so it is published now.
+   * Not for a page at the caller's shape (`startsSeparateInterval`): it says nothing about the
+   * list's own first page. Not for a superseded claim ({@link claimIsSuperseded}): the later claim
+   * owns the list.
+   */
+  private emptyPageSettlesListWithoutItems(
+    placement: QueryPagePlacement<Q>,
+    page: T[],
+  ): boolean {
+    return (
+      placement.isFirstPage &&
+      page.length === 0 &&
+      !this.hasResults &&
+      !placement.startsSeparateInterval &&
+      !this.claimIsSuperseded(placement)
+    );
+  }
+
   /** Whether a claim on the active interval followed the query's own (`activeIntervalClaim`). */
   private claimIsSuperseded({ activeIntervalClaim }: QueryPagePlacement<Q>): boolean {
     return (
@@ -3213,7 +3349,10 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
    * of the paginator's own queries may still be running.
    */
   protected placePage(
-    {
+    placement: QueryPagePlacement<Q> & { results: PaginationQueryReturnValue<T> },
+    { endsQuery }: { endsQuery: boolean },
+  ): ExecuteQueryReturnValue<T> {
+    const {
       startsSeparateInterval,
       direction,
       isFirstPage,
@@ -3222,9 +3361,7 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
       requestedPageSize,
       results,
       updateState = true,
-    }: QueryPagePlacement<Q> & { results: PaginationQueryReturnValue<T> },
-    { endsQuery }: { endsQuery: boolean },
-  ): ExecuteQueryReturnValue<T> {
+    } = placement;
     const stateUpdate: Partial<PaginatorState<T>> = endsQuery
       ? { isLoading: false, lastQueryError: undefined }
       : {};
@@ -3280,11 +3417,9 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
     } else if (
       updateState &&
       !filteredItems.length &&
-      (keepPreviousItems || !isFirstPage)
+      this.emptyPageKeepsLoadedItems({ isFirstPage, keepPreviousItems })
     ) {
-      // A page left empty, by the server or by `filterQueryResults`, must not wipe the loaded items
-      // on a `keepPreviousItems` refresh or an incremental query (`ingestPage` returns null for it).
-      // A genuine reset still blanks.
+      // `ingestPage` returns no interval for an empty page, so the loaded items are carried over.
       stateUpdate.items = this.items;
     }
 
@@ -3423,10 +3558,11 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
     const state = endsQuery
       ? this.getStateAfterQuery(stateUpdate, isFirstPage)
       : { ...this.state.getLatestValue(), ...stateUpdate };
-    // `updateState` decides whether the results are committed, not whether the query is over: a
-    // caller that commits its own state must not be left with the `isLoading` executeQuery published.
-    if (updateState) this.state.next(state);
-    else this.publishStoredPage({ endsQuery, interval, state });
+    // Committing the results is `commitsPlacedState`'s call; ending the query is not: an
+    // uncommitted page still clears the `isLoading` that `executeQuery` published.
+    if (this.commitsPlacedState(placement, filteredItems, { endsQuery })) {
+      this.state.next(state);
+    } else this.publishStoredPage({ endsQuery, interval, state });
     // Only the first page of the paginator's own query is cached; a later page cannot change it.
     if (endsQuery && isFirstPage) {
       this.populateOfflineDbAfterQuery({ items: state.items, queryShape });
@@ -3465,7 +3601,12 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
     this._executeQueryDebounced.cancel();
   }
 
+  /**
+   * Returns the paginator to "never queried" (`items: undefined`). A query running meanwhile is
+   * ignored (see {@link executeQuery}); a debounced query stays scheduled.
+   */
   resetState() {
+    this._stateResetCount++;
     // Nothing is loaded, so the next query is a first page again. A stale shape would make a
     // re-query with an unchanged shape a continuation, ingested without `isHead`. Cleared before
     // the publish below, whose subscribers read `isInitialized` / `hasLoadedPage`.
