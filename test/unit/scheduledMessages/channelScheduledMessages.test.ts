@@ -763,6 +763,81 @@ describe("a channel's scheduled messages", () => {
         expect(listed(channel)).toEqual([sm]);
       });
     });
+
+    describe('while a send of the channel is in flight', () => {
+      const holdSend = async (channel: Channel, client: StreamChat) => {
+        channel.messageComposer.updateConfig({
+          attachments: { pendingUploadsEnabled: true },
+        });
+        let releaseSend: () => void = () => undefined;
+        const sendSpy = vi.spyOn(client, 'sendMessage').mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              releaseSend = () =>
+                resolve({ duration: '', message: { id: 'm-1', text: 'first' } } as never);
+            }) as never,
+        );
+        channel.messageComposer.textComposer.setText('first');
+        const sending = channel.messageComposer.send();
+        await vi.waitFor(() => expect(sendSpy).toHaveBeenCalledOnce());
+        return { releaseSend: () => releaseSend(), sending, sendSpy };
+      };
+
+      it('schedules after the send', async () => {
+        const { channel, client } = setup();
+        channel.scheduledMessagesPaginator.hydrate([]);
+        const { releaseSend, sending, sendSpy } = await holdSend(channel, client);
+        const sm = generateScheduledMessage();
+        sendSpy.mockResolvedValueOnce({
+          duration: '',
+          message: { id: sm.id, text: 'later' },
+          scheduled_message: sm,
+        } as never);
+
+        const scheduling = channel.scheduleMessage({
+          message: { id: sm.id, text: 'later' },
+          scheduled_at: new Date(Date.now() + 60 * 60 * 1000),
+        });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(sendSpy).toHaveBeenCalledOnce();
+
+        releaseSend();
+        await Promise.all([sending, scheduling]);
+
+        expect(sendSpy).toHaveBeenCalledTimes(2);
+        expect(listed(channel)).toEqual([sm]);
+      });
+
+      it.each([
+        [
+          'updateScheduledMessage',
+          (channel: Channel, id: string) =>
+            channel.updateScheduledMessage(id, { message: { text: 'edited' } }),
+        ],
+        [
+          'deleteScheduledMessage',
+          (channel: Channel, id: string) => channel.deleteScheduledMessage(id),
+        ],
+        [
+          'sendScheduledMessageNow',
+          (channel: Channel, id: string) => channel.sendScheduledMessageNow(id),
+        ],
+      ] as const)('does not hold %s behind the send', async (method, act) => {
+        const { channel, client, sm } = setupWithMessage();
+        const { releaseSend, sending } = await holdSend(channel, client);
+        const request = vi
+          .spyOn(client, method)
+          .mockResolvedValue({ duration: '', scheduled_message: sm });
+
+        await act(channel, sm.id);
+
+        expect(request).toHaveBeenCalledOnce();
+
+        releaseSend();
+        await sending;
+      });
+    });
   });
 
   describe('lists holding the same message', () => {

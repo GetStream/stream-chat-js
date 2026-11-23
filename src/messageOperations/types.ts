@@ -14,6 +14,8 @@ import type { StreamChat } from '../client';
 
 export type OperationKind = 'send' | 'retry' | 'update' | 'delete';
 
+export type SequencedOperationKind = OperationKind | 'schedule';
+
 export type MessageOperationSpec = {
   send: {
     options: SendMessageOptions;
@@ -88,7 +90,10 @@ export type MessageOperationsContext = {
    * Lets the owner serialize requests: the server dates a message on arrival, so a short text sent after
    * a photo would otherwise be dated first. Wraps the request only; call it once and return its result.
    */
-  sequenceRequests?: <T>(kind: OperationKind, request: () => Promise<T>) => Promise<T>;
+  sequenceRequests?: <T>(
+    kind: SequencedOperationKind,
+    request: () => Promise<T>,
+  ) => Promise<T>;
 
   /**
    * Resolves any attachment upload still in flight, returning the attachments with their URLs written
