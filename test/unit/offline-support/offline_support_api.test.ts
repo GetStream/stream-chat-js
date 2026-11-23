@@ -1630,6 +1630,79 @@ describe('OfflineSupportApi', () => {
         });
       });
 
+      describe('handleMessageMarkAddedEvent', () => {
+        const mark = {
+          type: 'played',
+          message_id: 'msg-1',
+          user_id: 'user-b',
+          created_at: convertDateToTimestamp(new Date().toISOString()),
+        };
+        const markAddedEvent = {
+          type: 'message.mark_added',
+          cid: 'messaging:channel123',
+          message_id: 'msg-1',
+          created_at: mark.created_at,
+          custom: {},
+          mark,
+        } as Event;
+        const heldMessage = {
+          id: 'msg-1',
+          cid: 'messaging:channel123',
+          user: { id: 'user-a' },
+          mark_groups: {
+            played: {
+              count: 1,
+              latest_by: [{ user_id: 'user-b', created_at: mark.created_at }],
+            },
+          },
+        } as unknown as LocalMessage;
+
+        afterEach(() => {
+          client.messageStore.remove('msg-1');
+          vi.resetAllMocks();
+        });
+
+        it('returns empty query array if the store does not hold the message', async () => {
+          const result = await offlineDb.handleMessageMarkAddedEvent({
+            event: markAddedEvent as Extract<Event, { type: 'message.mark_added' }>,
+          });
+          expect(queriesWithChannelGuardSpy).not.toHaveBeenCalled();
+          expect(result).toEqual([]);
+        });
+
+        it('returns empty query array if the message is a thread reply', async () => {
+          client.messageStore.upsert({ ...heldMessage, parent_id: 'parent1' });
+          const result = await offlineDb.handleMessageMarkAddedEvent({
+            event: markAddedEvent as Extract<Event, { type: 'message.mark_added' }>,
+          });
+          expect(queriesWithChannelGuardSpy).not.toHaveBeenCalled();
+          expect(result).toEqual([]);
+        });
+
+        it('stores the held message through handleEvent', async () => {
+          client.messageStore.upsert(heldMessage);
+          offlineDb.updateMessage.mockResolvedValue(['UPDATE * IN messages']);
+
+          const result = await offlineDb.handleEvent({
+            event: markAddedEvent,
+            execute: false,
+          });
+
+          expect(queriesWithChannelGuardSpy).toHaveBeenCalledWith(
+            { event: markAddedEvent, execute: false },
+            expect.any(Function),
+          );
+          expect(offlineDb.updateMessage).toHaveBeenCalledWith({
+            message: expect.objectContaining({
+              id: 'msg-1',
+              mark_groups: heldMessage.mark_groups,
+            }),
+            execute: false,
+          });
+          expect(result).toEqual(['UPDATE * IN messages']);
+        });
+      });
+
       describe('handleChannelVisibilityEvent', () => {
         const channelHiddenEvent: Event = {
           ...baseEvent,

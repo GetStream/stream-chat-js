@@ -131,6 +131,12 @@ export const QUEUEABLE_OPERATIONS: {
     run: ({ channel, client, task }) =>
       channelOf(client, task, channel).sendMessage(...task.payload),
   },
+  // Nothing to settle on replay; `message.mark_added` updates the message.
+  'send-message-mark': {
+    needsChannel: false,
+    logFailureAs: { message: 'Marking the message failed.', method: 'createMessageMark' },
+    run: ({ client, task }) => client.createMessageMark(...task.payload),
+  },
   'send-reaction': {
     needsChannel: false,
     logFailureAs: { message: 'Sending the reaction failed.', method: 'sendReaction' },

@@ -745,6 +745,35 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   };
 
   /**
+   * Stores the message as the message store holds it. The event carries only the mark, which
+   * `Channel` has applied to that copy by the time a live event reaches the DB. A message the store
+   * does not hold, or a thread reply, is skipped and gets its marks stored with its next query.
+   *
+   * @param payload.event - The WS event we are trying to process.
+   * @param payload.execute - Whether to immediately execute the queries. Defaults to `true`.
+   * @returns The prepared queries.
+   */
+  public handleMessageMarkAddedEvent = async ({
+    event,
+    execute = true,
+  }: {
+    event: EventPayload<'message.mark_added'>;
+    execute?: boolean;
+  }) => {
+    const message = this.client.messageStore.get(event.mark.message_id);
+
+    if (message && !message.parent_id) {
+      return await this.queriesWithChannelGuard(
+        { event, execute },
+        async (executeOverride) =>
+          await this.updateMessage({ message, execute: executeOverride }),
+      );
+    }
+
+    return [];
+  };
+
+  /**
    * Sets `hidden` from the event type, as the event's channel does not carry it.
    *
    * @param payload.event - The WS event we are trying to process.
@@ -950,6 +979,10 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
 
     if (type === 'message.updated' || type === 'message.undeleted') {
       return this.handleMessageUpdatedEvent({ event, execute });
+    }
+
+    if (type === 'message.mark_added') {
+      return await this.handleMessageMarkAddedEvent({ event, execute });
     }
 
     if (type === 'message.read' || type === 'notification.mark_read') {

@@ -288,6 +288,7 @@ export type PendingTaskTypes = {
   deleteReaction: 'delete-reaction';
   sendReaction: 'send-reaction';
   sendMessage: 'send-message';
+  sendMessageMark: 'send-message-mark';
   createDraft: 'create-draft';
   deleteDraft: 'delete-draft';
 };
@@ -308,6 +309,7 @@ export type QueueableOperationSignatures = {
   'delete-message': StreamChat['deleteMessage'];
   'delete-reaction': StreamChat['deleteReaction'];
   'send-message': Channel['sendMessage'];
+  'send-message-mark': StreamChat['createMessageMark'];
   'send-reaction': StreamChat['sendReaction'];
   'update-message': StreamChat['updateMessage'];
 };
