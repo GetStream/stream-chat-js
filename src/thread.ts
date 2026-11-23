@@ -453,6 +453,7 @@ export class Thread extends WithSubscriptions {
     this.addUnsubscribeFunction(this.subscribeParentMessageFromStore());
     this.addUnsubscribeFunction(this.subscribeMarkActiveThreadRead());
     this.addUnsubscribeFunction(this.subscribeReloadActiveStaleThread());
+    this.addUnsubscribeFunction(this.subscribeLoadScheduledMessagesWhenActive());
     this.addUnsubscribeFunction(this.subscribeMarkStaleOnStopWatching());
     this.scheduledMessages.registerSubscriptions();
     this.addUnsubscribeFunction(() => this.scheduledMessages.unregisterSubscriptions());
@@ -513,6 +514,14 @@ export class Thread extends WithSubscriptions {
         if (active && isStateStale) {
           this.reload();
         }
+      },
+    );
+
+  private subscribeLoadScheduledMessagesWhenActive = () =>
+    this.state.subscribeWithSelector(
+      ({ active }) => ({ active }),
+      ({ active }) => {
+        if (active) this.channel.ensureScheduledMessagesLoaded();
       },
     );
 

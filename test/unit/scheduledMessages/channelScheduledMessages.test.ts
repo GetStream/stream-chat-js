@@ -3,9 +3,11 @@ import {
   Channel,
   EventType,
   getThreadScheduledMessages,
+  MessageResponse,
   ScheduledMessagePaginator,
   ScheduledMessageResponse,
   StreamChat,
+  Thread,
 } from '../../../src';
 import { msToNs, nowNs } from '../../../src/utils/time';
 import { getClientWithUser } from '../test-utils/getClient';
@@ -968,6 +970,92 @@ describe("a channel's scheduled messages", () => {
 
       expect(listed(channel)).toEqual([sm]);
       expect(channel.scheduledMessagesPaginator.lastQueryError).toBe(error);
+    });
+  });
+
+  describe('loaded when a thread opens', () => {
+    const registerThread = (client: StreamChat, channel: Channel, parentId: string) => {
+      const thread = new Thread({
+        client,
+        channel,
+        parentMessage: { id: parentId, text: 'parent' } as MessageResponse,
+      });
+      thread.registerSubscriptions();
+      return thread;
+    };
+
+    const setupThread = () => {
+      const context = setup();
+      vi.spyOn(context.client, 'getThread').mockReturnValue(new Promise(() => undefined));
+      return context;
+    };
+
+    it("loads the channel's list, with the thread's replies, when a thread is activated", async () => {
+      const { channel, client, queryScheduledMessages } = setupThread();
+      const reply = generateScheduledMessage({
+        message: { parent_id: 'parent', text: 'reply' },
+      });
+      queryScheduledMessages.mockResolvedValue(queryResponse([reply]));
+      const thread = registerThread(client, channel, 'parent');
+
+      thread.activate();
+
+      await vi.waitFor(() =>
+        expect(thread.scheduledMessages.state.getLatestValue().items).toEqual([reply]),
+      );
+      expect(queryScheduledMessages).toHaveBeenCalledOnce();
+      expect(queryScheduledMessages).toHaveBeenCalledWith({
+        filter: { cid },
+        limit: 100,
+      });
+    });
+
+    it('does not load for a registered thread that is not active', () => {
+      const { channel, client, queryScheduledMessages } = setupThread();
+
+      registerThread(client, channel, 'parent');
+
+      expect(queryScheduledMessages).not.toHaveBeenCalled();
+    });
+
+    it('does not load a list the channel query already filled', async () => {
+      const { channel, client, queryScheduledMessages } = setupThread();
+      await channel.query();
+      const thread = registerThread(client, channel, 'parent');
+
+      thread.activate();
+
+      expect(queryScheduledMessages).not.toHaveBeenCalled();
+    });
+
+    it('loads once when several threads of the channel open while it loads', () => {
+      const { channel, client, queryScheduledMessages } = setupThread();
+      queryScheduledMessages.mockReturnValue(new Promise(() => undefined));
+
+      registerThread(client, channel, 'first').activate();
+      registerThread(client, channel, 'second').activate();
+
+      expect(queryScheduledMessages).toHaveBeenCalledOnce();
+    });
+
+    it('does not load when scheduled messages are turned off for the channel', () => {
+      const { channel, client, queryScheduledMessages } = setupThread();
+      client.config.set({ channel: { scheduledMessages: { enabled: false } } });
+      const thread = registerThread(client, channel, 'parent');
+
+      thread.activate();
+
+      expect(queryScheduledMessages).not.toHaveBeenCalled();
+    });
+
+    it('does not load when the user cannot schedule messages in the channel', () => {
+      const { channel, client, queryScheduledMessages } = setupThread();
+      channel.data = { ...channel.data, own_capabilities: ['send-message'] } as never;
+      const thread = registerThread(client, channel, 'parent');
+
+      thread.activate();
+
+      expect(queryScheduledMessages).not.toHaveBeenCalled();
     });
   });
 });
