@@ -1127,16 +1127,33 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     });
   };
 
+  /** Whether a mark of the same type is already queued for the message. */
+  private isMessageMarkQueued = async (
+    task: Extract<PendingTask, { type: 'send-message-mark' }>,
+  ) => {
+    const [{ id }, { type }] = task.payload;
+    const pendingTasks = await this.getPendingTasks({ messageId: id });
+
+    return pendingTasks.some(
+      (pending) =>
+        pending.type === 'send-message-mark' && pending.payload[1]?.type === type,
+    );
+  };
+
   /**
    * Stores the task. An edit of a never-sent message is folded into its queued send instead. With no
    * queued send, an edit `isMessageUpdateReplayable` refuses (attachments still on local URLs) is
-   * dropped.
+   * dropped. A mark already queued for the message is not queued again.
    *
    * @param payload.task - The pending task to store.
    */
   public handleAddPendingTask = async ({ task }: { task: PendingTask }) => {
     if (task.type === 'update-message') {
       await this.handleUpdateMessagePendingTask(task);
+      return;
+    }
+
+    if (task.type === 'send-message-mark' && (await this.isMessageMarkQueued(task))) {
       return;
     }
 

@@ -2536,6 +2536,53 @@ describe('OfflineSupportApi', () => {
           expect(addPendingTaskSpy).toHaveBeenCalledWith(task);
         });
 
+        describe('send-message-mark', () => {
+          const markTask = (type: string) =>
+            ({
+              channelId: 'channel-id',
+              channelType: 'messaging',
+              messageId: 'msg-123',
+              payload: [{ id: 'msg-123' }, { type }],
+              type: 'send-message-mark',
+            }) as PendingTask;
+
+          it('adds a mark when none is queued for the message', async () => {
+            const task = markTask('played');
+            const getPendingTasksSpy = vi
+              .spyOn(offlineDb, 'getPendingTasks')
+              .mockResolvedValue([]);
+            const addPendingTaskSpy = vi.spyOn(offlineDb, 'addPendingTask');
+
+            await offlineDb.handleAddPendingTask({ task });
+
+            expect(getPendingTasksSpy).toHaveBeenCalledWith({ messageId: 'msg-123' });
+            expect(addPendingTaskSpy).toHaveBeenCalledWith(task);
+          });
+
+          it('does not queue a mark of a type already queued for the message', async () => {
+            vi.spyOn(offlineDb, 'getPendingTasks').mockResolvedValue([
+              { ...markTask('played'), id: 1 },
+            ]);
+            const addPendingTaskSpy = vi.spyOn(offlineDb, 'addPendingTask');
+
+            await offlineDb.handleAddPendingTask({ task: markTask('played') });
+
+            expect(addPendingTaskSpy).not.toHaveBeenCalled();
+          });
+
+          it('adds a mark of a different type', async () => {
+            const task = markTask('seen');
+            vi.spyOn(offlineDb, 'getPendingTasks').mockResolvedValue([
+              { ...markTask('played'), id: 1 },
+            ]);
+            const addPendingTaskSpy = vi.spyOn(offlineDb, 'addPendingTask');
+
+            await offlineDb.handleAddPendingTask({ task });
+
+            expect(addPendingTaskSpy).toHaveBeenCalledWith(task);
+          });
+        });
+
         it('adds replayable update-message tasks as-is when nothing is queued for the message', async () => {
           const task = generatePendingTask('update-message') as PendingTask;
           const addPendingTaskSpy = vi.spyOn(offlineDb, 'addPendingTask');
