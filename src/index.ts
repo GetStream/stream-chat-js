@@ -132,3 +132,5 @@ export {
 } from './utils/concurrency';
 export * from './ChannelManager';
 export * from './EventHandlerPipeline';
+// Only `version`: its type is `typeof version`, and the parser and env reader stay internal.
+export { version } from './version';

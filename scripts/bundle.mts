@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { builtinModules } from 'node:module';
 import * as esbuild from 'esbuild';
@@ -132,6 +133,49 @@ const assertBundleBoundaries = (metafile: esbuild.Metafile) => {
 };
 
 /**
+ * Fails the build if a `define`d name survives in an output bundle.
+ *
+ * `define` replaces only the exact expression (`process.env.PKG_VERSION`), so a refactor that
+ * reads it any other way — a destructure, `globalThis.process.env.X`, `process.env[key]` — still
+ * compiles and passes every unit test (vitest never bundles), yet ships the fallback `version`
+ * (`0.0.0-development`) and user agent to every consumer. Those leave the name behind, which is
+ * what this looks for.
+ *
+ * It cannot see a `typeof process` guard around the exact expression: the expression is still
+ * replaced, so no name is left, yet the guard makes every browser take the fallback. That case is
+ * guarded only by the comment on `readInjectedVersion` in `src/version.ts`.
+ *
+ * Matches are whole words, so a longer identifier containing a name does not count, but a string
+ * literal spelling a name exactly does: spell it differently. Source maps are skipped: they embed
+ * the original source.
+ */
+const assertDefinesReplaced = (
+  metafile: esbuild.Metafile,
+  define: Record<string, string> = {},
+) => {
+  const names = Object.keys(define).map((key) => key.slice(key.lastIndexOf('.') + 1));
+  const failures = Object.keys(metafile.outputs)
+    .filter((outputFile) => !outputFile.endsWith('.map'))
+    .flatMap((outputFile) =>
+      readFileSync(outputFile, 'utf8')
+        .split('\n')
+        .flatMap((line, index) =>
+          names.some((name) => new RegExp(`\\b${name}\\b`).test(line))
+            ? [`${outputFile}:${index + 1}: ${line.trim()}`]
+            : [],
+        ),
+    );
+
+  if (failures.length) {
+    console.error(
+      `\nA define was not replaced (read it as the exact \`process.env.X\` expression):\n  ` +
+        `${failures.join('\n  ')}\n`,
+    );
+    process.exit(1);
+  }
+};
+
+/**
  * process.env.CLIENT_BUNDLE values:
  *
  * - index.js - browser-esm
@@ -182,5 +226,9 @@ if (watchModeEnabled) {
   console.log('ESBuild is watching for changes...');
 } else {
   const results = await Promise.all(bundles.map((config) => esbuild.build(config)));
-  results.forEach(({ metafile }) => metafile && assertBundleBoundaries(metafile));
+  results.forEach(({ metafile }, index) => {
+    if (!metafile) return;
+    assertBundleBoundaries(metafile);
+    assertDefinesReplaced(metafile, bundles[index].define);
+  });
 }

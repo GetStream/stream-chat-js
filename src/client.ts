@@ -1,5 +1,4 @@
 /* eslint no-unused-vars: "off" */
-/* global process */
 
 import type { AxiosInstance, AxiosRequestConfig } from 'axios';
 import axios from 'axios';
@@ -22,6 +21,7 @@ import {
   sanitizeOutgoingAttachments,
 } from './utils';
 import { nowNs } from './utils/time';
+import { readInjectedClientBundle, readInjectedVersion } from './version';
 import { normalizeUploadFile } from './upload-utils';
 
 import type {
@@ -1711,16 +1711,34 @@ export class StreamChat extends ChatApi {
   }
 
   /**
-   * Revokes a global ban.
+   * Revokes a global ban, or a channel ban when `options.type` and `options.id` name a channel.
+   *
+   * Goes through V2 `client.moderation.unban()`. The one exception is
+   * `remove_future_channels_ban`, which that endpoint does not accept, so a call with it set still
+   * goes to v1 `DELETE /moderation/ban`. `shadow` is accepted for compatibility but ignored: the
+   * server lifts whichever ban is in place, shadow or not, on both endpoints.
    *
    * @param targetUserId - The user to unban.
    * @param options - Unban options (optional).
    * @returns The server response.
    */
-  async unbanUser(targetUserId: string, options?: UnBanUserOptions) {
-    return await this.api.delete<APIResponse>(this.baseURL + '/moderation/ban', {
-      target_user_id: targetUserId,
-      ...options,
+  async unbanUser(
+    targetUserId: string,
+    options?: UnBanUserOptions,
+  ): Promise<APIResponse> {
+    const { id, remove_future_channels_ban, type } = options ?? {};
+    const target_user_id = options?.target_user_id ?? targetUserId;
+
+    if (remove_future_channels_ban) {
+      return await this.api.delete<APIResponse>(this.baseURL + '/moderation/ban', {
+        ...options,
+        target_user_id,
+      });
+    }
+
+    return await this.moderation.unban({
+      target_user_id,
+      channel_cid: type && id ? `${type}:${id}` : undefined,
     });
   }
 
@@ -1742,6 +1760,22 @@ export class StreamChat extends ChatApi {
     this.blockedUsers.partialNext({
       userIds: result.blocks.map(({ blocked_user_id }) => blocked_user_id),
     });
+    return result;
+  }
+
+  override async updatePushNotificationPreferences(
+    ...args: Parameters<ChatApi['updatePushNotificationPreferences']>
+  ) {
+    const result = await super.updatePushNotificationPreferences(...args);
+    const { user } = this;
+    if (!user) return result;
+
+    // The full stored preferences after the update, or null when the request only had
+    // channel-level items for this user.
+    const updated = result.user_preferences[user.id];
+    if (updated) {
+      this.user = { ...user, push_preferences: updated };
+    }
     return result;
   }
 
@@ -1963,7 +1997,7 @@ export class StreamChat extends ChatApi {
 
     // Memoized on the first call: later changes to the identifiers are not picked up.
     if (!this.cachedUserAgent) {
-      const version = process.env.PKG_VERSION;
+      const version = readInjectedVersion();
       const { name: sdkName, version: sdkVersion } = this.sdkIdentifier ?? {};
       const { name: appName, version: appVersion } = this.appIdentifier ?? {};
       const { os, model: deviceModel } = this.deviceIdentifier ?? {};
@@ -1980,7 +2014,7 @@ export class StreamChat extends ChatApi {
           app_version: appVersion,
           os,
           device_model: deviceModel,
-          client_bundle: process.env.CLIENT_BUNDLE,
+          client_bundle: readInjectedClientBundle(),
         })
           .filter(([, value]) => value && value.length > 0)
           .map(([key, value]) => `${key}=${value}`),
