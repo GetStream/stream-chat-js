@@ -8538,12 +8538,11 @@ describe('message marks (CHA-6554)', () => {
 			mark: { type: 'played', message_id: 'm1', user_id: 'me', created_at: now },
 		};
 
-		it('sends the played mark once for another user message', async () => {
+		it('sends the played mark for another user message', async () => {
 			vi.spyOn(client, 'createMessageMark').mockResolvedValue(response);
 			const message = generateMsg({ id: 'm1', user: { id: 'alice' } });
 
 			expect(await channel.markMessagePlayed(message)).to.equal(response);
-			expect(await channel.markMessagePlayed(message)).to.equal(null);
 
 			expect(client.createMessageMark).toHaveBeenCalledTimes(1);
 			expect(client.createMessageMark).toHaveBeenCalledWith(
@@ -8570,23 +8569,8 @@ describe('message marks (CHA-6554)', () => {
 			expect(client.createMessageMark).not.toHaveBeenCalled();
 		});
 
-		it('sends again after a failed request', async () => {
-			const error = new Error('offline');
-			vi.spyOn(client, 'createMessageMark')
-				.mockRejectedValueOnce(error)
-				.mockResolvedValueOnce(response);
-			const message = generateMsg({ id: 'm1', user: { id: 'alice' } });
-
-			await expect(channel.markMessagePlayed(message)).rejects.toThrow(error);
-			expect(await channel.markMessagePlayed(message)).to.equal(response);
-			expect(client.createMessageMark).toHaveBeenCalledTimes(2);
-		});
-
-		it('queues the mark while offline and does not queue it again', async () => {
-			const offlineDb = new MockOfflineDB({ client });
-			client.setOfflineDBApi(offlineDb);
-			// Uninitialized mock DB holds no tasks.
-			offlineDb.state.partialNext({ initialized: true, userId: client.userId });
+		it('queues the mark while offline', async () => {
+			client.setOfflineDBApi(new MockOfflineDB({ client }));
 			const task = {
 				channelId: channel.id,
 				channelType: channel.type,
@@ -8598,14 +8582,10 @@ describe('message marks (CHA-6554)', () => {
 			const queueTask = vi
 				.spyOn(client.offlineDb, 'queueTask')
 				.mockRejectedValue(new Error('connection lost'));
-			vi.spyOn(client.offlineDb, 'getPendingTasks').mockResolvedValue([
-				{ id: 1, ...task },
-			]);
 			vi.spyOn(client, 'createMessageMark').mockRejectedValue(new Error('network down'));
 			const message = generateMsg({ id: 'm1', user: { id: 'alice' } });
 
 			await expect(channel.markMessagePlayed(message)).rejects.toThrow('network down');
-			expect(await channel.markMessagePlayed(message)).to.equal(null);
 
 			expect(queueTask).toHaveBeenCalledTimes(1);
 			expect(queueTask).toHaveBeenCalledWith({ task });

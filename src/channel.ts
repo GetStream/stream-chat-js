@@ -1,7 +1,7 @@
 import { ChannelState, ChannelWatchStatus } from './channel_state';
 import { isEqual } from './utils/mergeWith/mergeWithCore';
 import { CooldownTimer } from './CooldownTimer';
-import { isQueuedForReplay, queueOrRun } from './offline-support/queueableOperations';
+import { queueOrRun } from './offline-support/queueableOperations';
 import { MessageComposer } from './messageComposer';
 import { MessageReceiptsTracker } from './messageDelivery';
 import type { ReadStoreReconcileMeta } from './messageDelivery';
@@ -219,8 +219,6 @@ export class Channel extends ChannelApi {
    * `watch()` with these options has nothing to send. Cleared when the watch ends.
    */
   private _lastWatchOptions?: ChannelGetOrCreateRequest;
-  /** The messages {@link Channel.markMessagePlayed} sent a mark for, so a replay sends nothing. */
-  private _playedMarksSent = new Set<string>();
   push_preferences?: Gen_ChannelPushPreferencesResponse;
   private readonly configController: ConfigController<ChannelConfig>;
   public readonly messageComposer: MessageComposer;
@@ -495,9 +493,8 @@ export class Channel extends ChannelApi {
   /**
    * Marks a message `played` for the current user, for instance when the user starts its voice note.
    * Sends nothing for the user's own message, for a message the user already marked, or without the
-   * `send-message-mark` capability, and sends once per message until a request fails. A mark the
-   * offline queue holds counts as sent. The message changes only when `message.mark_added` arrives,
-   * as with read state.
+   * `send-message-mark` capability. The message changes only when `message.mark_added` arrives, as
+   * with read state.
    *
    * @param message - The played message.
    * @returns The server response, or `null` when no request went out.
@@ -509,24 +506,12 @@ export class Channel extends ChannelApi {
       !userId ||
       message.user?.id === userId ||
       message.own_marks?.some(({ type }) => type === 'played') ||
-      (Array.isArray(ownCapabilities) &&
-        !ownCapabilities.includes('send-message-mark')) ||
-      this._playedMarksSent.has(message.id)
+      (Array.isArray(ownCapabilities) && !ownCapabilities.includes('send-message-mark'))
     ) {
       return null;
     }
 
-    this._playedMarksSent.add(message.id);
-    try {
-      return await this.sendMessageMark({ id: message.id }, { type: 'played' });
-    } catch (error) {
-      if (
-        !(await isQueuedForReplay(this.getClient(), message.id, ['send-message-mark']))
-      ) {
-        this._playedMarksSent.delete(message.id);
-      }
-      throw error;
-    }
+    return await this.sendMessageMark({ id: message.id }, { type: 'played' });
   }
 
   async deleteReaction(...args: Parameters<ChatApi['deleteReaction']>) {
