@@ -157,6 +157,11 @@ export type ChannelConfig = {
    * command can be used right now is `messageComposer.isCommandDisabled(command)`.
    */
   availableCommands: Command[];
+  /**
+   * The message mark types the channel type accepts, for instance `played`. Server-owned: the
+   * integrator cannot set it. Empty when message marks are off for the channel type.
+   */
+  markTypes: string[];
 };
 
 /**
@@ -191,6 +196,7 @@ const ownDeclarativeConfig = (
 export const DEFAULT_CHANNEL_CONFIG: ChannelConfig = deepFreezeConfig({
   availableCommands: [],
   deliveryEvents: { enabled: true },
+  markTypes: [],
   readEvents: { enabled: true, localUnreadCountEnabled: false },
   replies: { enabled: true },
   typingEvents: { enabled: true },
@@ -329,6 +335,7 @@ export class Channel extends ChannelApi {
             ) as ChannelConfig),
             // Assigned, not merged: the deep merge would concatenate the lists.
             availableCommands: this.serverConfig?.commands ?? [],
+            markTypes: this.serverConfig?.mark_types ?? [],
           }),
         ) as ChannelConfig,
     });
@@ -492,7 +499,8 @@ export class Channel extends ChannelApi {
 
   /**
    * Marks a message `played` for the current user, for instance when the user starts its voice note.
-   * Sends nothing for the user's own message, for a message the user already marked, or without the
+   * Sends nothing when the channel type has no `played` mark ({@link ChannelConfig.markTypes}), for
+   * the user's own message, for a message the user already marked, or without the
    * `send-message-mark` capability. The message changes only when `message.mark_added` arrives, as
    * with read state.
    *
@@ -504,6 +512,7 @@ export class Channel extends ChannelApi {
     const ownCapabilities = this.data?.own_capabilities;
     if (
       !userId ||
+      !this.config.markTypes.includes('played') ||
       message.user?.id === userId ||
       message.own_marks?.some(({ type }) => type === 'played') ||
       (Array.isArray(ownCapabilities) && !ownCapabilities.includes('send-message-mark'))

@@ -585,6 +585,13 @@ describe("the 'channel' configuration key", () => {
       expect(channel.config.availableCommands).toEqual(commands);
     });
 
+    it('mirrors the server mark types, empty without them', () => {
+      expect(openChannel().config.markTypes).toEqual([]);
+
+      const channel = withServerConfig({ mark_types: ['played'] }, 'marks');
+      expect(channel.config.markTypes).toEqual(['played']);
+    });
+
     it('ANDs the replies gate like the others', () => {
       client.config.set({ channel: { replies: { enabled: true } } });
       const channel = withServerConfig({ replies: false });

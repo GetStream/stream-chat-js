@@ -8537,6 +8537,14 @@ describe('message marks (CHA-6554)', () => {
 			created: true,
 			mark: { type: 'played', message_id: 'm1', user_id: 'me', created_at: now },
 		};
+		const setMarkTypes = (mark_types) =>
+			client.channelServerConfigsStore.partialNext({
+				configs: { [channel.cid]: { mark_types } },
+			});
+
+		beforeEach(() => {
+			setMarkTypes(['played']);
+		});
 
 		it('sends the played mark for another user message', async () => {
 			vi.spyOn(client, 'createMessageMark').mockResolvedValue(response);
@@ -8566,6 +8574,16 @@ describe('message marks (CHA-6554)', () => {
 			channel.data = { ...channel.data, own_capabilities: ['send-message'] };
 			await channel.markMessagePlayed(generateMsg({ id: 'm3', user: { id: 'alice' } }));
 
+			expect(client.createMessageMark).not.toHaveBeenCalled();
+		});
+
+		it('sends nothing when the channel type has no played mark', async () => {
+			vi.spyOn(client, 'createMessageMark').mockResolvedValue(response);
+			setMarkTypes(undefined);
+
+			expect(
+				await channel.markMessagePlayed(generateMsg({ id: 'm1', user: { id: 'alice' } })),
+			).to.equal(null);
 			expect(client.createMessageMark).not.toHaveBeenCalled();
 		});
 
