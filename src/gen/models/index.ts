@@ -270,6 +270,8 @@ export interface AITextConfig {
 export interface AIVideoConfigRequest {
   async?: boolean;
   enabled?: boolean;
+  ocr_rules?: Array<OCRRule>;
+  ocr_severity_rules?: Array<BodyguardRule>;
   rules?: Array<AWSRekognitionRule>;
 }
 
@@ -277,6 +279,8 @@ export interface AIVideoConfigResponse {
   enabled: boolean;
   rules: Array<AWSRekognitionRule>;
   async?: boolean;
+  ocr_rules?: Array<OCRRule>;
+  ocr_severity_rules?: Array<BodyguardRule>;
 }
 
 export interface APIError {
@@ -350,7 +354,7 @@ export interface ActionLogResponse {
    */
   reason: string;
   /**
-   * Classification of who triggered the action (e.g. user, moderator, automod, api_integration)
+   * Classification of who triggered the action (e.g. user, moderator, automod, agent_reviewer, api_integration)
    */
   reporter_type: string;
   /**
@@ -367,9 +371,10 @@ export interface ActionLogResponse {
   user_id: string;
   ai_providers: Array<string>;
   /**
-   * Additional metadata about the action
+   * Additional metadata about the action. An agent_recommendation log keeps the suggested action under recommended_action
    */
   custom: Record<string, any>;
+  agent_recommendation?: AgentRecommendationResponse;
   review_queue_item?: ReviewQueueItemResponse;
   /**
    * User response object
@@ -408,6 +413,67 @@ export interface AddUserGroupMembersRequest {
 export interface AddUserGroupMembersResponse {
   duration: string;
   user_group?: UserGroupResponse;
+}
+
+export interface AgentRecommendationPayload {
+  /**
+   * Why Nora suggests this action. Stored on the action log, cut to 500 bytes
+   */
+  reason: string;
+  /**
+   * Action Nora suggests for the item
+   */
+  recommended_action:
+    | 'keep'
+    | 'flag'
+    | 'mask'
+    | 'mask_flag'
+    | 'shadow'
+    | 'remove'
+    | 'bounce'
+    | 'bounce_flag'
+    | 'bounce_remove'
+    | 'review';
+}
+
+export interface AgentRecommendationResponse {
+  /**
+   * Why Nora suggested this action
+   */
+  reason: string;
+  /**
+   * Action Nora suggested for the item
+   */
+  recommended_action:
+    | 'keep'
+    | 'flag'
+    | 'mask'
+    | 'mask_flag'
+    | 'shadow'
+    | 'remove'
+    | 'bounce'
+    | 'bounce_flag'
+    | 'bounce_remove'
+    | 'review';
+}
+
+export interface AgentReviewSummaryResponse {
+  /**
+   * Verdict confidence from 0 to 1
+   */
+  confidence: number;
+  /**
+   * pending, processing, done, failed, or skipped
+   */
+  status: string;
+  /**
+   * Whether the flag matches the content. Set once the review is done
+   */
+  flag_assessment?: string;
+  /**
+   * The action Nora recommends. Set once the review is done
+   */
+  recommended_action?: string;
 }
 
 export interface AppChannelCountParameters {
@@ -637,6 +703,22 @@ export interface Attachment {
   actions?: Array<Action>;
   fields?: Array<Field>;
   giphy?: Images;
+  voice_transcript?: AttachmentTranscriptResponse;
+}
+
+export interface AttachmentTranscriptResponse {
+  /**
+   * Why the recording could not be transcribed: unsupported_format, too_large, blocked_url, fetch_failed or invalid_response
+   */
+  error?: string;
+  /**
+   * Transcribed text of the recording
+   */
+  text?: string;
+  /**
+   * Languages detected in the recording
+   */
+  languages?: Array<TranscriptLanguageResponse>;
 }
 
 export interface AutomodDetailsResponse {
@@ -1076,6 +1158,7 @@ export interface CallActionOptions {
 }
 
 export interface CallCustomPropertyParameters {
+  expected_value?: any;
   operator?: string;
   property_key?: string;
 }
@@ -1177,6 +1260,10 @@ export interface ChannelConfigOverrides {
    */
   user_message_reminders?: boolean;
   /**
+   * Enables or disables transcription of voice recordings
+   */
+  voice_transcription?: boolean;
+  /**
    * List of commands that channel supports
    */
   commands?: Array<string>;
@@ -1218,6 +1305,7 @@ export interface ChannelConfigWithInfo {
   uploads: boolean;
   url_enrichment: boolean;
   user_message_reminders: boolean;
+  voice_transcription: boolean;
   commands: Array<Command>;
   blocklist?: string;
   /**
@@ -1248,6 +1336,7 @@ export interface ChannelConfigWithInfo {
   scheduled_messages_min_lead_time_seconds?: number;
   allowed_flag_reasons?: Array<string>;
   blocklists?: Array<BlockListOptions>;
+  mark_types?: Array<string>;
   /**
    * Sets thresholds for AI moderation
    */
@@ -1843,6 +1932,7 @@ export const ChannelOwnCapability = {
   SEND_CUSTOM_EVENTS: 'send-custom-events',
   SEND_LINKS: 'send-links',
   SEND_MESSAGE: 'send-message',
+  SEND_MESSAGE_MARK: 'send-message-mark',
   SEND_POLL: 'send-poll',
   SEND_REACTION: 'send-reaction',
   SEND_REPLY: 'send-reply',
@@ -2410,6 +2500,16 @@ export interface ChatDraftResponse {
   quoted_message?: ChatMessageResponse;
 }
 
+export interface ChatMarkGroupResponse {
+  count: number;
+  latest_by: Array<ChatMessageMarkerResponse>;
+}
+
+export interface ChatMessageMarkerResponse {
+  created_at: TimestampNS;
+  user_id: string;
+}
+
 export interface ChatMessageResponse {
   cid: string;
   created_at: TimestampNS;
@@ -2451,10 +2551,12 @@ export interface ChatMessageResponse {
   mentioned_group_ids?: Array<string>;
   mentioned_groups?: Array<UserGroupResponse>;
   mentioned_roles?: Array<string>;
+  own_marks?: Array<ChatOwnMarkResponse>;
   thread_participants?: Array<UserResponse>;
   draft?: ChatDraftResponse;
   i18n?: Record<string, string>;
   image_labels?: Record<string, Array<string>>;
+  mark_groups?: Record<string, ChatMarkGroupResponse>;
   member?: ChannelMemberPartialResponse;
   moderation?: ChatModerationV2Response;
   /**
@@ -2477,6 +2579,11 @@ export interface ChatModerationV2Response {
   blocklists_matched?: Array<string>;
   image_harms?: Array<string>;
   text_harms?: Array<string>;
+}
+
+export interface ChatOwnMarkResponse {
+  created_at: TimestampNS;
+  type: string;
 }
 
 export interface ChatPreferences {
@@ -2573,6 +2680,7 @@ export interface ClosedCaptionRuleParameters {
   threshold?: number;
   time_window?: string;
   harm_labels?: Array<string>;
+  severities?: Array<string>;
   llm_harm_labels?: Record<string, string>;
 }
 
@@ -2666,6 +2774,10 @@ export interface ConfigOverridesRequest {
    */
   user_message_reminders?: boolean;
   /**
+   * Enable/disable transcription of voice recordings in this channel
+   */
+  voice_transcription?: boolean;
+  /**
    * List of available commands
    */
   commands?: Array<string>;
@@ -2718,8 +2830,17 @@ export interface ConfigResponse {
   ai_image_subclassifications?: Record<string, Array<string>>;
   ai_text_config?: AITextConfig;
   ai_video_config?: AIVideoConfigResponse;
+  /**
+   * @deprecated
+   */
   automod_platform_circumvention_config?: AutomodPlatformCircumventionConfig;
+  /**
+   * @deprecated
+   */
   automod_semantic_filters_config?: AutomodSemanticFiltersConfig;
+  /**
+   * @deprecated
+   */
   automod_toxicity_config?: AutomodToxicityConfig;
   block_list_config?: BlockListConfig;
   engine?: ModerationEngineConfigResponse;
@@ -2796,6 +2917,7 @@ export interface ContentCountryCodeParameters {
 }
 
 export interface ContentCustomPropertyCountParameters {
+  expected_value?: any;
   operator?: string;
   property_key?: string;
   threshold?: number;
@@ -2803,8 +2925,309 @@ export interface ContentCustomPropertyCountParameters {
 }
 
 export interface ContentCustomPropertyParameters {
+  expected_value?: any;
   operator?: string;
   property_key?: string;
+}
+
+export interface CountReviewQueueRequest {
+  /**
+   * Filter conditions for review queue items, the same filter Query Review Queue takes. The count covers exactly the items that query lists for this filter, ignoring sort, paging and item locks.
+   */
+  filter?: Filters<{
+    agent_review_action: {
+      type: string;
+      operators: '$eq';
+    };
+
+    agent_reviewed: {
+      type: boolean;
+      operators: '$eq';
+    };
+
+    ai_text_severity: {
+      type: string;
+      operators: '$eq';
+    };
+
+    appeal: {
+      type: boolean;
+      operators: '$eq';
+    };
+
+    appeal_id: {
+      type: string;
+      operators: '$eq';
+    };
+
+    appeal_status: {
+      type: string;
+      operators: '$eq';
+    };
+
+    archived_at: {
+      type: Date | string;
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
+    };
+
+    bounce_count: {
+      type: number;
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
+    };
+
+    category: {
+      type: string;
+      operators: '$eq' | '$in';
+    };
+
+    channel_cid: {
+      type: string;
+      operators: '$eq';
+    };
+
+    channel_id: {
+      type: string;
+      operators: '$eq';
+    };
+
+    completed_at: {
+      type: Date | string;
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
+    };
+
+    confidence_score: {
+      type: number;
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
+    };
+
+    config_key: {
+      type: string;
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
+    };
+
+    content_text: {
+      type: string;
+      operators: '$eq' | '$in' | '$q';
+    };
+
+    country_code: {
+      type: string;
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
+    };
+
+    created_at: {
+      type: Date | string;
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
+    };
+
+    custom: {
+      type: Record<string, any>;
+      operators:
+        | '$autocomplete'
+        | '$contains'
+        | '$eq'
+        | '$exists'
+        | '$gt'
+        | '$gte'
+        | '$in'
+        | '$lt'
+        | '$lte'
+        | '$q';
+    };
+
+    date_range: {
+      type: string;
+      operators: '$eq';
+    };
+
+    entity_creator_id: {
+      type: string;
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
+    };
+
+    entity_creator_name: {
+      type: string;
+      operators:
+        | '$contains'
+        | '$eq'
+        | '$exists'
+        | '$gt'
+        | '$gte'
+        | '$in'
+        | '$lt'
+        | '$lte';
+    };
+
+    entity_id: {
+      type: string;
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
+    };
+
+    entity_type: {
+      type: string;
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
+    };
+
+    escalated: {
+      type: boolean;
+      operators: '$eq';
+    };
+
+    escalated_at: {
+      type: Date | string;
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
+    };
+
+    escalated_by: {
+      type: string;
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
+    };
+
+    escalation_priority: {
+      type: string;
+      operators: '$eq';
+    };
+
+    escalation_reason: {
+      type: string;
+      operators: '$eq';
+    };
+
+    flagged_user_id: {
+      type: string;
+      operators: '$eq';
+    };
+
+    flags_count: {
+      type: number;
+      operators: '$eq';
+    };
+
+    has_audio: {
+      type: boolean;
+      operators: '$eq';
+    };
+
+    has_false_positive: {
+      type: boolean;
+      operators: '$eq';
+    };
+
+    has_image: {
+      type: boolean;
+      operators: '$eq';
+    };
+
+    has_text: {
+      type: boolean;
+      operators: '$eq';
+    };
+
+    has_video: {
+      type: boolean;
+      operators: '$eq';
+    };
+
+    id: {
+      type: string;
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
+    };
+
+    label: {
+      type: string;
+      operators: '$eq' | '$in';
+    };
+
+    language: {
+      type: string;
+      operators: '$contains' | '$eq' | '$in';
+    };
+
+    latest_moderator_action: {
+      type: string;
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
+    };
+
+    queue_type: {
+      type: string;
+      operators: '$eq' | '$in';
+    };
+
+    recommended_action: {
+      type: string;
+      operators: '$eq' | '$in';
+    };
+
+    reporter_id: {
+      type: string;
+      operators: '$eq' | '$in';
+    };
+
+    reporter_type: {
+      type: string;
+      operators: '$eq' | '$in';
+    };
+
+    reviewed: {
+      type: boolean;
+      operators: '$eq';
+    };
+
+    reviewed_at: {
+      type: Date | string;
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
+    };
+
+    severity: {
+      type: number;
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
+    };
+
+    status: {
+      type: string;
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
+    };
+
+    teams: {
+      type: string;
+      operators: '$contains' | '$eq' | '$in';
+    };
+
+    type: {
+      type: string;
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
+    };
+
+    updated_at: {
+      type: Date | string;
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
+    };
+
+    user_report_reason: {
+      type: string;
+      operators: '$eq' | '$in';
+    };
+  }>;
+}
+
+export interface CountReviewQueueResponse {
+  /**
+   * Whether more items match than are counted exactly (50,000), so total is a lower bound
+   */
+  capped: boolean;
+  duration: string;
+  /**
+   * Whether the count is missing or out of date because the queue changed since it was computed. A later request may return a fresher count.
+   */
+  pending: boolean;
+  /**
+   * Number of review queue items matching the filter. When capped is true, at least this many items match.
+   */
+  total: number;
+  /**
+   * When the count was computed. Counts are refreshed in the background as the review queue changes.
+   */
+  computed_at?: TimestampNS;
 }
 
 export interface CreateBlockListRequest {
@@ -2903,6 +3326,25 @@ export interface CreateGuestResponse {
    * User response object
    */
   user: UserResponse;
+}
+
+export interface CreateMessageMarkRequest {
+  /**
+   * The mark type: a built-in type such as played (the acting user played the message's audio, voiceRecording or video attachment) or a type the app defines in its message_marks settings
+   */
+  type: string;
+}
+
+export interface CreateMessageMarkResponse {
+  /**
+   * Whether this request wrote the mark. False on a repeat and on the author's own mark
+   */
+  created: boolean;
+  duration: string;
+  /**
+   * A mark one user put on one message, for example played on a voice note. A mark is written once and never removed by users.
+   */
+  mark: MessageMarkResponse;
 }
 
 export interface CreatePollOptionRequest {
@@ -4250,6 +4692,7 @@ export interface GetOGResponse {
   actions?: Array<Action>;
   fields?: Array<Field>;
   giphy?: Images;
+  voice_transcript?: AttachmentTranscriptResponse;
 }
 
 export interface GetOrCreateChannelDefaults {
@@ -4428,6 +4871,7 @@ export interface IPFlagCountRuleParameters {
   threshold?: number;
   time_window?: string;
   harm_labels?: Array<string>;
+  severities?: Array<string>;
 }
 
 export interface ImageContentParameters {
@@ -4658,6 +5102,17 @@ export interface MarkDeliveredResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
+}
+
+export interface MarkGroupResponse {
+  /**
+   * Number of users who marked the message with this type
+   */
+  count: number;
+  /**
+   * The users who marked the message with this type, newest first, at most 100
+   */
+  latest_by: Array<MessageMarkerResponse>;
 }
 
 export interface MarkReadRequest {
@@ -5068,6 +5523,97 @@ export interface MessageFlagResponse {
    * User response object
    */
   user?: UserResponse;
+}
+
+export interface MessageMarkAddedEvent {
+  /**
+   * Date/time of creation
+   */
+  created_at: TimestampNS;
+  /**
+   * The marked message
+   */
+  message_id: string;
+  custom: Record<string, any>;
+  /**
+   * A mark one user put on one message, for example played on a voice note. A mark is written once and never removed by users.
+   */
+  mark: MessageMarkResponse;
+  /**
+   * The type of event: "message.mark_added" in this case
+   */
+  type: string;
+  /**
+   * The ID of the channel holding the marked message
+   */
+  channel_id?: string;
+  /**
+   * The type of the channel holding the marked message
+   */
+  channel_type?: string;
+  /**
+   * The CID of the channel holding the marked message
+   */
+  cid?: string;
+  /**
+   * The ID of the parent message, when the marked message is a thread reply
+   */
+  parent_id?: string;
+  received_at?: TimestampNS;
+  user?: UserResponseCommonFields;
+}
+
+export interface MessageMarkResponse {
+  /**
+   * When the mark was written
+   */
+  created_at: TimestampNS;
+  /**
+   * The marked message
+   */
+  message_id: string;
+  /**
+   * The mark type, for example played
+   */
+  type: string;
+  /**
+   * The user who marked the message
+   */
+  user_id: string;
+}
+
+export interface MessageMarkWithUserResponse {
+  /**
+   * When the mark was written
+   */
+  created_at: TimestampNS;
+  /**
+   * The marked message
+   */
+  message_id: string;
+  /**
+   * The mark type, for example played
+   */
+  type: string;
+  /**
+   * The user who marked the message
+   */
+  user_id: string;
+  /**
+   * User response object
+   */
+  user: UserResponse;
+}
+
+export interface MessageMarkerResponse {
+  /**
+   * When the mark was written
+   */
+  created_at: TimestampNS;
+  /**
+   * The user who marked the message
+   */
+  user_id: string;
 }
 
 export interface MessageModerationResult {
@@ -5488,6 +6034,10 @@ export interface MessageResponse {
    */
   mentioned_roles?: Array<string>;
   /**
+   * The viewer's own marks on this message, for example played. Omitted when marks are off for the channel type
+   */
+  own_marks?: Array<OwnMarkResponse>;
+  /**
    * List of users who participate in thread
    */
   thread_participants?: Array<UserResponse>;
@@ -5500,6 +6050,10 @@ export interface MessageResponse {
    * Contains image moderation information
    */
   image_labels?: Record<string, Array<string>>;
+  /**
+   * On the viewer's own messages: who marked them, per mark type (for example played). Omitted when marks are off for the channel type
+   */
+  mark_groups?: Record<string, MarkGroupResponse>;
   member?: ChannelMemberPartialResponse;
   /**
    * Channel member data for the users mentioned in the message, keyed by user id. Only present when the app has member custom on mentioned users enabled, and only for the first two mentioned users of each message
@@ -5752,6 +6306,10 @@ export interface MessageWithChannelResponse {
    */
   mentioned_roles?: Array<string>;
   /**
+   * The viewer's own marks on this message, for example played. Omitted when marks are off for the channel type
+   */
+  own_marks?: Array<OwnMarkResponse>;
+  /**
    * List of users who participate in thread
    */
   thread_participants?: Array<UserResponse>;
@@ -5764,6 +6322,10 @@ export interface MessageWithChannelResponse {
    * Contains image moderation information
    */
   image_labels?: Record<string, Array<string>>;
+  /**
+   * On the viewer's own messages: who marked them, per mark type (for example played). Omitted when marks are off for the channel type
+   */
+  mark_groups?: Record<string, MarkGroupResponse>;
   member?: ChannelMemberPartialResponse;
   /**
    * Channel member data for the users mentioned in the message, keyed by user id. Only present when the app has member custom on mentioned users enabled, and only for the first two mentioned users of each message
@@ -5876,24 +6438,46 @@ export interface ModerationCustomActionEvent {
 
 export interface ModerationEngineConfigRequest {
   /**
-   * LLM model used when the provider resolves to llm. Not allowed with provider nlp. Empty uses the app's moderation settings
+   * LLM model used when the provider resolves to llm, or a Stream model with provider stream (an alias, or a pinned version the server accepts). Not allowed with provider nlp. Empty uses the app's moderation settings, or the latest Stream model
    */
-  model?: 'gpt-4o-mini' | 'gpt-4o';
+  model?:
+    | 'gpt-4o-mini'
+    | 'gpt-4o'
+    | 'gpt-6-luna'
+    | 'stream-mammoth-1'
+    | 'stream-elephant-1'
+    | 'stream-whale-1';
   /**
-   * llm or nlp. Empty follows the app's LLM moderation setting
+   * llm, nlp or stream. Empty follows the app's LLM moderation setting
    */
-  provider?: 'llm' | 'nlp';
+  provider?: 'llm' | 'nlp' | 'stream';
+  /**
+   * OpenAI reasoning effort for model. Requires model, and must be one the model accepts. Empty uses the model's default
+   */
+  reasoning_effort?: string;
+  /**
+   * How sure a Stream model must be before it flags: relaxed, balanced or strict. Only with provider stream. Empty is balanced
+   */
+  strictness?: 'relaxed' | 'balanced' | 'strict';
 }
 
 export interface ModerationEngineConfigResponse {
   /**
-   * LLM model used when the provider resolves to llm. Not allowed with provider nlp. Empty uses the app's moderation settings
+   * LLM model used when the provider resolves to llm, or a Stream model with provider stream (an alias, or a pinned version the server accepts). Not allowed with provider nlp. Empty uses the app's moderation settings, or the latest Stream model
    */
   model?: string;
   /**
-   * llm or nlp. Empty follows the app's LLM moderation setting
+   * llm, nlp or stream. Empty follows the app's LLM moderation setting
    */
-  provider?: 'llm' | 'nlp';
+  provider?: 'llm' | 'nlp' | 'stream';
+  /**
+   * OpenAI reasoning effort for model. Requires model, and must be one the model accepts. Empty uses the model's default
+   */
+  reasoning_effort?: string;
+  /**
+   * How sure a Stream model must be before it flags: relaxed, balanced or strict. Only with provider stream. Empty is balanced
+   */
+  strictness?: 'relaxed' | 'balanced' | 'strict';
 }
 
 export interface ModerationFlagResponse {
@@ -6016,6 +6600,8 @@ export interface ModerationQueueResponse {
   description: string;
   id: string;
   item_count: number;
+  item_count_capped: boolean;
+  item_count_pending: boolean;
   name: string;
   type: string;
   updated_at: TimestampNS;
@@ -6818,6 +7404,7 @@ export interface OCRContentParameters {
   label_operator?: string;
   severity?: string;
   harm_labels?: Array<string>;
+  severities?: Array<string>;
 }
 
 export interface OCRRule {
@@ -6830,6 +7417,17 @@ export interface OCRRule {
 
 export interface OnlyUserID {
   id: string;
+}
+
+export interface OwnMarkResponse {
+  /**
+   * When the mark was written
+   */
+  created_at: TimestampNS;
+  /**
+   * The mark type, for example played
+   */
+  type: string;
 }
 
 export interface OwnUserResponse {
@@ -8054,6 +8652,43 @@ export interface QueryMessageFlagsResponse {
   flags: Array<MessageFlagResponse>;
 }
 
+export interface QueryMessageMarksFilter {
+  /**
+   * Only marks of this type, for example played
+   */
+  type?: string;
+}
+
+export interface QueryMessageMarksRequest {
+  /**
+   * Page size, 1 to 100. Defaults to 25
+   */
+  limit?: number;
+  /**
+   * Cursor from the previous page's next field. The order is fixed: newest first
+   */
+  next?: string;
+  /**
+   * Filter for listing the marks on a message
+   */
+  filter?: QueryMessageMarksFilter;
+}
+
+export interface QueryMessageMarksResponse {
+  /**
+   * Duration of the request in milliseconds
+   */
+  duration: string;
+  /**
+   * The marks of this page, newest first
+   */
+  marks: Array<MessageMarkWithUserResponse>;
+  /**
+   * Cursor for the next page; absent on the last page
+   */
+  next?: string;
+}
+
 export interface QueryModerationConfigsRequest {
   limit?: number;
   next?: string;
@@ -8367,6 +9002,16 @@ export interface QueryReviewQueueRequest {
    * Filter conditions for review queue items. Accepts built-in fields (e.g. status, channel_cid, severity, recommended_action) and customer-supplied moderation_payload.custom keys: any key that is not a built-in field is matched against the item's custom moderation data (e.g. {"location_id": "loc-42"}). Use filter_config.filterable_custom_keys to discover which custom keys the app exposes as chips. content_text searches the moderated text: "$q" is a keyword search (terms ANDed, no adjacency) over the indexed tsvector, while "$eq" (or "$in" for several wordings) matches the text exactly. The exact form is unindexed, so scope it with date_range rather than running it across the whole queue.
    */
   filter?: Filters<{
+    agent_review_action: {
+      type: string;
+      operators: '$eq';
+    };
+
+    agent_reviewed: {
+      type: boolean;
+      operators: '$eq';
+    };
+
     ai_text_severity: {
       type: string;
       operators: '$eq';
@@ -9546,6 +10191,7 @@ export interface ReviewQueueItemResponse {
    */
   teams?: Array<string>;
   activity?: EnrichedActivity;
+  agent_review?: AgentReviewSummaryResponse;
   appeal?: AppealItemResponse;
   /**
    * User response object
@@ -9738,8 +10384,17 @@ export interface SaveConfigVersionRequest {
   ai_image_config?: AIImageConfig;
   ai_text_config?: AITextConfig;
   ai_video_config?: AIVideoConfigRequest;
+  /**
+   * @deprecated
+   */
   automod_platform_circumvention_config?: AutomodPlatformCircumventionConfig;
+  /**
+   * @deprecated
+   */
   automod_semantic_filters_config?: AutomodSemanticFiltersConfig;
+  /**
+   * @deprecated
+   */
   automod_toxicity_config?: AutomodToxicityConfig;
   aws_rekognition_config?: AIImageConfig;
   block_list_config?: BlockListConfig;
@@ -9857,6 +10512,10 @@ export interface ScheduledMessageContentResponse {
    * IDs of the users the message will be visible to
    */
   restricted_visibility?: Array<string>;
+  /**
+   * Represents any chat message
+   */
+  quoted_message?: MessageResponse;
   /**
    * The location a scheduled message will share
    */
@@ -10071,6 +10730,93 @@ export interface ScheduledMessagesFilter {
    * Only these statuses, as reported in each scheduled message's status. One or more of: scheduled, sending, failed
    */
   status?: Array<ScheduledMessageQueryStatus>;
+}
+
+export interface SearchAllChannelsSection {
+  /**
+   * Opaque cursor for the next page of this section, present only when more results exist. Pass it back under next.channels with the same query
+   */
+  next?: string;
+  /**
+   * Channels the caller is a member of whose name starts with the query, in the same shape as the query channels endpoint's results but without messages or members
+   */
+  channels?: Array<ChannelStateResponseFields>;
+  error?: SearchAllSectionError;
+  warning?: SearchAllWarning;
+}
+
+export interface SearchAllMessagesSection {
+  /**
+   * Opaque cursor for the next page of this section, present only when more results exist. Pass it back under next.messages with the same query
+   */
+  next?: string;
+  /**
+   * Matching messages, newest first, in the same shape as the search endpoint's results
+   */
+  results?: Array<SearchResult>;
+  error?: SearchAllSectionError;
+  results_warning?: SearchWarning;
+  warning?: SearchAllWarning;
+}
+
+export interface SearchAllRequest {
+  /**
+   * Number of results per section, 1-30. Defaults to 10. Applies to every requested section; there is no per-section limit
+   */
+  limit?: number;
+  /**
+   * Free-text search phrase, 1-80 characters after trimming whitespace. Required. Matched as a prefix of a user's name or username and of a channel's name, and as full-text against message text
+   */
+  query?: string;
+  /**
+   * Which sections to search: any subset of messages, users and channels. Defaults to all three when omitted; must not be empty when provided. Response sections always appear in the order messages, users, channels
+   */
+  entities?: Array<string>;
+  /**
+   * Opaque pagination cursors from a previous response, keyed by entity. A cursor that fails to decode restarts that section from page 1 with a cursor_rejected warning; the request fails with 400 only when every cursor supplied for a requested entity is invalid. Cursors for entities not in entities are ignored
+   */
+  next?: Record<string, string>;
+}
+
+export interface SearchAllResponse {
+  /**
+   * Duration of the request in milliseconds
+   */
+  duration: string;
+  channels?: SearchAllChannelsSection;
+  messages?: SearchAllMessagesSection;
+  users?: SearchAllUsersSection;
+}
+
+export interface SearchAllSectionError {
+  /**
+   * Error code. backend_timeout and backend_unavailable are retryable; unsupported (the app's configuration cannot serve this section) and internal_error are not
+   */
+  code: 'backend_unavailable' | 'backend_timeout' | 'unsupported' | 'internal_error';
+  /**
+   * Human-readable description of the failure
+   */
+  message: string;
+}
+
+export interface SearchAllUsersSection {
+  /**
+   * Opaque cursor for the next page of this section, present only when more results exist. Pass it back under next.users with the same query
+   */
+  next?: string;
+  /**
+   * Users whose name or username starts with the query, in the same shape as the query users endpoint's results
+   */
+  users?: Array<FullUserResponse>;
+  error?: SearchAllSectionError;
+  warning?: SearchAllWarning;
+}
+
+export interface SearchAllWarning {
+  /**
+   * Warning code. cursor_rejected: the cursor supplied for this section failed to decode, so the section restarted from page 1
+   */
+  code: 'cursor_rejected';
 }
 
 export interface SearchPayload {
@@ -10425,6 +11171,7 @@ export interface SearchResultMessage {
   mentioned_group_ids?: Array<string>;
   mentioned_groups?: Array<UserGroupResponse>;
   mentioned_roles?: Array<string>;
+  own_marks?: Array<OwnMarkResponse>;
   thread_participants?: Array<UserResponse>;
   /**
    * Represents channel in chat
@@ -10433,6 +11180,7 @@ export interface SearchResultMessage {
   draft?: DraftResponse;
   i18n?: Record<string, string>;
   image_labels?: Record<string, Array<string>>;
+  mark_groups?: Record<string, MarkGroupResponse>;
   member?: ChannelMemberPartialResponse;
   mentioned_channel_members?: Record<string, ChannelMemberPartialResponse>;
   moderation?: ModerationV2Response;
@@ -10715,7 +11463,7 @@ export type SortParamType = '' | 'number' | 'boolean';
 
 export interface SubmitActionRequest {
   /**
-   * Type of moderation action to perform. One of: mark_reviewed, delete_message, delete_activity, delete_comment, delete_reaction, delete_poll, delete_poll_option, delete_poll_answer, ban, custom, unban, restore, delete_user, delete_user_messages, unblock, block, shadow_block, unmask, kick_user, end_call, escalate, de_escalate
+   * Type of moderation action to perform. One of: mark_reviewed, delete_message, delete_activity, delete_comment, delete_reaction, delete_poll, delete_poll_option, delete_poll_answer, ban, custom, unban, restore, delete_user, delete_user_messages, unblock, block, shadow_block, unmask, kick_user, end_call, escalate, de_escalate, agent_recommendation
    */
   action_type:
     | 'flag'
@@ -10742,7 +11490,8 @@ export interface SubmitActionRequest {
     | 'reject_appeal'
     | 'escalate'
     | 'de_escalate'
-    | 'bypass';
+    | 'bypass'
+    | 'agent_recommendation';
   /**
    * UUID of the appeal to act on (required for reject_appeal, optional for other actions)
    */
@@ -10751,6 +11500,7 @@ export interface SubmitActionRequest {
    * UUID of the review queue item to act on
    */
   item_id?: string;
+  agent_recommendation?: AgentRecommendationPayload;
   /**
    * Configuration for ban moderation action
    */
@@ -10876,6 +11626,7 @@ export interface TextContentParameters {
   text_length_operator?: string;
   blocklist_match?: Array<string>;
   harm_labels?: Array<string>;
+  severities?: Array<string>;
   llm_harm_labels?: Record<string, string>;
 }
 
@@ -10888,6 +11639,7 @@ export interface TextRuleParameters {
   blocklist_match?: Array<string>;
   harm_labels?: Array<string>;
   semantic_filter_names?: Array<string>;
+  severities?: Array<string>;
   llm_harm_labels?: Record<string, string>;
 }
 
@@ -11070,6 +11822,13 @@ export interface Thresholds {
   explicit?: LabelThresholds;
   spam?: LabelThresholds;
   toxic?: LabelThresholds;
+}
+
+export interface TranscriptLanguageResponse {
+  /**
+   * Language code, e.g. en
+   */
+  code: string;
 }
 
 export interface TranslateMessageRequest {
@@ -11878,8 +12637,17 @@ export interface UpsertConfigRequest {
   ai_image_config?: AIImageConfig;
   ai_text_config?: AITextConfig;
   ai_video_config?: AIVideoConfigRequest;
+  /**
+   * @deprecated
+   */
   automod_platform_circumvention_config?: AutomodPlatformCircumventionConfig;
+  /**
+   * @deprecated
+   */
   automod_semantic_filters_config?: AutomodSemanticFiltersConfig;
+  /**
+   * @deprecated
+   */
   automod_toxicity_config?: AutomodToxicityConfig;
   aws_rekognition_config?: AIImageConfig;
   block_list_config?: BlockListConfig;
@@ -12015,6 +12783,7 @@ export interface UserCreatedWithinParameters {
 }
 
 export interface UserCustomPropertyParameters {
+  expected_value?: any;
   operator?: string;
   property_key?: string;
 }
@@ -12650,6 +13419,7 @@ export type WSClientEvent =
   | ({ type: 'member.updated' } & MemberUpdatedEvent)
   | ({ type: 'message.deleted' } & MessageDeletedEvent)
   | ({ type: 'message.delivered' } & MessageDeliveredEvent)
+  | ({ type: 'message.mark_added' } & MessageMarkAddedEvent)
   | ({ type: 'message.new' } & MessageNewEvent)
   | ({ type: 'message.pending' } & PendingMessageEvent)
   | ({ type: 'message.read' } & MessageReadEvent)
@@ -12744,6 +13514,7 @@ export type WSEvent =
   | ({ type: 'member.updated' } & MemberUpdatedEvent)
   | ({ type: 'message.deleted' } & MessageDeletedEvent)
   | ({ type: 'message.delivered' } & MessageDeliveredEvent)
+  | ({ type: 'message.mark_added' } & MessageMarkAddedEvent)
   | ({ type: 'message.new' } & MessageNewEvent)
   | ({ type: 'message.pending' } & PendingMessageEvent)
   | ({ type: 'message.read' } & MessageReadEvent)

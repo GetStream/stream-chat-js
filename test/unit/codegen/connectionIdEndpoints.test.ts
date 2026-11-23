@@ -2,12 +2,14 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
+import { requiresConnectionId } from '../../../src/api-client';
+
 /**
  * `requiresConnectionId` (src/api-client.ts) gates only on the `watch` / `presence` flags. The two
  * generated operations that declare `connection_id` but carry no flag set it themselves:
  * `stopWatchingChannel` from `StreamChat`'s override, which always waits for the connection id as the
  * gate does and sends it, and `longPoll`'s endpoint from the long-poll fallback, which addresses its
- * own polls.
+ * own polls. `searchAll` declares it too, but the SDK does not call it, so a caller passes its own.
  *
  * That makes every new flagless, connection-scoped operation a place the id has to be set by hand,
  * with nothing failing if it is not. This test pins the set, so a regenerated spec adding one
@@ -23,6 +25,8 @@ const ENDPOINTS_DECLARING_CONNECTION_ID = [
   'longPoll',
   'queryChannels',
   'queryThreads',
+  'queryUsers',
+  'searchAll',
   'stopWatchingChannel',
   'sync',
 ];
@@ -65,13 +69,9 @@ describe('generated endpoints declaring connection_id', () => {
     expect(methodsEmittingConnectionId()).to.eql(ENDPOINTS_DECLARING_CONNECTION_ID);
   });
 
-  it('does not include queryUsers, which the payload.presence probe exists for', () => {
-    // GET /users needs a connection id to subscribe to presence but the spec declares no
-    // `connection_id` param, so it is the one operation the flag probes alone keep gated. Drop
-    // those probes and queryUsers silently stops waiting.
-    const found = methodsEmittingConnectionId();
-    // Guards against a detector that matches nothing, which would pass this test by default.
-    expect(found).toContain('getOrCreateChannel');
-    expect(found).not.toContain('queryUsers');
+  it('includes queryUsers, which still relies on the payload.presence probe', () => {
+    // Generated queryUsers only forwards a caller's `connection_id`; the presence probe attaches it.
+    expect(methodsEmittingConnectionId()).toContain('queryUsers');
+    expect(requiresConnectionId({ payload: { presence: true } }, undefined)).toBe(true);
   });
 });
