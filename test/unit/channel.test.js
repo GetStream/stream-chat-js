@@ -8546,33 +8546,46 @@ describe('message marks (CHA-6554)', () => {
 			setMarkTypes(['played']);
 		});
 
-		it('sends the played mark for another user message', async () => {
+		it('sends the played mark for another user message the client holds', async () => {
 			vi.spyOn(client, 'createMessageMark').mockResolvedValue(response);
-			const message = generateMsg({ id: 'm1', user: { id: 'alice' } });
+			seed(generateMsg({ id: 'm1', cid: channel.cid, user: { id: 'alice' } }));
 
-			expect(await channel.markMessagePlayed(message)).to.equal(response);
+			expect(await channel.markMessagePlayed('m1')).to.equal(response);
 
 			expect(client.createMessageMark).toHaveBeenCalledTimes(1);
 			expect(client.createMessageMark).toHaveBeenCalledWith(
 				{ id: 'm1' },
 				{ type: 'played' },
 			);
-			expect(channel.messagePaginator.getItem('m1')).to.be.undefined;
 		});
 
-		it('sends nothing for the own message, a played message, or without the capability', async () => {
+		it('sends the played mark for a message the client does not hold', async () => {
 			vi.spyOn(client, 'createMessageMark').mockResolvedValue(response);
 
-			await channel.markMessagePlayed(generateMsg({ id: 'm1', user: { id: 'me' } }));
-			await channel.markMessagePlayed(
+			expect(await channel.markMessagePlayed('not-held')).to.equal(response);
+
+			expect(client.createMessageMark).toHaveBeenCalledWith(
+				{ id: 'not-held' },
+				{ type: 'played' },
+			);
+		});
+
+		it('sends nothing for a held own message, a held played message, or without the capability', async () => {
+			vi.spyOn(client, 'createMessageMark').mockResolvedValue(response);
+			seed(generateMsg({ id: 'own', cid: channel.cid, user: { id: 'me' } }));
+			seed(
 				generateMsg({
-					id: 'm2',
+					id: 'played',
+					cid: channel.cid,
 					user: { id: 'alice' },
 					own_marks: [{ type: 'played', created_at: now }],
 				}),
 			);
+
+			expect(await channel.markMessagePlayed('own')).to.equal(null);
+			expect(await channel.markMessagePlayed('played')).to.equal(null);
 			channel.data = { ...channel.data, own_capabilities: ['send-message'] };
-			await channel.markMessagePlayed(generateMsg({ id: 'm3', user: { id: 'alice' } }));
+			expect(await channel.markMessagePlayed('not-held')).to.equal(null);
 
 			expect(client.createMessageMark).not.toHaveBeenCalled();
 		});
@@ -8581,9 +8594,7 @@ describe('message marks (CHA-6554)', () => {
 			vi.spyOn(client, 'createMessageMark').mockResolvedValue(response);
 			setMarkTypes(undefined);
 
-			expect(
-				await channel.markMessagePlayed(generateMsg({ id: 'm1', user: { id: 'alice' } })),
-			).to.equal(null);
+			expect(await channel.markMessagePlayed('m1')).to.equal(null);
 			expect(client.createMessageMark).not.toHaveBeenCalled();
 		});
 
@@ -8601,9 +8612,8 @@ describe('message marks (CHA-6554)', () => {
 				.spyOn(client.offlineDb, 'queueTask')
 				.mockRejectedValue(new Error('connection lost'));
 			vi.spyOn(client, 'createMessageMark').mockRejectedValue(new Error('network down'));
-			const message = generateMsg({ id: 'm1', user: { id: 'alice' } });
 
-			await expect(channel.markMessagePlayed(message)).rejects.toThrow('network down');
+			await expect(channel.markMessagePlayed('m1')).rejects.toThrow('network down');
 
 			expect(queueTask).toHaveBeenCalledTimes(1);
 			expect(queueTask).toHaveBeenCalledWith({ task });

@@ -499,28 +499,35 @@ export class Channel extends ChannelApi {
 
   /**
    * Marks a message `played` for the current user, for instance when the user starts its voice note.
-   * Sends nothing when the channel type has no `played` mark ({@link ChannelConfig.markTypes}), for
-   * the user's own message, for a message the user already marked, or without the
-   * `send-message-mark` capability. The message changes only when `message.mark_added` arrives, as
-   * with read state.
+   * Sends nothing when the channel type has no `played` mark ({@link ChannelConfig.markTypes}) or
+   * without the `send-message-mark` capability. When the client holds the message, it also sends
+   * nothing for the user's own message or a message the user already marked. Otherwise the server
+   * ignores those. The message changes only when `message.mark_added` arrives, as with read state.
    *
-   * @param message - The played message.
+   * @param messageId - The ID of the played message.
    * @returns The server response, or `null` when no request went out.
    */
-  async markMessagePlayed(message: LocalMessage | MessageResponse) {
+  async markMessagePlayed(messageId: string) {
     const userId = this.getClient().userId;
     const ownCapabilities = this.data?.own_capabilities;
     if (
       !userId ||
       !this.config.markTypes.includes('played') ||
-      message.user?.id === userId ||
-      message.own_marks?.some(({ type }) => type === 'played') ||
       (Array.isArray(ownCapabilities) && !ownCapabilities.includes('send-message-mark'))
     ) {
       return null;
     }
 
-    return await this.sendMessageMark({ id: message.id }, { type: 'played' });
+    const message = this.getClient().messageStore.get(messageId);
+    if (
+      message &&
+      (message.user?.id === userId ||
+        message.own_marks?.some(({ type }) => type === 'played'))
+    ) {
+      return null;
+    }
+
+    return await this.sendMessageMark({ id: messageId }, { type: 'played' });
   }
 
   async deleteReaction(...args: Parameters<ChatApi['deleteReaction']>) {
