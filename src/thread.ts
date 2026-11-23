@@ -633,24 +633,21 @@ export class Thread extends WithSubscriptions {
 
   public handleMessageUpdated = (event: PipelineEvent) => {
     if (!event.message) return;
-    // A `message.updated` event carries `own_reactions: []`, which would wipe the current user's
-    // reactions: keep them from the held copy (the reply paginator, or `state.parentMessage`).
-    const message =
+    // Events carry `own_reactions: []` and no marks; keep both from the held copy.
+    const held =
       event.message.parent_id === this.id
-        ? {
-            ...event.message,
-            own_reactions:
-              this.messagePaginator.getItem(event.message.id)?.own_reactions ??
-              event.message.own_reactions,
-          }
+        ? this.messagePaginator.getItem(event.message.id)
         : !event.message.parent_id && event.message.id === this.id
-          ? {
-              ...event.message,
-              own_reactions:
-                this.state.getLatestValue().parentMessage?.own_reactions ??
-                event.message.own_reactions,
-            }
-          : event.message;
+          ? this.state.getLatestValue().parentMessage
+          : undefined;
+    const message = held
+      ? {
+          ...event.message,
+          own_reactions: held.own_reactions ?? event.message.own_reactions,
+          mark_groups: event.message.mark_groups ?? held.mark_groups,
+          own_marks: event.message.own_marks ?? held.own_marks,
+        }
+      : event.message;
     this.updateParentMessageOrReplyLocally(message);
     this.messagePaginator.reflectQuotedMessageUpdate(formatMessage(event.message));
   };
