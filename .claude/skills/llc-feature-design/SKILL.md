@@ -1,15 +1,17 @@
 ---
 name: llc-feature-design
-description: Design a new stream-chat-js (LLC) feature on the services the SDK already has (the parent node that holds each piece, generated API, paginators and paginator managers, entity stores, WS event routing, connection recovery, offline queue, optimistic updates, client.config, composer middleware), before writing code. Walks through the design questions in order and produces a design note that names, for every unit, the existing service it extends. Use when adding a feature, entity, list, endpoint wrapper, manager, store or paginator to src/, when planning or reviewing such a design or PR, or when asked where some new logic should live.
+description: Design a new stream-chat-js (LLC) feature on the services the SDK already has (the parent node that holds each piece, generated API, paginators and paginator managers, entity stores, WS event routing, connection recovery, offline queue, optimistic updates, client.config, composer middleware), before writing code. Walks through the design questions in order and adds a Design section to the feature's spec file that names, for every unit, the existing service it extends. Use when adding a feature, entity, list, endpoint wrapper, manager, store or paginator to src/, when planning or reviewing such a design or PR, or when asked where some new logic should live.
 ---
 
 # Design an LLC feature on the existing services
 
 New features in this SDK are built from services that already exist. The common failure is a feature that brings its own manager, store, consistency layer, event routing and recovery, next to the ones the SDK already has. That code repeats existing logic, is hard to read, and leaves two services that do the same job.
 
-This skill walks through the design questions in a fixed order. Each answer names the existing service the feature uses or extends. The output is a short design note (template at the end) written **before** any code.
+This skill walks through the design questions in a fixed order. Each answer names the existing service the feature uses or extends. The output is a short `## Design` section (template at the end), written **before** any code, in the feature's one spec file, `specs/<feature>/spec.md` (`<feature>`: the intake's folder, or a name chosen as `llc-spec-intake`, "The document", says). The file holds an intake when it opens with a Sources line under its title; add the section after the intake's closing "Checked, nothing for the SDK:" line. When there is no file, create it with a `# <Feature>` title above the section. A `## Design` section already in the file is replaced, and its "Intake changes" entries are carried over. A `spec.md` that holds anything else is not yours to change: ask where to write. When your brief gives another path, use it. Change nothing else in the folder.
 
-When the input is a spec from another team, run `llc-spec-intake` (`.claude/skills/llc-spec-intake/SKILL.md`) first. Its items and "Already works" answer the steps; its Offline table answers steps 11–12; each Errors row goes to the note's "Errors" line; its decisions are settled in their step or carried, with their default, to "Open decisions", as are its questions.
+When the input is a spec from another team, run `llc-spec-intake` (`.claude/skills/llc-spec-intake/SKILL.md`) first; it writes the intake into `specs/<feature>/spec.md`. Read it from there. Its items and "Already works" answer the steps; its Offline table answers steps 11–12; each Errors row goes to the section's "Errors" line; its decisions are settled in their step or carried, with their default, to "Open decisions", as are its unanswered questions. The section points to the intake's ids (E2, Q3, D1) and does not repeat their text.
+
+When the file holds an intake, before the walkthrough record each answer the other team has given (in the ticket, a thread, a reply to the questions) as its question's last sub-bullet, `Answer:`. When an answer differs from what the intake assumed, update every part that relied on it (items, "Already works" lines, scenario steps, States, Errors and Offline cells, disagreement lines, decision defaults), pointing to the question's id rather than restating the answer; a line that now holds only once an announced server change ships says "relies on Qn". Add the items the question's "What the SDK does with the answer" names for that answer. A finding the intake lacks (an item, a question, a decision) is added to it, and a wrong or contradictory statement is corrected there, not only in the Design. All of this follows `llc-spec-intake`, "Changing an intake later", and that skill's rules for each part. List what changed on the section's "Intake changes" line, then run `llc-spec-intake` section 7's searches on the intake parts, except its Out of scope and Run notes checks. Change nothing else in the intake.
 
 What each service owns, its public contract and its file paths are in the `llc-services` skill: `.claude/skills/llc-services/SKILL.md`. Read it first. Repo-wide conventions are in `CLAUDE.md` and `AGENTS.md`; this skill does not repeat them.
 
@@ -33,7 +35,7 @@ When an existing service almost fits, change the service (an option, a protected
 
 ## The walkthrough
 
-Answer the questions in this order. Later answers follow from earlier ones. For each, the note records: the answer, the existing service it uses (with path), and what is new inside that service, if anything.
+Answer the questions in this order. Later answers follow from earlier ones. For each, the section records: the answer, the existing service it uses (with path), and what is new inside that service, if anything.
 
 ### 1. Parent
 
@@ -57,13 +59,14 @@ List the parameters the feature needs, check whether `client.config` already has
 - Per-parent nesting, server restrictions and request overrides follow `llc-services`: "Configuration" ("Where a key goes", "Server authority") and "Generated API and request handlers" (which parents have `requestHandlers`; another parent needs a new key).
 - When the server signals the feature by a field's presence, derive the boolean once, in the parent's server-restrictions getter.
 - An object that depends on its parent's setting reads it through a getter the parent exposes (`channel.xEnabled`), not by parsing the parent's config tree.
+- A key that only tunes client behaviour (a timeout, a debounce) needs no `enabled` flag, and takes a server restriction only when the server sets a limit on it.
 
 ### 5. A paginator class for the entity
 
 Subclass `BasePaginator` and implement its hooks (`llc-services`, "BasePaginator"); don't rebuild what it does. `buildMatchFilters` uses the same filter as the query, and `sortComparator` the same order.
 
 - Over a shared store (step 8), pass the paginator as the index `owner` and implement `onEntitiesChanged` / `onEntityRemoved`. The base `reconcileChangedIds()` only swaps in place, so when a change can move an item (a sort field) or take it out (a filter field), re-place each changed item by the list's filter and order.
-- When the store decides which copy wins (step 8), resolve each item against the store in `ingestItem` and `filterQueryResults` before matching and placing.
+- When the store decides which copy wins (step 8) and the copies can differ in a field the list filters or sorts by (a status, a date), match and place the copy the store's rule keeps, not the incoming one, by overriding `ingestItem` and `filterQueryResults`. A store-backed paginator reads its items from the store (`StoreBackedItemIndex`), so a rule that keeps only other fields needs nothing here.
 
 ### 6. Each paginator on its parent
 
@@ -82,9 +85,9 @@ When the integrator decides which lists exist (a cross-channel list, a list per 
 
 When the same entity can sit in several lists, one `EntityStore` holds one canonical copy per id. It lives on `StreamChat` (`client.messageStore`), or on the manager that owns the entity itself (`client.channelManager.channelStore`).
 
-- Consistency rules (which copy wins, which copy removes the entity) belong to the store, so every writer obeys them: events, queries, action responses. On master `EntityStore` has no such hook (its `upsert` always replaces). Adding one is the expected change: an opt-in option on `EntityStore`, with a generic contract, that stores which don't pass it ignore. Write the rule itself as named pure functions next to the feature and pass them in.
+- Consistency rules (which copy wins, which copy removes the entity) belong to the store, so every writer obeys them: events, queries, action responses. On master `EntityStore` has no such hook (its `upsert` always replaces). Adding one is the expected change: an opt-in option on `EntityStore`, with a generic contract, that stores which don't pass it ignore. Write the rule itself as named pure functions next to the feature and pass them in. A rule that stores something other than the copy written (the held copy, or a merge) breaks every writer that checks its own write by identity, such as `MessageOperationStatePolicy`, which compares what its `get(id)` returns with the copy it wrote. List those writers in the Design section; each one records the copy the store holds after its write.
 - Ask what a stale copy can bring back. A query that started before a removal can return the removed item. If the store forgets the removal (its entry is released when no list holds it), it can't refuse that copy. Then the store must remember removals (a tombstone kept after the entry is gone) until logout, and every removal must reach the store, including one for an item no list holds (an event for a channel that isn't loaded).
-- **A feature that adds fields to an existing entity** (a field on the message) needs no new store, but every path that writes that entity can drop the new fields: events whose payload lacks them, action responses, queries, local updates. List every writer of the entity's store (search for `upsert`, `ingestItem`, `setItems` and the event handlers that replace the entity) in the design note. Then decide, as one rule on the store, what an incoming copy without the fields means: keep the held value, or clear it. Don't repeat that merge at each call site, the way `Channel._extendEventWithOwnReactions()` carries `own_reactions` over.
+- **A feature that adds fields to an existing entity** (a field on the message) needs no new store, but every path that writes that entity can drop the new fields: events whose payload lacks them, action responses, queries, local updates. List every writer of the entity's store (search for `upsert`, `ingestItem`, `setItems` and the event handlers that replace the entity) in the Design section. Then decide, as one rule on the store, what an incoming copy without the fields means: keep the held value, or clear it. Don't repeat that merge at each call site, the way `Channel._extendEventWithOwnReactions()` carries `own_reactions` over.
 
 ### 9. WS events
 
@@ -113,7 +116,7 @@ Refresh each list through its parent's existing route (`llc-services`, "Connecti
 
 - Use `recover…Lists()`, called from both `handleReconnect()` and `recover()`, for lists that don't depend on the channel reloads. Use `connection.recovered` for those that do: it fires after them.
 - A reload keeps the current items until the response lands (`keepPreviousItems`, or a `reload()` override like `ThreadPaginator.reload()`), so the UI doesn't blank.
-- A view whose source paginator belongs to another parent (a thread's view of its channel's list) is refreshed only when that parent is. Name the gap in the design note, or close it from the parent that owns the list.
+- A view whose source paginator belongs to another parent (a thread's view of its channel's list) is refreshed only when that parent is. Name the gap in the Design section, or close it from the parent that owns the list.
 
 ### 13. Message composer
 
@@ -121,7 +124,7 @@ If the feature changes how a message is composed or submitted, add a middleware 
 
 ## Worked example: scheduled messages
 
-The scheduled messages feature (stream-chat-js [PR 1990](https://github.com/GetStream/stream-chat-js/pull/1990)) was first built as its own service, then rebuilt on the existing ones in commit `79b2d11d` ([PR 2013](https://github.com/GetStream/stream-chat-js/pull/2013), spec in `specs/scheduled-message-lists/spec.md`). The walkthrough leads to the second design. This code lives on PR 1990's branch, `feat/cha-5934-scheduled-messages-v10`, not on master; read it with `git show 79b2d11d:<path>`.
+The scheduled messages feature (stream-chat-js [PR 1990](https://github.com/GetStream/stream-chat-js/pull/1990)) was first built as its own service, then rebuilt on the existing ones in commit `79b2d11d` ([PR 2013](https://github.com/GetStream/stream-chat-js/pull/2013), spec in `specs/scheduled-message-lists/spec.md`). The walkthrough leads to the second design. This code lives on PR 1990's branch, `feat/cha-5934-scheduled-messages-v10`, not on master; read it with `git show 79b2d11d:<path>`. Without git, the tables below are the example.
 
 | Step | Answer |
 | --- | --- |
@@ -151,7 +154,7 @@ Steps 5–8, 12 and 13 are in the next table; for step 13, the scheduled-message
 
 ## Check a design or a diff
 
-Before the PR, check every assumption taken from the intake (store rules, event handling, error codes, what an absent field means) against the server repo's code and QA tests, when the user has one (`llc-spec-intake`, "The server repo"). Send any contradiction back to the server team with the evidence.
+A design under review is the `## Design` section of `specs/<feature>/spec.md`, or the path your brief gives. Report findings; edit the file only when asked. Before the PR, check every assumption taken from the intake (store rules, event handling, error codes, what an absent field means) against the server repo's code and QA tests, when the user has one (`llc-spec-intake`, "The server repo"). Send any contradiction back to the server team with the evidence, as a proposed question (`llc-spec-intake`, section 5); when you are asked to edit a spec file that holds an intake, add it there (`llc-spec-intake`, "Changing an intake later").
 
 Stop and rework when any of these is true:
 
@@ -165,12 +168,14 @@ Stop and rework when any of these is true:
 - A composer feature adds parallel state fields or forks an executor instead of one middleware and a derived getter.
 - The UI SDK would have to filter or merge SDK lists itself.
 
-## Design note template
+## Design section template
 
-Every source from outside this repo that the note cites (the spec, a PR, a ticket, another app's page, UI SDK or server code) is a Markdown link to its URL.
+Every source from outside this repo that the section cites (the spec, a PR, a ticket, another app's page, UI SDK or server code) is cited as `llc-spec-intake`'s **Links** rule says: a link, or marked "(no URL)". Write each line as that skill's **Context first, then detail** rule says.
 
 ```markdown
-# <Feature>: design
+## Design
+
+Intake changes: <each answered question and each finding added → the ids it changed or added, and the parts without ids it changed (a States row, the In short's list, a disagreement line); no answer text; "none", or leave the line out when there is no intake>
 
 1. Parents: <each piece → the node that holds it> — <why that node's key and lifetime fit>
 2. API: <generated methods and flags used>
@@ -186,11 +191,13 @@ Every source from outside this repo that the note cites (the spec, a PR, a ticke
 12. Recovery: <the route of each piece's parent>
 13. Composer: <none | middleware id, state field>
 
-Errors: <each row of the intake's Errors table → the existing path that handles it (`llc-services`, Reuse table, "Tell a final error from a transient one" and "Tell the user something failed"), and the named predicate for a feature's own code or reason>
+Errors: <each row of the intake's Errors table, by its E id → the existing path that handles it (`llc-services`, Reuse table, "Tell a final error from a transient one" and "Tell the user something failed"), and the named predicate for a feature's own code or reason>
 Existing code paths affected: <every writer and reader of the entities the feature touches, and what each does with the new data>
 Neighbouring features: <each SDK or server feature that already processes this kind of content (`message.i18n`, search sources, message previews, the offline DB's rows): covers the new data, or a gap with its default>
 New concepts inside existing services: <list, with the service>
 New services: <list; for each, why no existing service owns this>
 Behaviour against other chat apps: <each intake question or decision that names another app → follow the reference app, follow the spec, or an open decision. An adjustment to what the server sends is asked of the server first; one the SDK still makes lives in one named LLC predicate or selector, never in each UI component>
-Open decisions: <list>
+Open decisions: <each intake question or decision not settled here, by its id, with the default the design used>
 ```
+
+Before you hand over, have a fresh agent review the `## Design` section and every intake part it changed, as `llc-spec-intake`'s "Review by a fresh agent" says (section 7). Add the LLC code the section names to the sources it gets.
