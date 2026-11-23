@@ -123,6 +123,16 @@ describe('Threads 2.0', () => {
   });
 
   describe('Thread', () => {
+    it("applies the thread channel's server config to a channel never queried", () => {
+      const thread = createTestThread({
+        channelOverrides: {
+          config: { mark_types: ['played'] } as ChannelResponse['config'],
+        },
+      });
+
+      expect(thread.channel.config.markTypes).to.deep.equal(['played']);
+    });
+
     it('initializes properly', () => {
       const threadResponse = generateThreadResponse(
         channelResponse,

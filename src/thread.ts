@@ -839,7 +839,9 @@ const mergeThreadParticipants = (
 /** `participant_limit` of the single-thread requests (`getThreadAndHydrate`, `reload()`). */
 export const DEFAULT_THREAD_PARTICIPANT_LIMIT = 100;
 
-/** The thread's channel, with the members and custom data of `threadData` applied. */
+/**
+ * The thread's channel, with the members, custom data and server config of `threadData` applied.
+ */
 export const ensureThreadChannel = (
   client: StreamChat,
   threadData: ThreadStateResponse,
@@ -847,6 +849,7 @@ export const ensureThreadChannel = (
   if (!threadData.channel) {
     throw new Error('Thread channel is required when threadData is provided');
   }
+  client._addChannelConfig(threadData.channel);
   const channel = client.channelManager.ensure({
     type: threadData.channel.type,
     id: threadData.channel.id,
