@@ -1374,17 +1374,15 @@ export class StreamChat extends ChatApi {
    */
   override async queryChannels(...args: Parameters<ChatApi['queryChannels']>) {
     const [request, requestOptions] = args;
-    const defaultOptions: ChannelOptions = {
-      state: true,
-      watch: true,
-      presence: false,
-    };
 
     const {
       predefined_filter,
       filter_values,
       sort_values,
       filter_conditions,
+      state = true,
+      watch = true,
+      presence = false,
       ...restOptions
     } = request ?? {};
 
@@ -1394,12 +1392,16 @@ export class StreamChat extends ChatApi {
           predefined_filter,
           filter_values,
           sort_values,
-          ...defaultOptions,
+          state,
+          watch,
+          presence,
           ...restOptions,
         }
       : {
           filter_conditions,
-          ...defaultOptions,
+          state,
+          watch,
+          presence,
           ...restOptions,
         };
 
