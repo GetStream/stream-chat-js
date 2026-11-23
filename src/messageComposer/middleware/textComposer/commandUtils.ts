@@ -69,9 +69,10 @@ export const getCommandByName = (
 export const getCurrentCommand = (
   composer: MessageComposer,
   text = composer.textComposer.text,
+  commandSearchSource: CommandSearchSource = composer.commandSearchSource,
 ): Command | undefined =>
   composer.textComposer.command ??
-  getCommandByName(composer.commandSearchSource, getRawCommandName(text));
+  getCommandByName(commandSearchSource, getRawCommandName(text));
 
 export const notifyCommandDisabled = (composer: MessageComposer, command: Command) => {
   const disabledReason = composer.getCommandDisabledReason(command);
