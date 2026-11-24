@@ -15,15 +15,15 @@ export const reflectMessageMarkEvent = (
   if (!userId) return;
 
   const store = client.messageStore;
-  const existing = store.get(mark.message_id);
-  if (!existing) return;
-  if (existing.user?.id === userId) {
-    const group = existing.mark_groups?.[mark.type] ?? { count: 0, latest_by: [] };
+  const storedMessage = store.get(mark.message_id);
+  if (!storedMessage) return;
+  if (storedMessage.user?.id === userId) {
+    const group = storedMessage.mark_groups?.[mark.type] ?? { count: 0, latest_by: [] };
     if (group.latest_by.some((marker) => marker.user_id === mark.user_id)) return;
     store.upsert({
-      ...existing,
+      ...storedMessage,
       mark_groups: {
-        ...existing.mark_groups,
+        ...storedMessage.mark_groups,
         [mark.type]: {
           count: group.count + 1,
           latest_by: [
@@ -37,10 +37,10 @@ export const reflectMessageMarkEvent = (
   }
 
   if (mark.user_id === userId) {
-    const ownMarks = existing.own_marks ?? [];
+    const ownMarks = storedMessage.own_marks ?? [];
     if (ownMarks.some((own) => own.type === mark.type)) return;
     store.upsert({
-      ...existing,
+      ...storedMessage,
       own_marks: [...ownMarks, { created_at: mark.created_at, type: mark.type }],
     });
   }
