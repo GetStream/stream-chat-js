@@ -1,9 +1,9 @@
 import { withoutConcurrency } from '../utils/concurrency';
 
 import type { MessageComposer } from '../messageComposer/messageComposer';
-import type { SequencedOperationKind } from './types';
+import type { OperationKind } from './types';
 
-const SEND_ORDERED_KINDS: ReadonlySet<SequencedOperationKind> = new Set([
+const SEND_ORDERED_KINDS: ReadonlySet<OperationKind> = new Set([
   'retry',
   'schedule',
   'send',
@@ -24,7 +24,7 @@ export const keepSendOrderWhilePendingUploadsAllowed = <T>({
   /** Scope of the ordering: a thread passes its channel's cid. */
   channelCid: string;
   composer: MessageComposer;
-  kind: SequencedOperationKind;
+  kind: OperationKind;
   request: () => Promise<T>;
 }): Promise<T> =>
   SEND_ORDERED_KINDS.has(kind) && composer.allowsPendingUploads

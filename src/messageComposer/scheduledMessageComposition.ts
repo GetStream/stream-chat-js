@@ -1,4 +1,3 @@
-import { StateStore } from '@stream-io/state-store';
 import { WithSubscriptions } from '../utils/WithSubscriptions';
 import { CORE_NOTIFICATION_TYPE } from '../notifications';
 import {
@@ -8,10 +7,7 @@ import {
   ScheduledMessageEventType,
 } from '../scheduledMessages/constants';
 import { getCurrentCommand } from './middleware/textComposer/commandUtils';
-import {
-  toScheduledMessageComposition,
-  toScheduledMessagePayload,
-} from '../scheduledMessages/composition';
+import { toScheduledMessagePayload } from '../scheduledMessages/composition';
 import { nsToDate } from '../utils/time';
 import {
   resolveMessageById,
@@ -50,29 +46,21 @@ export type ScheduledMessageSubmitResult = {
   scheduledMessage?: ScheduledMessageResponse;
 };
 
-export type ScheduledMessageCompositionState = {
-  editedScheduledMessage: ScheduledMessageResponse | null;
-};
-
 export type ScheduledMessageCompositionOptions = {
   composer: MessageComposer;
 };
 
 export class ScheduledMessageComposition extends WithSubscriptions {
-  public readonly state: StateStore<ScheduledMessageCompositionState>;
   private readonly composer: MessageComposer;
   private restoreAfterEdit: ScheduledMessageEditRestore | null = null;
 
   constructor({ composer }: ScheduledMessageCompositionOptions) {
     super();
     this.composer = composer;
-    this.state = new StateStore<ScheduledMessageCompositionState>({
-      editedScheduledMessage: null,
-    });
   }
 
   get editedScheduledMessage(): ScheduledMessageResponse | undefined {
-    return this.state.getLatestValue().editedScheduledMessage ?? undefined;
+    return this.composer.editedScheduledMessage;
   }
 
   private get failedScheduledMessage(): ScheduledMessageResponse | undefined {
@@ -136,7 +124,7 @@ export class ScheduledMessageComposition extends WithSubscriptions {
     const restore = this.restoreAfterEdit ?? this.composer.clear;
 
     this.restoreAfterEdit = null;
-    this.state.partialNext({ editedScheduledMessage: null });
+    this.composer.state.partialNext({ editedScheduledMessage: null });
 
     restore();
   };
@@ -176,7 +164,7 @@ export class ScheduledMessageComposition extends WithSubscriptions {
 
     if (incoming.updated_at < editedScheduledMessage.updated_at) return;
 
-    this.state.partialNext({ editedScheduledMessage: incoming });
+    this.composer.state.partialNext({ editedScheduledMessage: incoming });
   };
 
   private endWhenScheduledMessageEnds = ({
@@ -229,11 +217,8 @@ export class ScheduledMessageComposition extends WithSubscriptions {
   public editScheduledMessage = async (scheduledMessage: ScheduledMessageResponse) => {
     const { composer } = this;
     const { message } = scheduledMessage;
-    const {
-      mentioned_users: mentionedUserIds,
-      quoted_message_id: quotedMessageId,
-      show_in_channel: showReplyInChannel = false,
-    } = message;
+    const { mentioned_users: mentionedUserIds, quoted_message_id: quotedMessageId } =
+      message;
 
     const quotedMessagePromise = quotedMessageId
       ? resolveMessageById(composer.client, quotedMessageId)
@@ -253,15 +238,8 @@ export class ScheduledMessageComposition extends WithSubscriptions {
     this.saveCompositionBeforeEdit();
 
     composer.initState({
-      composition: toScheduledMessageComposition(scheduledMessage),
-      stateOverrides: {
-        draftId: null,
-        quotedMessage,
-        showReplyInChannel,
-      },
+      composition: { mentionedUsers, quotedMessage, scheduledMessage },
     });
-    this.state.partialNext({ editedScheduledMessage: scheduledMessage });
-    composer.textComposer.setMentionedUsers(mentionedUsers);
   };
 
   public schedule = async (scheduledAt: Date): Promise<ScheduledMessageSubmitResult> => {

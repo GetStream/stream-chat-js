@@ -23,7 +23,7 @@ export const createScheduledMessageCompositionMiddleware = (
 
       if (!isScheduling) return await forward();
 
-      const { scheduleBlockReason } = composer.scheduledMessageComposition;
+      const { scheduleBlockReason } = composer;
 
       if (!scheduleBlockReason) return await forward();
 

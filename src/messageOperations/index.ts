@@ -12,7 +12,6 @@ export type {
   OperationParams,
   OperationRequestFn,
   OperationResponse,
-  SequencedOperationKind,
 } from './types';
 export * from './settlePendingAttachmentUploads';
 export * from './sendOrdering';
