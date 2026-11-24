@@ -4,6 +4,7 @@ import type {
   Event,
   LocalMessage,
   MessageMarkWithUserResponse,
+  QueryMessageMarksFilter,
   StreamChat,
   TimestampNS,
   UserResponse,
@@ -84,6 +85,54 @@ describe('MessageMarkManager', () => {
     expect(
       manager.getOrCreatePaginator({ filter: { type: 'played' }, messageId: 'other' }),
     ).not.toBe(paginator);
+  });
+
+  it('keys a list on its message and its whole filter', () => {
+    // Filter fields the API may add later: cast, as the generated type only has `type` today.
+    const filter = (value: object) => value as QueryMessageMarksFilter;
+    const played = manager.getOrCreatePaginator({
+      filter: filter({ type: 'played', user_id: 'u1' }),
+      messageId: 'message',
+    });
+
+    expect(
+      manager.getOrCreatePaginator({
+        filter: filter({ user_id: 'u1', type: 'played' }),
+        messageId: 'message',
+      }),
+    ).toBe(played);
+    expect(
+      manager.getOrCreatePaginator({
+        filter: filter({ type: 'played', user_id: 'u2' }),
+        messageId: 'message',
+      }),
+    ).not.toBe(played);
+    expect(manager.getOrCreatePaginator({ filter: {}, messageId: 'message' })).toBe(
+      manager.getOrCreatePaginator({ messageId: 'message' }),
+    );
+  });
+
+  it('applies paginatorOptions when it creates the list', () => {
+    const paginator = manager.getOrCreatePaginator({
+      messageId: 'message',
+      paginatorOptions: { pageSize: 25 },
+    });
+
+    const again = manager.getOrCreatePaginator({
+      messageId: 'message',
+      paginatorOptions: { pageSize: 5 },
+    });
+
+    expect(again).toBe(paginator);
+    expect(paginator.pageSize).toBe(25);
+  });
+
+  it('accepts only what the marks API supports', () => {
+    manager.getOrCreatePaginator({
+      messageId: 'message',
+      // @ts-expect-error marks have no sort: the API returns them newest first
+      sort: [{ direction: 1, field: 'created_at' }],
+    });
   });
 
   it('subscribes only once it holds a list', () => {

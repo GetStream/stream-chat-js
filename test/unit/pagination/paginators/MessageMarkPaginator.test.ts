@@ -40,7 +40,7 @@ describe('MessageMarkPaginator', () => {
     it('queries the marks of its message and keeps them newest first', async () => {
       const paginator = new MessageMarkPaginator(client, {
         messageId: 'message',
-        pageSize: 2,
+        paginatorOptions: { pageSize: 2 },
       });
       const spy = vi
         .spyOn(client, 'queryMessageMarks')
@@ -59,7 +59,7 @@ describe('MessageMarkPaginator', () => {
     it('sends the cursor as `next` and stops on a page without one', async () => {
       const paginator = new MessageMarkPaginator(client, {
         messageId: 'message',
-        pageSize: 2,
+        paginatorOptions: { pageSize: 2 },
       });
       const spy = vi.spyOn(client, 'queryMessageMarks');
       spy.mockResolvedValueOnce(response([makeMark('a', 3), makeMark('b', 2)], 'c1'));
@@ -92,7 +92,7 @@ describe('MessageMarkPaginator', () => {
       const paginator = new MessageMarkPaginator(client, {
         filter: { type: 'played' },
         messageId: 'message',
-        pageSize: 2,
+        paginatorOptions: { pageSize: 2 },
       });
       const spy = vi.spyOn(client, 'queryMessageMarks');
       spy.mockResolvedValueOnce(response([makeMark('a', 2), makeMark('b', 1)], 'c1'));
@@ -112,7 +112,7 @@ describe('MessageMarkPaginator', () => {
       const paginator = new MessageMarkPaginator(client, {
         filter,
         messageId: 'message',
-        pageSize: 2,
+        paginatorOptions: { pageSize: 2 },
       });
       vi.spyOn(client, 'queryMessageMarks').mockResolvedValueOnce(
         response([makeMark('b', 2), makeMark('a', 1)]),
@@ -132,7 +132,7 @@ describe('MessageMarkPaginator', () => {
     it('puts a new mark at the head after more pages loaded', async () => {
       const paginator = new MessageMarkPaginator(client, {
         messageId: 'message',
-        pageSize: 2,
+        paginatorOptions: { pageSize: 2 },
       });
       const spy = vi.spyOn(client, 'queryMessageMarks');
       spy.mockResolvedValueOnce(response([makeMark('d', 4), makeMark('c', 3)], 'c1'));
@@ -167,7 +167,7 @@ describe('MessageMarkPaginator', () => {
     const loaded = async () => {
       const paginator = new MessageMarkPaginator(client, {
         messageId: 'message',
-        pageSize: 2,
+        paginatorOptions: { pageSize: 2 },
       });
       const spy = vi.spyOn(client, 'queryMessageMarks');
       spy.mockResolvedValueOnce(response([makeMark('b', 2), makeMark('a', 1)]));

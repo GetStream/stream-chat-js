@@ -1,11 +1,8 @@
 import type { StreamChat } from '../client';
 import { MessageMarkPaginator } from '../pagination/paginators/MessageMarkPaginator';
+import type { MessageMarkPaginatorOptions } from '../pagination/paginators/MessageMarkPaginator';
 import { getMessageCreatedAtTimestamp } from '../pagination/paginators/MessageIntervalPaginator';
-import type {
-  MessageMarkWithUserResponse,
-  QueryMessageMarksFilter,
-  TimestampNS,
-} from '../types';
+import type { MessageMarkWithUserResponse, TimestampNS } from '../types';
 import { WithSubscriptions } from '../utils/WithSubscriptions';
 
 type Entry = {
@@ -16,15 +13,19 @@ type Entry = {
   paginator: MessageMarkPaginator;
 };
 
-export type GetOrCreateMessageMarkPaginatorParams = {
-  /** The message whose marks are listed. */
-  messageId: string;
-  /** Lists only the marks it matches, for example `{ type: 'played' }`. */
-  filter?: QueryMessageMarksFilter;
-};
+// Sorts object keys, so equal filters give equal keys whatever their key order.
+const stableStringify = (value: unknown): string =>
+  JSON.stringify(value, (_key, nested: unknown) =>
+    nested && typeof nested === 'object' && !Array.isArray(nested)
+      ? Object.fromEntries(
+          Object.entries(nested).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+        )
+      : nested,
+  );
 
-const getKey = ({ messageId, filter }: GetOrCreateMessageMarkPaginatorParams) =>
-  `${messageId}:${filter?.type ?? '*'}`;
+// What a list holds: its message and its whole filter. `paginatorOptions` only shape how it loads.
+const getKey = ({ messageId, filter }: MessageMarkPaginatorOptions) =>
+  `${messageId}:${stableStringify(filter ?? {})}`;
 
 /**
  * Keeps one {@link MessageMarkPaginator} per message and filter for the session and keeps them
@@ -42,12 +43,11 @@ export class MessageMarkManager extends WithSubscriptions {
 
   /**
    * The list of the message's marks that `filter` matches, created on first use and reused after,
-   * with the pages it has loaded. Display it between `paginator.activate()` and its release, so a
-   * stale list reloads while it is shown.
+   * with the pages it has loaded. `paginatorOptions` apply when the list is created, and a later
+   * call gets the existing list whatever it passes. Display it between `paginator.activate()` and
+   * its release, so a stale list reloads while it is shown.
    */
-  getOrCreatePaginator = (
-    params: GetOrCreateMessageMarkPaginatorParams,
-  ): MessageMarkPaginator => {
+  getOrCreatePaginator = (params: MessageMarkPaginatorOptions): MessageMarkPaginator => {
     const key = getKey(params);
     const existing = this.entries.get(key);
     if (existing) return existing.paginator;

@@ -34,14 +34,16 @@ const compareMarks = (
   return idA < idB ? ComparisonResult.A_PRECEDES_B : ComparisonResult.A_COMES_AFTER_B;
 };
 
-export type MessageMarkPaginatorOptions = PaginatorOptions<
-  MessageMarkWithUserResponse,
-  QueryMessageMarksRequest
-> & {
+export type MessageMarkPaginatorOptions = {
   /** The message whose marks are listed. */
   messageId: string;
   /** Lists only the marks it matches, for example `{ type: 'played' }`. */
   filter?: QueryMessageMarksFilter;
+  /** How the list is fetched, for example its `pageSize`. */
+  paginatorOptions?: PaginatorOptions<
+    MessageMarkWithUserResponse,
+    QueryMessageMarksRequest
+  >;
 };
 
 /**
@@ -61,9 +63,12 @@ export class MessageMarkPaginator extends BasePaginator<
 
   constructor(
     client: StreamChat,
-    { messageId, filter, ...options }: MessageMarkPaginatorOptions,
+    { messageId, filter, paginatorOptions }: MessageMarkPaginatorOptions,
   ) {
-    super({ initialCursor: { ...ZERO_PAGE_CURSOR, headward: null }, ...options });
+    super({
+      initialCursor: { ...ZERO_PAGE_CURSOR, headward: null },
+      ...paginatorOptions,
+    });
     this.client = client;
     this.messageId = messageId;
     this.filter = filter;
