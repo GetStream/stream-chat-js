@@ -1,9 +1,11 @@
 import { BasePaginator, ZERO_PAGE_CURSOR } from './BasePaginator';
 import type {
+  ExecuteQueryReturnValue,
   PaginationQueryParams,
   PaginationQueryReturnValue,
   PaginatorOptions,
   PaginatorState,
+  PlaceQueryPageParams,
 } from './BasePaginator';
 import type {
   MessageMarkWithUserResponse,
@@ -13,6 +15,7 @@ import type {
 import type { StreamChat } from '../../client';
 import { ComparisonResult } from '../types.normalization';
 import { generateUUIDv4 } from '../../utils';
+import { chatLoggerSystem } from '../../logger';
 
 // A mark has no ID of its own: a user marks a message once per type.
 const getMarkId = (mark: MessageMarkWithUserResponse) =>
@@ -53,6 +56,9 @@ export type MessageMarkPaginatorOptions = {
  * Lists the marks on one message, with the users who made them, newest first. The API pages
  * forward only, so the headward cursor starts exhausted (`null`). New marks are added at the head
  * through `ingestItem`, which `client.messageMarks` calls for `message.mark_added`.
+ *
+ * With offline support, the first page opens with the marks the offline database holds while the
+ * request runs, and keeps them when the request fails.
  */
 export class MessageMarkPaginator extends BasePaginator<
   MessageMarkWithUserResponse,
@@ -137,6 +143,43 @@ export class MessageMarkPaginator extends BasePaginator<
     // Nothing loaded yet: the first page will be fresh anyway.
     if (typeof this.items === 'undefined') return;
     void this.reload();
+  }
+
+  override get isOfflineSupportEnabled() {
+    return !!this.client.offlineDb;
+  }
+
+  override preloadFirstPageFromOfflineDb = async (): Promise<
+    MessageMarkWithUserResponse[] | undefined
+  > => {
+    const { offlineDb } = this.client;
+    if (!offlineDb) return undefined;
+    try {
+      const marks = await offlineDb.getMessageMarks({
+        filter: this.filter,
+        limit: this.pageSize,
+        messageId: this.messageId,
+      });
+      return marks?.length ? marks : undefined;
+    } catch (error) {
+      chatLoggerSystem
+        .getLogger('offline-db')
+        .warn('Reading the stored message marks failed.', { error });
+      return undefined;
+    }
+  };
+
+  // When the request fails, the stored marks are all the list has. It pages no further and counts
+  // as stale, so reconnecting or showing it again reloads it.
+  override placeQueryPage(
+    params: PlaceQueryPageParams<MessageMarkWithUserResponse, QueryMessageMarksRequest>,
+  ): ExecuteQueryReturnValue<MessageMarkWithUserResponse> {
+    const placed = super.placeQueryPage(params);
+    if (!params.results && this.showsOfflinePage) {
+      this._isStateStale = true;
+      this.state.partialNext({ hasMoreTail: false });
+    }
+    return placed;
   }
 
   protected override buildMatchFilters() {

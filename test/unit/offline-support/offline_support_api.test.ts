@@ -1644,6 +1644,7 @@ describe('OfflineSupportApi', () => {
           created_at: mark.created_at,
           custom: {},
           mark,
+          user: { id: 'user-b', name: 'B' },
         } as Event;
         const heldMessage = {
           id: 'msg-1',
@@ -1679,9 +1680,9 @@ describe('OfflineSupportApi', () => {
           expect(result).toEqual([]);
         });
 
-        it('stores the held message through handleEvent', async () => {
+        it('stores the mark, its user and the held message through handleEvent', async () => {
           client.messageStore.upsert(heldMessage);
-          offlineDb.updateMessage.mockResolvedValue(['UPDATE * IN messages']);
+          offlineDb.insertMessageMark.mockResolvedValue(['INSERT * INTO messageMarks']);
 
           const result = await offlineDb.handleEvent({
             event: markAddedEvent,
@@ -1692,14 +1693,17 @@ describe('OfflineSupportApi', () => {
             { event: markAddedEvent, execute: false },
             expect.any(Function),
           );
-          expect(offlineDb.updateMessage).toHaveBeenCalledWith({
+          expect(offlineDb.insertMessageMark).toHaveBeenCalledWith({
+            execute: false,
+            mark,
             message: expect.objectContaining({
               id: 'msg-1',
               mark_groups: heldMessage.mark_groups,
             }),
-            execute: false,
+            user: { id: 'user-b', name: 'B' },
           });
-          expect(result).toEqual(['UPDATE * IN messages']);
+          expect(offlineDb.updateMessage).not.toHaveBeenCalled();
+          expect(result).toEqual(['INSERT * INTO messageMarks']);
         });
       });
 

@@ -75,6 +75,8 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   /** Writes the reaction, the message carrying it and the associated users. */
   abstract insertReaction: OfflineDBApi['insertReaction'];
 
+  abstract insertMessageMark: OfflineDBApi['insertMessageMark'];
+
   /** Upserts the CIDs for a filter + sort query hash (cids table only). */
   abstract upsertCidsForQuery: OfflineDBApi['upsertCidsForQuery'];
 
@@ -148,6 +150,8 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   abstract getAppSettings: OfflineDBApi['getAppSettings'];
 
   abstract getReactions: OfflineDBApi['getReactions'];
+
+  abstract getMessageMarks: OfflineDBApi['getMessageMarks'];
 
   /** Runs the queries in one transaction. */
   abstract executeSqlBatch: OfflineDBApi['executeSqlBatch'];
@@ -745,9 +749,10 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   };
 
   /**
-   * Stores the message as the message store holds it. The event carries only the mark, which
-   * `Channel` has applied to that copy by the time a live event reaches the DB. A message the store
-   * does not hold, or a thread reply, is skipped and gets its marks stored with its next query.
+   * Stores the mark, and the message's mark summaries as the message store holds them: the event
+   * carries only the mark, which `Channel` has applied to that copy by the time a live event reaches
+   * the DB. A message the store does not hold, or a thread reply, is skipped and gets its marks
+   * stored with its next query.
    *
    * @param payload.event - The WS event we are trying to process.
    * @param payload.execute - Whether to immediately execute the queries. Defaults to `true`.
@@ -766,7 +771,12 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
       return await this.queriesWithChannelGuard(
         { event, execute },
         async (executeOverride) =>
-          await this.updateMessage({ message, execute: executeOverride }),
+          await this.insertMessageMark({
+            execute: executeOverride,
+            mark: event.mark,
+            message,
+            user: event.user,
+          }),
       );
     }
 
