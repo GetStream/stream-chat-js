@@ -1,6 +1,5 @@
 import type { StreamChat } from '../client';
-import { MessageMarkPaginator } from '../pagination/paginators/MessageMarkPaginator';
-import type { MessageMarkPaginatorOptions } from '../pagination/paginators/MessageMarkPaginator';
+import type { MessageMarkPaginator } from '../pagination/paginators/MessageMarkPaginator';
 import { getMessageCreatedAtTimestamp } from '../pagination/paginators/MessageIntervalPaginator';
 import type { MessageMarkWithUserResponse, TimestampNS } from '../types';
 import { WithSubscriptions } from '../utils/WithSubscriptions';
@@ -13,24 +12,11 @@ type Entry = {
   paginator: MessageMarkPaginator;
 };
 
-// Sorts object keys, so equal filters give equal keys whatever their key order.
-const stableStringify = (value: unknown): string =>
-  JSON.stringify(value, (_key, nested: unknown) =>
-    nested && typeof nested === 'object' && !Array.isArray(nested)
-      ? Object.fromEntries(
-          Object.entries(nested).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
-        )
-      : nested,
-  );
-
-// What a list holds: its message and its whole filter. `paginatorOptions` only shape how it loads.
-const getKey = ({ messageId, filter }: MessageMarkPaginatorOptions) =>
-  `${messageId}:${stableStringify(filter ?? {})}`;
-
 /**
- * Keeps one {@link MessageMarkPaginator} per message and filter for the session and keeps them
- * current: `message.mark_added` adds the mark to the lists of its message, and a reconnect flags
- * them stale, so each reloads when it is next active. Subscribes when the first list is created.
+ * Keeps the registered {@link MessageMarkPaginator}s current: `message.mark_added` adds the mark to
+ * the lists of its message, and a reconnect flags them stale, so each reloads when it is next
+ * active. Lists are registered by their `id` and stay until removed. Subscribes when the first list
+ * is registered.
  */
 export class MessageMarkManager extends WithSubscriptions {
   private client: StreamChat;
@@ -41,32 +27,59 @@ export class MessageMarkManager extends WithSubscriptions {
     this.client = client;
   }
 
-  /**
-   * The list of the message's marks that `filter` matches, created on first use and reused after,
-   * with the pages it has loaded. `paginatorOptions` apply when the list is created, and a later
-   * call gets the existing list whatever it passes. Display it between `paginator.activate()` and
-   * its release, so a stale list reloads while it is shown.
-   */
-  getOrCreatePaginator = (params: MessageMarkPaginatorOptions): MessageMarkPaginator => {
-    const key = getKey(params);
-    const existing = this.entries.get(key);
-    if (existing) return existing.paginator;
+  /** The registered lists. */
+  get paginators(): MessageMarkPaginator[] {
+    return [...this.entries.values()].map(({ paginator }) => paginator);
+  }
 
-    const paginator = new MessageMarkPaginator(this.client, params);
-    const message = this.client.messageStore.get(params.messageId);
-    this.entries.set(key, {
+  getPaginatorById(id: string): MessageMarkPaginator | undefined {
+    return this.entries.get(id)?.paginator;
+  }
+
+  /**
+   * Registers a list, so it follows `message.mark_added` and reconnects. One already registered
+   * with the same ID is replaced. Display it between `paginator.activate()` and its release, so a
+   * stale list reloads while it is shown.
+   *
+   * @returns The registered paginator.
+   */
+  insertPaginator({
+    paginator,
+  }: {
+    paginator: MessageMarkPaginator;
+  }): MessageMarkPaginator {
+    const message = this.client.messageStore.get(paginator.messageId);
+    this.entries.set(paginator.id, {
       cid: message?.cid,
       createdAt: getMessageCreatedAtTimestamp(message),
       paginator,
     });
     this.registerSubscriptions();
     return paginator;
-  };
+  }
 
-  /** Drops every list. Called by `client.disconnectUser()`: the marks belong to that user. */
+  /**
+   * Unregisters a list: it stops following events, and its loaded marks stay.
+   *
+   * @param paginatorOrId - The paginator to remove, or its ID.
+   * @returns The removed paginator, or `undefined` when it was not registered.
+   */
+  removePaginator(
+    paginatorOrId: MessageMarkPaginator | string,
+  ): MessageMarkPaginator | undefined {
+    const id = typeof paginatorOrId === 'string' ? paginatorOrId : paginatorOrId.id;
+    const removed = this.getPaginatorById(id);
+    if (removed) this.entries.delete(id);
+    return removed;
+  }
+
+  /**
+   * Empties and unregisters every list. Called by `client.disconnectUser()`: the marks belong to
+   * that user.
+   */
   clear = () => {
     this.unregisterSubscriptions();
-    this.entries.clear();
+    this.drop(() => true);
   };
 
   public registerSubscriptions = () => {
@@ -119,12 +132,12 @@ export class MessageMarkManager extends WithSubscriptions {
     });
   }
 
+  // Unregisters the lists whose marks are gone. A list still shown empties instead of showing them.
   private drop(predicate: (entry: Entry) => boolean) {
-    this.entries.forEach((entry, key) => {
+    this.entries.forEach((entry, id) => {
       if (!predicate(entry)) return;
-      // A list still shown empties instead of showing marks that no longer exist.
       entry.paginator.resetState();
-      this.entries.delete(key);
+      this.entries.delete(id);
     });
   }
 }

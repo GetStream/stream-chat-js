@@ -12,6 +12,7 @@ import type {
 } from '../../types';
 import type { StreamChat } from '../../client';
 import { ComparisonResult } from '../types.normalization';
+import { generateUUIDv4 } from '../../utils';
 
 // A mark has no ID of its own: a user marks a message once per type.
 const getMarkId = (mark: MessageMarkWithUserResponse) =>
@@ -35,6 +36,8 @@ const compareMarks = (
 };
 
 export type MessageMarkPaginatorOptions = {
+  /** Identifies the list in `client.messageMarks`. Generated when left out. */
+  id?: string;
   /** The message whose marks are listed. */
   messageId: string;
   /** Lists only the marks it matches, for example `{ type: 'played' }`. */
@@ -56,6 +59,7 @@ export class MessageMarkPaginator extends BasePaginator<
   QueryMessageMarksRequest
 > {
   private client: StreamChat;
+  private readonly _id: string;
   readonly messageId: string;
   readonly filter: QueryMessageMarksFilter | undefined;
   private activeRefCount = 0;
@@ -63,13 +67,14 @@ export class MessageMarkPaginator extends BasePaginator<
 
   constructor(
     client: StreamChat,
-    { messageId, filter, paginatorOptions }: MessageMarkPaginatorOptions,
+    { id, messageId, filter, paginatorOptions }: MessageMarkPaginatorOptions,
   ) {
     super({
       initialCursor: { ...ZERO_PAGE_CURSOR, headward: null },
       ...paginatorOptions,
     });
     this.client = client;
+    this._id = id ?? `message-mark-paginator-${generateUUIDv4()}`;
     this.messageId = messageId;
     this.filter = filter;
     this.sortComparator = compareMarks;
@@ -80,6 +85,10 @@ export class MessageMarkPaginator extends BasePaginator<
       ...super.initialState,
       hasMoreHead: false,
     };
+  }
+
+  get id() {
+    return this._id;
   }
 
   getItemId(item: MessageMarkWithUserResponse): string {
