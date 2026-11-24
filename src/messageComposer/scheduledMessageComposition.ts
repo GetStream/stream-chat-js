@@ -237,9 +237,11 @@ export class ScheduledMessageComposition extends WithSubscriptions {
 
     this.saveCompositionBeforeEdit();
 
-    composer.initState({
-      composition: { mentionedUsers, quotedMessage, scheduledMessage },
-    });
+    composer.initState({ composition: scheduledMessage });
+    // A scheduled message stores only the ids of its quoted message and mentioned users,
+    // so initState cannot fill them; they are fetched above and set here.
+    composer.setQuotedMessage(quotedMessage);
+    composer.textComposer.setMentionedUsers(mentionedUsers);
   };
 
   public schedule = async (scheduledAt: Date): Promise<ScheduledMessageSubmitResult> => {
