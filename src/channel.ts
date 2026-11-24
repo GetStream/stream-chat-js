@@ -506,15 +506,10 @@ export class Channel extends ChannelApi {
   override async sendMessage(...args: Parameters<ChannelApi['sendMessage']>) {
     const [request, requestOptions] = args;
 
-    const response = await super.sendMessage(
+    return await super.sendMessage(
       { ...request, message: sanitizeOutgoingAttachments(request.message) },
       requestOptions,
     );
-
-    if (response.scheduled_message)
-      this.messageOperations.ingestScheduledMessage(response.scheduled_message);
-
-    return response;
   }
 
   /**
