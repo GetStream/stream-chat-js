@@ -1,0 +1,165 @@
+import { BasePaginator, ZERO_PAGE_CURSOR } from './BasePaginator';
+import type {
+  PaginationQueryParams,
+  PaginationQueryReturnValue,
+  PaginatorOptions,
+  PaginatorState,
+} from './BasePaginator';
+import type {
+  MessageMarkWithUserResponse,
+  QueryMessageMarksFilter,
+  QueryMessageMarksRequest,
+} from '../../types';
+import type { StreamChat } from '../../client';
+import { ComparisonResult } from '../types.normalization';
+
+// A mark has no ID of its own: a user marks a message once per type.
+const getMarkId = (mark: MessageMarkWithUserResponse) =>
+  `${mark.message_id}:${mark.user_id}:${mark.type}`;
+
+// Newest first, as the server returns them. Ties need equal nanosecond timestamps; the ID keeps
+// the order total. The paginator checks for exactly -1 and 1, so no differences.
+const compareMarks = (
+  a: MessageMarkWithUserResponse,
+  b: MessageMarkWithUserResponse,
+): ComparisonResult => {
+  if (a.created_at !== b.created_at) {
+    return a.created_at > b.created_at
+      ? ComparisonResult.A_PRECEDES_B
+      : ComparisonResult.A_COMES_AFTER_B;
+  }
+  const idA = getMarkId(a);
+  const idB = getMarkId(b);
+  if (idA === idB) return ComparisonResult.A_IS_EQUAL_TO_B;
+  return idA < idB ? ComparisonResult.A_PRECEDES_B : ComparisonResult.A_COMES_AFTER_B;
+};
+
+export type MessageMarkPaginatorOptions = PaginatorOptions<
+  MessageMarkWithUserResponse,
+  QueryMessageMarksRequest
+> & {
+  /** The message whose marks are listed. */
+  messageId: string;
+  /** Lists only the marks it matches, for example `{ type: 'played' }`. */
+  filter?: QueryMessageMarksFilter;
+};
+
+/**
+ * Lists the marks on one message, with the users who made them, newest first. The API pages
+ * forward only, so the headward cursor starts exhausted (`null`). New marks are added at the head
+ * through `ingestItem`, which `client.messageMarks` calls for `message.mark_added`.
+ */
+export class MessageMarkPaginator extends BasePaginator<
+  MessageMarkWithUserResponse,
+  QueryMessageMarksRequest
+> {
+  private client: StreamChat;
+  readonly messageId: string;
+  readonly filter: QueryMessageMarksFilter | undefined;
+  private activeRefCount = 0;
+  private _isStateStale = false;
+
+  constructor(
+    client: StreamChat,
+    { messageId, filter, ...options }: MessageMarkPaginatorOptions,
+  ) {
+    super({ initialCursor: { ...ZERO_PAGE_CURSOR, headward: null }, ...options });
+    this.client = client;
+    this.messageId = messageId;
+    this.filter = filter;
+    this.sortComparator = compareMarks;
+  }
+
+  get initialState(): PaginatorState<MessageMarkWithUserResponse> {
+    return {
+      ...super.initialState,
+      hasMoreHead: false,
+    };
+  }
+
+  getItemId(item: MessageMarkWithUserResponse): string {
+    return getMarkId(item);
+  }
+
+  /** See {@link MessageMarkPaginator.activate}. */
+  get active() {
+    return this.activeRefCount > 0;
+  }
+
+  /** Whether marks may have been missed, for example while the connection was down. */
+  get isStateStale() {
+    return this._isStateStale;
+  }
+
+  /**
+   * Call this when a screen starts showing the list, and call the returned function when it stops.
+   * A stale list reloads as soon as it is shown. The list counts as shown until every caller has
+   * released it, and releasing twice does nothing.
+   */
+  activate = (): (() => void) => {
+    this.activeRefCount += 1;
+    if (this.activeRefCount === 1) this.reloadIfStale();
+
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      this.activeRefCount -= 1;
+    };
+  };
+
+  /**
+   * Flags the loaded marks as possibly incomplete. An active list reloads now, an inactive one when
+   * it is next activated.
+   */
+  markStale = () => {
+    this._isStateStale = true;
+    if (this.active) this.reloadIfStale();
+  };
+
+  private reloadIfStale() {
+    if (!this._isStateStale) return;
+    this._isStateStale = false;
+    // Nothing loaded yet: the first page will be fresh anyway.
+    if (typeof this.items === 'undefined') return;
+    void this.reload();
+  }
+
+  protected override buildMatchFilters() {
+    return { message_id: this.messageId, ...this.filter };
+  }
+
+  // The cursor stays out of the shape: `fetchQueryResponse` applies it.
+  protected getNextQueryShape(): QueryMessageMarksRequest {
+    return {
+      limit: this.pageSize,
+      ...(this.filter ? { filter: this.filter } : {}),
+    };
+  }
+
+  protected override fetchQueryResponse = async ({
+    direction,
+    queryShape,
+  }: PaginationQueryParams<QueryMessageMarksRequest>): Promise<
+    PaginationQueryReturnValue<MessageMarkWithUserResponse>
+  > => {
+    if (direction === 'headward') {
+      return { items: [] };
+    }
+
+    const next = direction ? (this.cursor?.tailward ?? undefined) : undefined;
+    const { marks: items, next: tailward } = await this.client.queryMessageMarks(
+      { id: this.messageId },
+      { ...(queryShape ?? this.getNextQueryShape()), ...(next ? { next } : {}) },
+    );
+    return { items, tailward };
+  };
+
+  /** The extracting step of the query pipeline: the response is the page. */
+  protected override extractQueryPage(
+    response: PaginationQueryReturnValue<MessageMarkWithUserResponse>,
+    _params: PaginationQueryParams<QueryMessageMarksRequest>,
+  ) {
+    return response;
+  }
+}
