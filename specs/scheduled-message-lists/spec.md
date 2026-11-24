@@ -118,8 +118,8 @@ by event while the request was in flight.
   attachment sanitizing, and the "not found → remove it" handling. The result goes into the channel's
   list and to the manager's lists. The event that follows reaches every connection of the user,
   including this one, and writes an equal copy again.
-- **Threads:** the channel's list holds thread replies too (`message.parent_id`); a thread view
-  filters it with `getThreadScheduledMessages(items, parentId)`, which already exists.
+- **Threads:** the channel's list holds thread replies too (`message.parent_id`); a thread's
+  `ScheduledMessagesView` filters it by `parentId`.
 
 ### 3. The manager owns the lists the integrator registers (`client.scheduledMessagePaginators`)
 

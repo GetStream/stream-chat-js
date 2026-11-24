@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   Channel,
   EventType,
-  getThreadScheduledMessages,
   MessageResponse,
   ScheduledMessagePaginator,
   ScheduledMessageResponse,
@@ -122,7 +121,7 @@ describe("a channel's scheduled messages", () => {
       expect(client.scheduledMessagePaginators.paginators).toEqual([]);
     });
 
-    it('lists thread replies, which a thread view filters', () => {
+    it('lists thread replies with the channel messages', () => {
       const { channel } = setup();
       const inChannel = generateScheduledMessage({ scheduled_at: at(10) });
       const reply = generateScheduledMessage({
@@ -133,7 +132,6 @@ describe("a channel's scheduled messages", () => {
       channel.scheduledMessagesPaginator.hydrate([reply, inChannel]);
 
       expect(listed(channel)).toEqual([inChannel, reply]);
-      expect(getThreadScheduledMessages(listed(channel), 'parent')).toEqual([reply]);
     });
 
     it('follows the cid a channel created from its members gets from its first query', async () => {
