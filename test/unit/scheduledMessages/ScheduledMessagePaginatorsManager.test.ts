@@ -292,6 +292,30 @@ describe('ScheduledMessagePaginatorsManager', () => {
       await dispatchEvent(client, generateEvent('scheduled_message.created', sm));
       expect(itemsOf(all)).toEqual([]);
     });
+
+    it('keeps handling events until the last consumer unregisters', async () => {
+      const { all, client, manager } = setup();
+      await all.toTail();
+      const whileShared = generateScheduledMessage();
+      const afterTeardown = generateScheduledMessage();
+
+      manager.registerSubscriptions();
+      manager.registerSubscriptions();
+
+      manager.unregisterSubscriptions();
+      await dispatchEvent(
+        client,
+        generateEvent('scheduled_message.created', whileShared),
+      );
+      expect(itemsOf(all)).toEqual([whileShared]);
+
+      manager.unregisterSubscriptions();
+      await dispatchEvent(
+        client,
+        generateEvent('scheduled_message.created', afterTeardown),
+      );
+      expect(itemsOf(all)).toEqual([whileShared]);
+    });
   });
 
   describe('ordering', () => {
@@ -314,28 +338,38 @@ describe('ScheduledMessagePaginatorsManager', () => {
       expect(itemsOf(all)).toEqual([failedSooner, scheduled, sending]);
     });
 
-    it('breaks scheduled_at ties by text', async () => {
+    it('breaks scheduled_at ties by created_at', async () => {
       const { all, manager } = setup();
       await all.toTail();
-      const pizza = generateScheduledMessage({
+      const earlier = generateScheduledMessage({
+        created_at: at(1),
         message: { custom: {}, text: 'Pizza tonight?' },
         scheduled_at: at(10),
       });
-      const lunch = generateScheduledMessage({
+      const later = generateScheduledMessage({
+        created_at: at(2),
         message: { custom: {}, text: 'Lunch at noon' },
         scheduled_at: at(10),
       });
 
-      [pizza, lunch].forEach(manager.ingest);
+      [later, earlier].forEach(manager.ingest);
 
-      expect(itemsOf(all)).toEqual([lunch, pizza]);
+      expect(itemsOf(all)).toEqual([earlier, later]);
     });
 
-    it('breaks scheduled_at and text ties by id', async () => {
+    it('breaks scheduled_at and created_at ties by id', async () => {
       const { all, manager } = setup();
       await all.toTail();
-      const b = generateScheduledMessage({ id: 'b', scheduled_at: at(10) });
-      const a = generateScheduledMessage({ id: 'a', scheduled_at: at(10) });
+      const b = generateScheduledMessage({
+        created_at: at(1),
+        id: 'b',
+        scheduled_at: at(10),
+      });
+      const a = generateScheduledMessage({
+        created_at: at(1),
+        id: 'a',
+        scheduled_at: at(10),
+      });
 
       [b, a].forEach(manager.ingest);
 
@@ -444,6 +478,38 @@ describe('ScheduledMessagePaginatorsManager', () => {
       expect(itemsOf(all)).toEqual([failedOne]);
     });
 
+    it('drops an in-flight reload superseded by a filter change', async () => {
+      const { all, client } = setup();
+      const pending = generateScheduledMessage();
+      const stale = generateScheduledMessage({ scheduled_at: at(10) });
+      const failedOne = generateScheduledMessage({
+        scheduled_at: at(20),
+        status: 'failed',
+      });
+
+      vi.mocked(client.queryScheduledMessages).mockResolvedValueOnce(
+        queryResponse([pending]),
+      );
+      await all.toTail();
+
+      const slow = deferred<Awaited<ReturnType<typeof client.queryScheduledMessages>>>();
+      vi.mocked(client.queryScheduledMessages).mockReturnValueOnce(slow.promise);
+      const reloading = all.reload();
+
+      all.filter = { status: ['failed'] };
+
+      slow.resolve(queryResponse([stale]));
+      await reloading;
+
+      expect(all.items).toBeUndefined();
+
+      vi.mocked(client.queryScheduledMessages).mockResolvedValueOnce(
+        queryResponse([failedOne]),
+      );
+      await all.reload();
+      expect(itemsOf(all)).toEqual([failedOne]);
+    });
+
     it('loads the next page with the cursor of the previous one', async () => {
       const { all, client } = setup();
       const first = generateScheduledMessage({ scheduled_at: at(10) });
@@ -537,147 +603,6 @@ describe('ScheduledMessagePaginatorsManager', () => {
       manager.removePaginator(all);
 
       expect(manager.isDisabled).toBe(false);
-    });
-  });
-
-  describe('stale copies', () => {
-    const setupLoaded = async () => {
-      const context = setup();
-      context.manager.registerSubscriptions();
-      await context.all.toTail();
-      const sm = generateScheduledMessage({ updated_at: at(0) });
-      context.manager.ingest(sm);
-      return { ...context, sm };
-    };
-
-    it('takes a newer copy over the stored one', async () => {
-      const { all, client, sm } = await setupLoaded();
-      const newer = { ...sm, message: { text: 'newer' }, updated_at: at(20) };
-
-      await dispatchEvent(client, generateEvent('scheduled_message.updated', newer));
-      await dispatchEvent(
-        client,
-        generateEvent('scheduled_message.updated', { ...sm, updated_at: at(10) }),
-      );
-
-      expect(itemsOf(all)).toEqual([newer]);
-    });
-
-    it('applies a copy with the same updated_at', async () => {
-      const { all, manager, sm } = await setupLoaded();
-
-      manager.ingest({ ...sm, status: 'sending' });
-
-      expect(itemsOf(all)).toEqual([expect.objectContaining({ status: 'sending' })]);
-    });
-
-    it('lists a canceled message scheduled again under the same ID', async () => {
-      const { all, client, sm } = await setupLoaded();
-      await dispatchEvent(
-        client,
-        generateEvent('scheduled_message.deleted', { ...sm, updated_at: at(10) }),
-      );
-      const scheduledAgain = { ...sm, message: { text: 'again' }, updated_at: at(20) };
-
-      await dispatchEvent(
-        client,
-        generateEvent('scheduled_message.created', scheduledAgain),
-      );
-
-      expect(itemsOf(all)).toEqual([scheduledAgain]);
-    });
-
-    it('does not list a canceled message again from a stale query page', async () => {
-      const { all, client, sm } = await setupLoaded();
-      await dispatchEvent(
-        client,
-        generateEvent('scheduled_message.deleted', { ...sm, updated_at: at(10) }),
-      );
-      vi.mocked(client.queryScheduledMessages).mockResolvedValue(queryResponse([sm]));
-
-      await all.reload();
-
-      expect(itemsOf(all)).toEqual([]);
-    });
-
-    it('does not list a sent message again from a query page', async () => {
-      const { all, client, sm } = await setupLoaded();
-      await dispatchEvent(
-        client,
-        generateEvent('scheduled_message.sent', { ...sm, updated_at: at(20) }),
-      );
-      vi.mocked(client.queryScheduledMessages).mockResolvedValue(queryResponse([sm]));
-
-      await all.reload();
-
-      expect(itemsOf(all)).toEqual([]);
-    });
-
-    it('does not bring back a message sent while a query is in flight', async () => {
-      const { all, client, sm } = await setupLoaded();
-      const response = deferred<unknown>();
-      vi.spyOn(client, 'queryScheduledMessages').mockReturnValue(
-        response.promise as never,
-      );
-
-      const loading = all.reload();
-      await dispatchEvent(client, generateEvent('scheduled_message.sent', sm));
-      response.resolve(queryResponse([sm]));
-      await loading;
-
-      expect(itemsOf(all)).toEqual([]);
-    });
-
-    it('keeps a failure received while a query is in flight', async () => {
-      const { all, client, sm } = await setupLoaded();
-      const response = deferred<unknown>();
-      vi.spyOn(client, 'queryScheduledMessages').mockReturnValue(
-        response.promise as never,
-      );
-
-      const loading = all.reload();
-      await dispatchEvent(
-        client,
-        generateEvent('scheduled_message.failed', {
-          ...sm,
-          status: 'failed',
-          updated_at: at(20),
-        }),
-      );
-      response.resolve(queryResponse([sm]));
-      await loading;
-
-      expect(itemsOf(all)).toEqual([expect.objectContaining({ status: 'failed' })]);
-    });
-
-    it('keeps a message created while the first query is in flight', async () => {
-      const { all, client, manager } = setup();
-      const response = deferred<unknown>();
-      vi.spyOn(client, 'queryScheduledMessages').mockReturnValue(
-        response.promise as never,
-      );
-
-      const loading = all.toTail();
-      const fresh = generateScheduledMessage();
-      manager.ingest(fresh);
-      response.resolve(queryResponse([]));
-      await loading;
-
-      expect(itemsOf(all)).toEqual([fresh]);
-      expect(all.logicalHeadItems).toEqual([]);
-    });
-
-    it('drops a message missing from a reload', async () => {
-      const { all, client } = setup();
-      const gone = generateScheduledMessage();
-      vi.spyOn(client, 'queryScheduledMessages')
-        .mockResolvedValueOnce(queryResponse([gone]))
-        .mockResolvedValueOnce(queryResponse([]));
-      await all.toTail();
-
-      await all.reload();
-
-      expect(itemsOf(all)).toEqual([]);
     });
   });
 

@@ -215,6 +215,15 @@ export type PlaceQueryPageParams<T, Q> = QueryPagePlacement<Q> & {
   results: PaginationQueryReturnValue<T> | null;
 };
 
+type EmptyCompleteFirstPagePlacement = {
+  isFirstPage: boolean;
+  isHead: boolean;
+  isTail: boolean;
+  isSeparateInterval: boolean;
+  keepPreviousItems: boolean;
+  updateState: boolean;
+};
+
 /**
  * What the preparing step of the query pipeline hands to the next ones (see
  * `BasePaginator.executeQuery`): the parameters for fetching and for placing the page, and the
@@ -394,6 +403,15 @@ export type PaginatorOptions<T, Q> = {
    */
   lockItemOrder?: boolean;
   /**
+   * Where a newly ingested item lands in a loaded list that is already empty and complete. When the
+   * sort order follows arrival (recency lists: messages by `created_at`, channels by
+   * `last_message_at`), a new item is the newest and waits in the logical head, leaving the list
+   * re-queryable — so this stays `false`. When the sort order is independent of arrival (scheduled
+   * messages, by `scheduled_at`), completeness makes its slot known, so it anchors a real interval
+   * there instead; such paginators set this `true`. Defaults to `false`.
+   */
+  newItemsAnchorBySortPosition?: boolean;
+  /**
    * Caps the loaded items: when the head interval exceeds it, the oldest are released as new ones
    * arrive and the tailward edge re-opens, so scrolling back re-fetches. Unset: unbounded. Values
    * below `pageSize` are clamped up to it. See {@link BasePaginator.pruneTailToLimit}.
@@ -444,6 +462,7 @@ export const DEFAULT_PAGINATION_OPTIONS: BasePaginatorConfig<any, any> = deepFre
   {
     debounceMs: 300,
     lockItemOrder: false,
+    newItemsAnchorBySortPosition: false,
     pageSize: 10,
     hasPaginationQueryShapeChanged: baseHasPaginationQueryShapeChanged,
     retryCount: 0,
@@ -659,10 +678,6 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
     return this._pageSetWithoutQuery || this.isInitialized;
   }
 
-  protected get startsIntervalInEmptyCompleteList(): boolean {
-    return false;
-  }
-
   private get isLoadedEmptyAndComplete() {
     const { hasMoreHead, hasMoreTail } = this.state.getLatestValue();
     return (
@@ -680,22 +695,15 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
     isSeparateInterval,
     keepPreviousItems,
     updateState,
-  }: {
-    isFirstPage: boolean | undefined;
-    isHead: boolean | undefined;
-    isTail: boolean | undefined;
-    isSeparateInterval: boolean | undefined;
-    keepPreviousItems: boolean | undefined;
-    updateState: boolean | undefined;
-  }): Interval | null {
+  }: EmptyCompleteFirstPagePlacement): Interval | null {
     const placesEmptyCompleteFirstPage =
-      this.startsIntervalInEmptyCompleteList &&
+      this.config.newItemsAnchorBySortPosition &&
       updateState &&
       isFirstPage &&
       !isSeparateInterval &&
       !keepPreviousItems &&
-      isHead === true &&
-      isTail === true;
+      isHead &&
+      isTail;
 
     if (!placesEmptyCompleteFirstPage) return null;
 
@@ -2476,7 +2484,7 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
       if (this._itemIntervals.size === 0) {
         // No pages yet: keep it in the logical head.
         targetInterval =
-          this.startsIntervalInEmptyCompleteList && this.isLoadedEmptyAndComplete
+          this.config.newItemsAnchorBySortPosition && this.isLoadedEmptyAndComplete
             ? this.makeInterval({ page: [ingestedItem], isHead: true, isTail: true })
             : {
                 id: LOGICAL_HEAD_INTERVAL_ID,
@@ -3328,10 +3336,10 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
       }) ??
       this.placeEmptyCompleteFirstPage({
         isFirstPage,
-        isHead,
-        isTail,
+        isHead: !!isHead,
+        isTail: !!isTail,
         isSeparateInterval,
-        keepPreviousItems,
+        keepPreviousItems: !!keepPreviousItems,
         updateState,
       });
     const intervalReachesHead =

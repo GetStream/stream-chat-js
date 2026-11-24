@@ -16,7 +16,6 @@ import type { OperationRequestFn } from './messageOperations/types';
 import type { ScheduledMessageRequestHandlers } from './scheduledMessages/types';
 import { getScheduledMessageLimitsFromServerConfig } from './scheduledMessages/limits';
 import { getScheduledMessageFromEvent } from './scheduledMessages/eventHandlers';
-import { ScheduledMessageOperations } from './scheduledMessages/ScheduledMessageOperations';
 import { ScheduledMessagesView } from './scheduledMessages/ScheduledMessagesView';
 import {
   channelCanScheduleMessages,
@@ -252,7 +251,6 @@ export class Channel extends ChannelApi {
    * thread replies it holds too. A thread's are `thread.scheduledMessages`.
    */
   public readonly scheduledMessages: ScheduledMessagesView;
-  public readonly scheduledMessageOperations: ScheduledMessageOperations;
   public readonly cooldownTimer: CooldownTimer;
   private unsubscribeConfiguration?: Unsubscribe;
   private unsubscribeServerConfig?: Unsubscribe;
@@ -343,8 +341,6 @@ export class Channel extends ChannelApi {
       scope: { type: 'channel' },
     });
     this.scheduledMessages.registerSubscriptions();
-
-    this.scheduledMessageOperations = new ScheduledMessageOperations({ channel: this });
 
     this.messageReceiptsTracker = new MessageReceiptsTracker({ channel: this });
     this.messageReceiptsTracker.registerSubscriptions();
@@ -516,7 +512,7 @@ export class Channel extends ChannelApi {
     );
 
     if (response.scheduled_message)
-      this.scheduledMessageOperations.ingest(response.scheduled_message);
+      this.messageOperations.ingestScheduledMessage(response.scheduled_message);
 
     return response;
   }
@@ -549,20 +545,34 @@ export class Channel extends ChannelApi {
     runDetached(paginator.reload(), { context: 'reloadScheduledMessages' });
   }
 
+  ensureScheduledMessagesLoaded() {
+    const paginator = this.scheduledMessagesPaginator;
+    if (
+      this.pendingDisposal ||
+      !this.scheduledMessagesEnabled ||
+      paginator.hasLoadedPage ||
+      paginator.isLoading
+    ) {
+      return;
+    }
+    runDetached(paginator.reload(), { context: 'ensureScheduledMessagesLoaded' });
+  }
+
   async scheduleMessage(request: SendMessageRequest) {
-    return await this.scheduledMessageOperations.schedule(request);
+    const { message, ...options } = request;
+    return await this.messageOperations.scheduleMessage({ message, options });
   }
 
   async updateScheduledMessage(id: string, request: UpdateScheduledMessageRequest) {
-    return await this.scheduledMessageOperations.update(id, request);
+    return await this.messageOperations.updateScheduledMessage(id, { request });
   }
 
   async deleteScheduledMessage(id: string) {
-    return await this.scheduledMessageOperations.cancel(id);
+    return await this.messageOperations.deleteScheduledMessage(id);
   }
 
   async sendScheduledMessageNow(id: string) {
-    return await this.scheduledMessageOperations.sendNow(id);
+    return await this.messageOperations.sendScheduledMessageNow(id);
   }
 
   async sendReaction(...args: Parameters<ChatApi['sendReaction']>) {

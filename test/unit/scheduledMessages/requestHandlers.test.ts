@@ -55,8 +55,7 @@ describe('scheduled message request handlers', () => {
     client.config.set({ channel: { requestHandlers: { scheduleMessageRequest } } });
     channel.messageComposer.textComposer.setText('see you tomorrow');
 
-    const result =
-      await channel.messageComposer.scheduledMessageComposition.schedule(scheduledAt);
+    const result = await channel.messageComposer.scheduleMessage(scheduledAt);
 
     expect(result).toEqual({ scheduledMessage, status: 'scheduled' });
     expect(scheduleMessageRequest).toHaveBeenCalledWith(

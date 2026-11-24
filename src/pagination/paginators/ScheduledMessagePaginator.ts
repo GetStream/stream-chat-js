@@ -40,25 +40,21 @@ const compareValues = <TValue extends number | string>(first: TValue, second: TV
   first < second ? -1 : first > second ? 1 : 0;
 
 // Earliest first. Failed messages need no rule of their own: they failed at their send time, so they
-// precede the pending ones. Messages due at the same time sort by text.
+// precede the pending ones. Ties break on `created_at` then `id`, both stable under edits.
 const defaultScheduledMessagesComparator = (
   first: ScheduledMessageResponse,
   second: ScheduledMessageResponse,
 ) =>
   compareValues<number>(first.scheduled_at, second.scheduled_at) ||
-  compareValues(first.message.text ?? '', second.message.text ?? '') ||
+  compareValues<number>(first.created_at, second.created_at) ||
   compareValues(first.id, second.id);
 
-/**
- * The current user's scheduled messages, earliest `scheduled_at` first. Every copy it
- * takes is resolved against the shared store first (see `shouldReplaceScheduledMessage`).
- */
+/** The current user's scheduled messages, earliest `scheduled_at` first. */
 export class ScheduledMessagePaginator extends BasePaginator<
   ScheduledMessageResponse,
   QueryScheduledMessagesRequest
 > {
   private readonly client: StreamChat;
-  private readonly store: EntityStore<ScheduledMessageResponse>;
   private readonly _id: string;
   private _filter: ScheduledMessagesFilter;
 
@@ -82,11 +78,10 @@ export class ScheduledMessagePaginator extends BasePaginator<
           }),
         ...paginatorOptions,
       },
-      { pageSize: SCHEDULED_MESSAGES_PAGE_SIZE },
+      { newItemsAnchorBySortPosition: true, pageSize: SCHEDULED_MESSAGES_PAGE_SIZE },
     );
 
     this.client = client;
-    this.store = entityStore;
     this._id = id ?? `scheduled-message-paginator-${generateUUIDv4()}`;
     this._filter = filter;
     this.sortComparator = defaultScheduledMessagesComparator;
@@ -109,10 +104,6 @@ export class ScheduledMessagePaginator extends BasePaginator<
 
   get cid() {
     return this.filter.cid;
-  }
-
-  protected override get startsIntervalInEmptyCompleteList() {
-    return true;
   }
 
   public getItemId(item: ScheduledMessageResponse): string {
@@ -161,25 +152,15 @@ export class ScheduledMessagePaginator extends BasePaginator<
   }
 
   public filterQueryResults(items: ScheduledMessageResponse[]) {
-    const { conflictPolicy } = this.store;
-    const latestItems = items.map((item) =>
-      conflictPolicy.resolveCanonicalEntity(item, this.store.get(item.id)),
-    );
-
-    return latestItems.filter((item) => this.matchesFilter(item));
+    return items.filter((item) => this.matchesFilter(item));
   }
 
   public ingestItem(item: ScheduledMessageResponse): boolean {
-    const latest = this.store.conflictPolicy.resolveCanonicalEntity(
-      item,
-      this.store.get(item.id),
-    );
+    // the list already holds this copy and placed it when it was stored (`onEntitiesChanged` places
+    // copies other lists store): nothing to place
+    if (this.getItem(item.id) === item) return false;
 
-    // the list already holds the copy that wins and placed it when it was stored (`onEntitiesChanged`
-    // places copies other lists store): nothing to place
-    if (this.getItem(latest.id) === latest) return false;
-
-    return this.placeItem(latest);
+    return this.placeItem(item);
   }
 
   /** Places `item` by the list's filter and order: moves it, or takes it out when it no longer matches. */
@@ -241,15 +222,24 @@ export class ScheduledMessagePaginator extends BasePaginator<
    * joins it.
    */
   reload = (): Promise<void> => {
-    this.reloadInFlight ??= this.reloadFirstPage().finally(() => {
-      this.reloadInFlight = undefined;
-    });
+    if (!this.reloadInFlight) {
+      const inFlight = this.reloadFirstPage().finally(() => {
+        if (this.reloadInFlight === inFlight) this.reloadInFlight = undefined;
+      });
+      this.reloadInFlight = inFlight;
+    }
     return this.reloadInFlight;
   };
 
   private reloadInFlight?: Promise<void>;
+  private reloadGeneration = 0;
+
+  private reloadWasSuperseded(generation: number) {
+    return generation !== this.reloadGeneration;
+  }
 
   private reloadFirstPage = async () => {
+    const generation = this.reloadGeneration;
     const isFirstLoad = !this.hasLoadedPage;
     const itemIdsAtRequest = this.getItemIds();
     if (isFirstLoad) this.state.partialNext({ isLoading: true });
@@ -260,7 +250,7 @@ export class ScheduledMessagePaginator extends BasePaginator<
         retryCount: this.config.retryCount,
       };
       const response = await this.fetchQueryResponseWithRetries(fetchParams);
-      if (!response) return;
+      if (!response || this.reloadWasSuperseded(generation)) return;
       const { items, tailward } = this.extractQueryPage(response);
       if (tailward) {
         this.replaceWithFirstPage({
@@ -273,12 +263,14 @@ export class ScheduledMessagePaginator extends BasePaginator<
       }
       applied = true;
     } finally {
-      const clearError = applied && this.lastQueryError;
-      if (isFirstLoad || clearError) {
-        this.state.partialNext({
-          ...(isFirstLoad ? { isLoading: false } : {}),
-          ...(clearError ? { lastQueryError: undefined } : {}),
-        });
+      if (!this.reloadWasSuperseded(generation)) {
+        const clearError = applied && this.lastQueryError;
+        if (isFirstLoad || clearError) {
+          this.state.partialNext({
+            ...(isFirstLoad ? { isLoading: false } : {}),
+            ...(clearError ? { lastQueryError: undefined } : {}),
+          });
+        }
       }
     }
   };
@@ -354,5 +346,7 @@ export class ScheduledMessagePaginator extends BasePaginator<
   public resetState() {
     super.resetState();
     this._itemIndex.clear();
+    this.reloadInFlight = undefined;
+    this.reloadGeneration += 1;
   }
 }

@@ -12,7 +12,7 @@ import type { QueueableType } from '../offline-support/types';
 import type { Channel } from '../channel';
 import type { StreamChat } from '../client';
 
-export type OperationKind = 'send' | 'retry' | 'update' | 'delete';
+export type OperationKind = 'send' | 'retry' | 'update' | 'delete' | 'schedule';
 
 export type MessageOperationSpec = {
   send: {
@@ -31,12 +31,16 @@ export type MessageOperationSpec = {
     options: DeleteMessageOptions;
     requestResult: { message: MessageResponse };
   };
+  schedule: {
+    options: SendMessageOptions;
+    requestResult: SendMessageAPIResponse;
+  };
 };
 
 export type OperationParams<K extends OperationKind> = {
   localMessage: LocalMessage;
   options?: MessageOperationSpec[K]['options'];
-} & (K extends 'send' | 'retry' ? { message?: MessageRequest } : {});
+} & (K extends 'send' | 'retry' | 'schedule' ? { message?: MessageRequest } : {});
 
 export type OperationResponse = { message: MessageResponse };
 

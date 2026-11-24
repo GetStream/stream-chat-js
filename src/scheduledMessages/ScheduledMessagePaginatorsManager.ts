@@ -19,8 +19,7 @@ import type {
   SetScheduledMessageEventHandlersParams,
 } from './types';
 
-type ScheduledMessageEventHandlerPipeline =
-  EventHandlerPipeline<ScheduledMessagePaginatorsManagerEventHandlerContext>;
+const MANAGER_NAME = 'ScheduledMessagePaginatorsManager';
 
 const isDisabledError = (error: Error | undefined) =>
   !!error &&
@@ -31,22 +30,43 @@ const createInitialState = (): ScheduledMessagePaginatorsManagerState => ({
   paginators: [],
 });
 
-/**
- * Keeps the scheduled message lists an integrator registers up to date with `scheduled_message.*`
- * events, which reach every connection of the user, loaded channel or not. A channel's own list
- * (`channel.scheduledMessagesPaginator`) is the channel's.
- */
+const copyEventHandlers = (
+  handlers: ScheduledMessagePaginatorsManagerEventHandlers,
+): ScheduledMessagePaginatorsManagerEventHandlers => {
+  const copy: ScheduledMessagePaginatorsManagerEventHandlers = {};
+  for (const [eventType, eventHandlers] of Object.entries(handlers)) {
+    if (eventHandlers) copy[eventType] = [...eventHandlers];
+  }
+  return copy;
+};
+
+const dedupeById = (paginators: ScheduledMessagePaginator[]) => {
+  const seenIds = new Set<string>();
+  return paginators.filter(({ id }) => {
+    if (seenIds.has(id)) return false;
+    seenIds.add(id);
+    return true;
+  });
+};
+
+const sameOrder = (
+  first: ScheduledMessagePaginator[],
+  second: ScheduledMessagePaginator[],
+) =>
+  first.length === second.length &&
+  first.every((paginator, index) => paginator === second[index]);
+
 export class ScheduledMessagePaginatorsManager extends WithSubscriptions {
-  private client: StreamChat;
   private eventHandlerPipelines = new Map<
     ScheduledMessagePaginatorsManagerEventType,
-    ScheduledMessageEventHandlerPipeline
+    EventHandlerPipeline<ScheduledMessagePaginatorsManagerEventHandlerContext>
   >();
-  private queryErrorUnsubscribeFunctions = new Map<
+  private queryErrorUnsubscribeByPaginator = new Map<
     ScheduledMessagePaginator,
     Unsubscribe
   >();
 
+  public readonly client: StreamChat;
   public state: StateStore<ScheduledMessagePaginatorsManagerState>;
 
   constructor({
@@ -54,49 +74,56 @@ export class ScheduledMessagePaginatorsManager extends WithSubscriptions {
     eventHandlers = ScheduledMessagePaginatorsManager.getDefaultHandlers(),
   }: ScheduledMessagePaginatorsManagerOptions) {
     super();
-
     this.client = client;
     this.state = new StateStore<ScheduledMessagePaginatorsManagerState>(
       createInitialState(),
     );
 
-    Object.entries(eventHandlers).forEach(([eventType, handlers = []]) =>
-      this.ensurePipeline(eventType).replaceAll(handlers),
-    );
+    this.installEventHandlers(eventHandlers);
+  }
+
+  public static getDefaultHandlers(): ScheduledMessagePaginatorsManagerEventHandlers {
+    return copyEventHandlers(DEFAULT_SCHEDULED_MESSAGE_EVENT_HANDLERS);
   }
 
   get paginators() {
     return this.state.getLatestValue().paginators;
   }
 
-  get pipelines() {
-    return this.eventHandlerPipelines;
-  }
-
   get isDisabled() {
     return this.state.getLatestValue().isDisabled;
   }
 
-  public static getDefaultHandlers(): ScheduledMessagePaginatorsManagerEventHandlers {
-    const defaultHandlers = Object.fromEntries(
-      Object.entries(DEFAULT_SCHEDULED_MESSAGE_EVENT_HANDLERS).map(
-        ([eventType, handlers = []]) => [eventType, [...handlers]],
-      ),
-    );
-
-    return defaultHandlers;
+  get pipelines() {
+    return this.eventHandlerPipelines;
   }
 
   private get eventHandlerContext(): ScheduledMessagePaginatorsManagerEventHandlerContext {
     return { scheduledMessagePaginators: this };
   }
 
-  private runEventHandlers = () =>
-    this.client.on((event) => {
-      const pipeline = this.eventHandlerPipelines.get(event.type);
+  private installEventHandlers(handlers: ScheduledMessagePaginatorsManagerEventHandlers) {
+    for (const [eventType, eventHandlers] of Object.entries(handlers)) {
+      if (eventHandlers) this.ensurePipeline(eventType).replaceAll(eventHandlers);
+    }
+  }
 
-      pipeline?.run(event, this.eventHandlerContext);
-    }).unsubscribe;
+  private watchQueryErrors(paginator: ScheduledMessagePaginator) {
+    if (this.queryErrorUnsubscribeByPaginator.has(paginator)) return;
+
+    const unsubscribe = paginator.state.subscribeWithSelector(
+      ({ lastQueryError }) => ({ lastQueryError }),
+      this.updateIsDisabled,
+    );
+
+    this.queryErrorUnsubscribeByPaginator.set(paginator, unsubscribe);
+  }
+
+  private unwatchQueryErrors(paginator: ScheduledMessagePaginator) {
+    this.queryErrorUnsubscribeByPaginator.get(paginator)?.();
+    this.queryErrorUnsubscribeByPaginator.delete(paginator);
+    this.updateIsDisabled();
+  }
 
   private updateIsDisabled = () => {
     const isDisabled = this.paginators.some(({ lastQueryError }) =>
@@ -106,81 +133,55 @@ export class ScheduledMessagePaginatorsManager extends WithSubscriptions {
     this.state.partialNext({ isDisabled });
   };
 
-  private watchQueryErrors = (paginator: ScheduledMessagePaginator) => {
-    if (this.queryErrorUnsubscribeFunctions.has(paginator)) return;
-
-    const unsubscribe = paginator.state.subscribeWithSelector(
-      ({ lastQueryError }) => ({ lastQueryError }),
-      this.updateIsDisabled,
-    );
-
-    this.queryErrorUnsubscribeFunctions.set(paginator, unsubscribe);
-  };
-
-  private unwatchQueryErrors = (paginator: ScheduledMessagePaginator) => {
-    this.queryErrorUnsubscribeFunctions.get(paginator)?.();
-    this.queryErrorUnsubscribeFunctions.delete(paginator);
-  };
-
-  public ensurePipeline = (eventType: ScheduledMessagePaginatorsManagerEventType) => {
+  public ensurePipeline(eventType: ScheduledMessagePaginatorsManagerEventType) {
     const existingPipeline = this.eventHandlerPipelines.get(eventType);
-
     if (existingPipeline) return existingPipeline;
 
-    const pipeline: ScheduledMessageEventHandlerPipeline = new EventHandlerPipeline({
-      id: `ScheduledMessagePaginatorsManager:${eventType}`,
-    });
+    const pipeline =
+      new EventHandlerPipeline<ScheduledMessagePaginatorsManagerEventHandlerContext>({
+        id: `${MANAGER_NAME}:${eventType}`,
+      });
     this.eventHandlerPipelines.set(eventType, pipeline);
 
     return pipeline;
-  };
+  }
 
-  public addEventHandler = ({
+  public addEventHandler({
     eventType,
     ...payload
-  }: AddScheduledMessageEventHandlerParams): Unsubscribe =>
-    this.ensurePipeline(eventType).insert(payload);
+  }: AddScheduledMessageEventHandlerParams): Unsubscribe {
+    return this.ensurePipeline(eventType).insert(payload);
+  }
 
-  public setEventHandlers = ({
+  public setEventHandlers({
     eventType,
     handlers,
-  }: SetScheduledMessageEventHandlersParams) =>
-    this.ensurePipeline(eventType).replaceAll(handlers);
+  }: SetScheduledMessageEventHandlersParams) {
+    return this.ensurePipeline(eventType).replaceAll(handlers);
+  }
 
-  public removeEventHandlers = ({
+  public removeEventHandlers({
     eventType,
     handlers,
-  }: RemoveScheduledMessageEventHandlersParams) => {
+  }: RemoveScheduledMessageEventHandlersParams) {
     const pipeline = this.eventHandlerPipelines.get(eventType);
-
     handlers.forEach((params) => pipeline?.remove(params));
-  };
+  }
 
-  public getPaginatorById = (id: string) =>
-    this.paginators.find((paginator) => paginator.id === id);
+  public getPaginatorById(id: string): ScheduledMessagePaginator | undefined {
+    return this.paginators.find((paginator) => paginator.id === id);
+  }
 
-  /**
-   * Replaces the set of lists in one update, skipped when unchanged; duplicate IDs are kept once. A
-   * dropped list stops receiving events and its scheduled query is cancelled.
-   */
-  public setPaginators = (paginators: ScheduledMessagePaginator[]) => {
-    const nextPaginators: ScheduledMessagePaginator[] = [];
-    const seenIds = new Set<string>();
-    for (const paginator of paginators) {
-      if (seenIds.has(paginator.id)) continue;
-      seenIds.add(paginator.id);
-      nextPaginators.push(paginator);
-    }
-
+  public setPaginators(paginators: ScheduledMessagePaginator[]) {
+    const nextPaginators = dedupeById(paginators);
     const currentPaginators = this.paginators;
-    // An equivalent set would hand subscribers a new array and re-render every list.
-    const isUnchanged =
-      currentPaginators.length === nextPaginators.length &&
-      currentPaginators.every((paginator, i) => paginator === nextPaginators[i]);
-    if (isUnchanged) return;
+    if (sameOrder(currentPaginators, nextPaginators)) return;
 
     const detached = currentPaginators.filter(
       (paginator) => !nextPaginators.includes(paginator),
+    );
+    const attached = nextPaginators.filter(
+      (paginator) => !currentPaginators.includes(paginator),
     );
 
     this.state.partialNext({ paginators: nextPaginators });
@@ -189,25 +190,22 @@ export class ScheduledMessagePaginatorsManager extends WithSubscriptions {
       this.unwatchQueryErrors(paginator);
       paginator.cancelScheduledQuery();
     });
-    nextPaginators.forEach(this.watchQueryErrors);
-    this.updateIsDisabled();
-  };
+    attached.forEach((paginator) => this.watchQueryErrors(paginator));
+  }
 
-  /** Removes every list in one update and returns them. */
-  public clearPaginators = (): ScheduledMessagePaginator[] => {
+  public clearPaginators(): ScheduledMessagePaginator[] {
     const cleared = this.paginators;
     this.setPaginators([]);
     return cleared;
-  };
+  }
 
-  /** Registers a list at `index` (default: last), moving or replacing one with the same ID. */
-  public insertPaginator = ({
+  public insertPaginator({
     index,
     paginator,
   }: {
     paginator: ScheduledMessagePaginator;
     index?: number;
-  }) => {
+  }) {
     const paginators = this.paginators.filter(({ id }) => id !== paginator.id);
     const validIndex = Math.max(
       0,
@@ -215,43 +213,56 @@ export class ScheduledMessagePaginatorsManager extends WithSubscriptions {
     );
     paginators.splice(validIndex, 0, paginator);
     this.setPaginators(paginators);
-  };
+  }
 
-  /** Unregisters a list, keeping its items. Returns it, or `undefined` if it was not held. */
-  public removePaginator = (
+  public removePaginator(
     paginatorOrId: ScheduledMessagePaginator | string,
-  ): ScheduledMessagePaginator | undefined => {
+  ): ScheduledMessagePaginator | undefined {
     const id = typeof paginatorOrId === 'string' ? paginatorOrId : paginatorOrId.id;
     const removed = this.getPaginatorById(id);
     if (!removed) return undefined;
     this.setPaginators(this.paginators.filter((paginator) => paginator !== removed));
     return removed;
-  };
+  }
 
-  /** Ingests a copy into every registered list; each decides whether and where it belongs. */
+  public resetPaginatorStates() {
+    this.paginators.forEach((paginator) => {
+      paginator.cancelScheduledQuery();
+      paginator.resetState();
+    });
+    this.state.partialNext({ isDisabled: false });
+  }
+
   public ingest = (scheduledMessage: ScheduledMessageResponse) => {
     this.paginators.forEach((paginator) => paginator.ingestItem(scheduledMessage));
   };
 
-  /** Reloads the loaded lists after a reconnect (called by `ConnectionRecoveryManager`). */
   public recover = async () => {
     const loadedPaginators = this.paginators.filter(({ hasLoadedPage }) => hasLoadedPage);
 
     await Promise.allSettled(loadedPaginators.map((paginator) => paginator.reload()));
   };
 
-  /** Empties the lists on logout and keeps them registered. */
-  public resetPaginatorStates = () => {
-    this.paginators.forEach((paginator) => {
-      paginator.cancelScheduledQuery();
-      paginator.resetState();
-    });
-    this.state.partialNext({ isDisabled: false });
-  };
+  /**
+   * Starts syncing the registered lists with the client's WS events. Nothing keeps them in sync
+   * until this is called, so an integration has to call it once a user is connected and call the
+   * returned unsubscribe (or {@link unregisterSubscriptions}) on teardown. The Stream UI SDKs do
+   * this for you; a pure-LLC integration must do it itself. Ref-counted, so several holders can
+   * share one manager and only the last unsubscribe tears the subscriptions down.
+   */
+  public registerSubscriptions(): Unsubscribe {
+    if (!this.hasSubscriptions) {
+      this.addUnsubscribeFunction(
+        this.client.on((event) => {
+          this.eventHandlerPipelines
+            .get(event.type)
+            ?.run(event, this.eventHandlerContext);
+        }).unsubscribe,
+      );
+    }
 
-  public registerSubscriptions = () => {
-    if (this.hasSubscriptions) return;
+    this.incrementRefCount();
 
-    this.addUnsubscribeFunction(this.runEventHandlers());
-  };
+    return () => this.unregisterSubscriptions();
+  }
 }

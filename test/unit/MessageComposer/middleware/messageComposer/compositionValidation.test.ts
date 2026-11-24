@@ -12,6 +12,7 @@ import {
   LocalImageAttachment,
 } from '../../../../../src/messageComposer/types';
 import { MiddlewareStatus } from '../../../../../src/middleware';
+import { CommandSearchSource } from '../../../../../src/messageComposer/middleware/textComposer/commands';
 import { MessageComposerMiddlewareState } from '../../../../../src/messageComposer/middleware/messageComposer/types';
 import { MessageDraftComposerMiddlewareValueState } from '../../../../../src/messageComposer/middleware/messageComposer/types';
 import { LocalMessage, MessageResponse } from '../../../../../src';
@@ -309,6 +310,47 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
     const result = await createCompositionValidationMiddleware(
       messageComposer,
       commandSearchSource,
+    ).handlers.compose(setupMiddlewareInputs(setupCompositionState('/custom')));
+
+    expect(result.status).toBe('discard');
+    expect(validator).toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: expect.objectContaining({ name: 'custom' }),
+        rawText: '/custom',
+      }),
+    );
+  });
+
+  it('should resolve the current command through a passed search source, not the composer one', async () => {
+    const validator = vi.fn(({ command }) =>
+      command.name === 'custom'
+        ? {
+            command,
+            ready: false as const,
+            reason: 'missing_args' as const,
+          }
+        : undefined,
+    );
+    const { messageComposer } = setupMiddleware({
+      config: {
+        commands: {
+          sendValidator: validator,
+        },
+      },
+    });
+    const passedCommandSearchSource = new CommandSearchSource(messageComposer.channel);
+    vi.spyOn(passedCommandSearchSource, 'query').mockReturnValue({
+      items: [{ description: 'Custom command', id: 'custom', name: 'custom' }],
+      next: null,
+    });
+    vi.spyOn(messageComposer.commandSearchSource, 'query').mockReturnValue({
+      items: [],
+      next: null,
+    });
+
+    const result = await createCompositionValidationMiddleware(
+      messageComposer,
+      passedCommandSearchSource,
     ).handlers.compose(setupMiddlewareInputs(setupCompositionState('/custom')));
 
     expect(result.status).toBe('discard');

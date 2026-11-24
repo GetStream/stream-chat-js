@@ -4,6 +4,7 @@ import type {
   MessageResponse,
   ReactionRequest,
   SendReactionRequest,
+  StreamResponse,
   UpdateMessageOptions,
 } from '../types';
 import { applyReactionLocally } from './applyReactionLocally';
@@ -11,10 +12,21 @@ import { FailedSendCache } from './FailedSendCache';
 import { deepFreezeConfig } from '../configuration/utils/deepFreezeConfig';
 import type { StateStore } from '@stream-io/state-store';
 import { ConfigController } from '../configuration/ConfigController';
-import { formatMessage, localMessageToNewMessagePayload } from '../utils';
+import {
+  formatMessage,
+  localMessageToNewMessagePayload,
+  sanitizeOutgoingAttachments,
+} from '../utils';
 import { dateToNs } from '../utils/time';
 import { MessageOperationStatePolicy } from './MessageOperationStatePolicy';
+import { ScheduledMessageStatePolicy } from '../scheduledMessages/ScheduledMessageStatePolicy';
+import type { ScheduledMessageOperationKind } from '../scheduledMessages/ScheduledMessageStatePolicy';
 import type { QueueableType } from '../offline-support';
+import type {
+  ScheduledMessageResponse,
+  SendMessageRequest,
+  SendMessageResponse,
+} from '../gen/models';
 import type {
   DefaultOperationRequest,
   MessageOperationsContext,
@@ -22,6 +34,13 @@ import type {
   OperationParams,
   OperationRequestFn,
 } from './types';
+import type {
+  DefaultScheduledMessageRequest,
+  ScheduledMessageRequestFn,
+  ScheduledMessageRequestHandlers,
+  ScheduleMessageParams,
+  UpdateScheduledMessageParams,
+} from '../scheduledMessages/types';
 
 export type MessageOperationsConfig = {
   /** Most failed sends kept for retry; the oldest is evicted past this (defaults to 100). */
@@ -65,6 +84,7 @@ const isFailedEdit = (localMessage: LocalMessage) =>
 export class MessageOperations {
   private ctx: MessageOperationsContext;
   private policy: MessageOperationStatePolicy;
+  private scheduledPolicy: ScheduledMessageStatePolicy;
   private readonly failedSendCache = new FailedSendCache(() => this.config);
   private readonly normalizeOutgoingMessage: NonNullable<
     MessageOperationsContext['normalizeOutgoingMessage']
@@ -84,6 +104,10 @@ export class MessageOperations {
       persist: ctx.persist,
       purge: ctx.purge,
       remove: ctx.remove,
+    });
+    this.scheduledPolicy = new ScheduledMessageStatePolicy({
+      ingest: (scheduledMessage) => this.ingestScheduledMessage(scheduledMessage),
+      get: (id) => ctx.channel.getClient().scheduledMessageStore.get(id),
     });
     this.normalizeOutgoingMessage = ctx.normalizeOutgoingMessage ?? ((m) => m);
     this.sequenceRequests = ctx.sequenceRequests ?? ((_kind, request) => request());
@@ -328,6 +352,135 @@ export class MessageOperations {
         async (p) => await this.ctx.defaults.delete(p.localMessage.id, p.options),
       ),
     );
+  }
+
+  ingestScheduledMessage(scheduledMessage: ScheduledMessageResponse) {
+    const { channel } = this.ctx;
+    channel.scheduledMessagesPaginator.ingestItem(scheduledMessage);
+    channel.getClient().scheduledMessagePaginators.ingest(scheduledMessage);
+  }
+
+  private get scheduledRequestHandlers(): ScheduledMessageRequestHandlers {
+    return this.ctx.channel.configState.getLatestValue().requestHandlers ?? {};
+  }
+
+  private resolveScheduledRequest<TParams, TResponse>(
+    handler: ScheduledMessageRequestFn<TParams, TResponse> | undefined,
+    defaultRequest: DefaultScheduledMessageRequest<TParams, TResponse>,
+    params: TParams,
+  ) {
+    return handler ? handler(params, defaultRequest) : defaultRequest(params);
+  }
+
+  private async runScheduled<R extends { scheduled_message?: ScheduledMessageResponse }>(
+    kind: ScheduledMessageOperationKind,
+    id: string | undefined,
+    doRequest: () => Promise<R>,
+  ): Promise<R> {
+    try {
+      const response = await doRequest();
+      this.scheduledPolicy.success(kind, response.scheduled_message);
+      return response;
+    } catch (error) {
+      this.scheduledPolicy.failure(kind, id, error);
+      throw error;
+    }
+  }
+
+  async scheduleMessage({
+    localMessage,
+    message,
+    options,
+  }: ScheduleMessageParams): Promise<StreamResponse<SendMessageResponse>> {
+    return await this.runScheduled('schedule', undefined, () =>
+      this.sequenceRequests('schedule', async () => {
+        let outgoingMessage = message;
+
+        if (localMessage) {
+          const settled = await this.withSettledUploads<'schedule'>({
+            localMessage,
+            message,
+          });
+          if (settled.failureReason) throw settled.failureReason;
+          outgoingMessage = settled.params.message ?? message;
+        }
+
+        const request: SendMessageRequest = {
+          ...options,
+          message: sanitizeOutgoingAttachments(outgoingMessage),
+        };
+
+        return await this.resolveScheduledRequest(
+          this.scheduledRequestHandlers.scheduleMessageRequest,
+          (params) => this.ctx.channel.sendMessage(params),
+          request,
+        );
+      }),
+    );
+  }
+
+  async updateScheduledMessage(
+    id: string,
+    { localMessage, request }: UpdateScheduledMessageParams,
+  ): Promise<ScheduledMessageResponse> {
+    let outgoingMessage = request.message;
+
+    if (localMessage && outgoingMessage) {
+      const settled = await this.withSettledUploads<'schedule'>({
+        localMessage,
+        message: outgoingMessage,
+      });
+      if (settled.failureReason) throw settled.failureReason;
+      outgoingMessage = settled.params.message ?? outgoingMessage;
+    }
+
+    const sanitizedRequest = outgoingMessage
+      ? { ...request, message: sanitizeOutgoingAttachments(outgoingMessage) }
+      : request;
+
+    const { scheduled_message: scheduledMessage } = await this.runScheduled(
+      'update',
+      id,
+      () =>
+        this.resolveScheduledRequest(
+          this.scheduledRequestHandlers.updateScheduledMessageRequest,
+          ({ id, request }) =>
+            this.ctx.channel.getClient().updateScheduledMessage({ id }, request),
+          { id, request: sanitizedRequest },
+        ),
+    );
+
+    return scheduledMessage;
+  }
+
+  async deleteScheduledMessage(id: string): Promise<ScheduledMessageResponse> {
+    const { scheduled_message: scheduledMessage } = await this.runScheduled(
+      'cancel',
+      id,
+      () =>
+        this.resolveScheduledRequest(
+          this.scheduledRequestHandlers.deleteScheduledMessageRequest,
+          ({ id }) => this.ctx.channel.getClient().deleteScheduledMessage({ id }),
+          { id },
+        ),
+    );
+
+    return scheduledMessage;
+  }
+
+  async sendScheduledMessageNow(id: string): Promise<ScheduledMessageResponse> {
+    const { scheduled_message: scheduledMessage } = await this.runScheduled(
+      'sendNow',
+      id,
+      () =>
+        this.resolveScheduledRequest(
+          this.scheduledRequestHandlers.sendScheduledMessageNowRequest,
+          ({ id }) => this.ctx.channel.getClient().sendScheduledMessageNow({ id }),
+          { id },
+        ),
+    );
+
+    return scheduledMessage;
   }
 
   /**

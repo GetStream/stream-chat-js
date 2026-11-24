@@ -19,11 +19,11 @@ export const createScheduledMessageCompositionMiddleware = (
       discard,
       forward,
     }: MiddlewareHandlerParams<MessageComposerMiddlewareState>) => {
-      const isScheduling = !!state.scheduling || !!state.sendOptions.scheduled_at;
+      const isScheduling = !!state.sendOptions.scheduled_at;
 
       if (!isScheduling) return await forward();
 
-      const { scheduleBlockReason } = composer.scheduledMessageComposition;
+      const { scheduleBlockReason } = composer;
 
       if (!scheduleBlockReason) return await forward();
 

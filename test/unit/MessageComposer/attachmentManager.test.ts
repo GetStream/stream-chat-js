@@ -776,6 +776,85 @@ describe('AttachmentManager', () => {
     });
   });
 
+  describe('getSnapshotKeepingUploads and restoreSnapshot', () => {
+    const uploadingAttachment = (id: string): LocalUploadAttachment => {
+      const file = generateFile({ name: `${id}.png`, type: 'image/png' });
+      return {
+        type: 'image',
+        mime_type: 'image/png',
+        file_size: file.size,
+        fallback: file.name,
+        localMetadata: { id, file, uploadProgress: 50, uploadState: 'uploading' },
+      };
+    };
+
+    const startUpload = (
+      { mockChannel, mockClient }: ReturnType<typeof setup>,
+      attachment: LocalUploadAttachment,
+    ) =>
+      void mockClient.uploadManager.upload({
+        id: attachment.localMetadata.id,
+        channelCid: mockChannel.cid,
+        file: attachment.localMetadata.file,
+      });
+
+    it('keeps the upload running and the attachment uploading', async () => {
+      const context = setup({ config: { trackUploadProgress: true } });
+      const { attachmentManager } = context.messageComposer;
+      const attachment = uploadingAttachment('running');
+      attachmentManager.upsertAttachments([attachment]);
+      vi.spyOn(attachmentManager, 'doUploadRequest').mockImplementation(
+        () => new Promise(() => {}),
+      );
+      startUpload(context, attachment);
+      await Promise.resolve();
+
+      const snapshot = attachmentManager.getSnapshotKeepingUploads();
+
+      expect('running' in context.mockClient.uploadManager.uploads).toBe(true);
+      expect(snapshot.attachments).toEqual([attachment]);
+    });
+
+    it('restores an upload nobody tracks any more as failed', () => {
+      const { attachmentManager } = setup().messageComposer;
+      const attachment = uploadingAttachment('settled');
+      attachmentManager.upsertAttachments([attachment]);
+      const snapshot = attachmentManager.getSnapshotKeepingUploads();
+      attachmentManager.initState();
+
+      attachmentManager.restoreSnapshot(snapshot);
+
+      expect(attachmentManager.attachments).toEqual([
+        expect.objectContaining({
+          localMetadata: expect.objectContaining({
+            id: 'settled',
+            uploadProgress: undefined,
+            uploadState: 'failed',
+          }),
+        }),
+      ]);
+    });
+
+    it('restores an upload still running as uploading', async () => {
+      const context = setup({ config: { trackUploadProgress: true } });
+      const { attachmentManager } = context.messageComposer;
+      const attachment = uploadingAttachment('running');
+      attachmentManager.upsertAttachments([attachment]);
+      vi.spyOn(attachmentManager, 'doUploadRequest').mockImplementation(
+        () => new Promise(() => {}),
+      );
+      startUpload(context, attachment);
+      await Promise.resolve();
+      const snapshot = attachmentManager.getSnapshotKeepingUploads();
+      attachmentManager.initState();
+
+      attachmentManager.restoreSnapshot(snapshot);
+
+      expect(attachmentManager.attachments).toEqual([attachment]);
+      expect('running' in context.mockClient.uploadManager.uploads).toBe(true);
+    });
+  });
+
   describe('clearAttachments', () => {
     it('cancels active uploads when clearing attachments', async () => {
       const {
