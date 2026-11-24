@@ -65,7 +65,6 @@ import { CommandSearchSource } from './middleware/textComposer/commands';
 import { ScheduledMessageComposition } from './scheduledMessageComposition';
 import type { ScheduledMessageResponse } from '../gen/models';
 import { toComposerContent } from '../scheduledMessages/composition';
-import type { EditedScheduledMessageComposition } from '../scheduledMessages/types';
 
 type UnregisterSubscriptions = Unsubscribe;
 
@@ -143,22 +142,20 @@ export type MessageComposerOptions = {
 const compositionIsDraftResponse = (composition: unknown): composition is DraftResponse =>
   !!(composition as { message?: DraftMessage })?.message;
 
-const compositionIsEditedScheduledMessage = (
+const compositionIsScheduledMessage = (
   composition: unknown,
-): composition is EditedScheduledMessageComposition =>
-  !!(composition as Partial<EditedScheduledMessageComposition>)?.scheduledMessage;
+): composition is ScheduledMessageResponse =>
+  (composition as Partial<ScheduledMessageResponse> | undefined)?.scheduled_at !==
+  undefined;
 
 const initEditingAuditState = (
-  composition?:
-    | DraftResponse
-    | MessageResponse
-    | LocalMessage
-    | EditedScheduledMessageComposition,
+  composition?: DraftResponse | MessageResponse | LocalMessage | ScheduledMessageResponse,
 ): EditingAuditState => {
   let draftUpdate = null;
   let stateUpdate = nowNs();
-  if (compositionIsEditedScheduledMessage(composition)) {
-    stateUpdate = composition.scheduledMessage.updated_at;
+
+  if (compositionIsScheduledMessage(composition)) {
+    stateUpdate = composition.updated_at;
   } else if (compositionIsDraftResponse(composition)) {
     stateUpdate = draftUpdate = composition.created_at;
   } else if (composition && isLocalMessage(composition)) {
@@ -173,11 +170,7 @@ const initEditingAuditState = (
 };
 
 const initState = (
-  composition?:
-    | DraftResponse
-    | MessageResponse
-    | LocalMessage
-    | EditedScheduledMessageComposition,
+  composition?: DraftResponse | MessageResponse | LocalMessage | ScheduledMessageResponse,
 ): MessageComposerState => {
   if (!composition) {
     return {
@@ -191,19 +184,18 @@ const initState = (
     };
   }
 
-  if (compositionIsEditedScheduledMessage(composition)) {
-    const { quotedMessage, scheduledMessage } = composition;
+  if (compositionIsScheduledMessage(composition)) {
     const { poll_id: pollId = null, show_in_channel: showReplyInChannel = false } =
-      scheduledMessage.message;
+      composition.message;
 
     return {
       draftId: null,
       id: MessageComposer.generateId(),
       pollId,
-      quotedMessage,
+      quotedMessage: null,
       showReplyInChannel,
       editedMessage: null,
-      editedScheduledMessage: scheduledMessage,
+      editedScheduledMessage: composition,
     };
   }
 
@@ -669,13 +661,13 @@ export class MessageComposer extends WithSubscriptions {
       | DraftResponse
       | MessageResponse
       | LocalMessage
-      | EditedScheduledMessageComposition;
+      | ScheduledMessageResponse;
   } = {}) => {
     this.clearSnapshots();
     this.editingAuditState.partialNext(this.initEditingAuditState(composition));
 
     let message: LocalMessage | DraftMessage | undefined;
-    if (compositionIsEditedScheduledMessage(composition)) {
+    if (compositionIsScheduledMessage(composition)) {
       message = toComposerContent(composition);
     } else if (compositionIsDraftResponse(composition)) {
       message = composition.message;
@@ -717,7 +709,7 @@ export class MessageComposer extends WithSubscriptions {
       | DraftResponse
       | MessageResponse
       | LocalMessage
-      | EditedScheduledMessageComposition,
+      | ScheduledMessageResponse,
   ) => initEditingAuditState(composition);
 
   clearSnapshots = () => {

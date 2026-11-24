@@ -7,7 +7,6 @@ import type {
   ScheduledMessageResponse,
 } from '../gen/models';
 import type { DraftMessage, LocalMessage, UserResponse } from '../types';
-import type { EditedScheduledMessageComposition } from './types';
 
 const SCHEDULED_MESSAGE_SERVER_FIELDS = ['id', 'mml', 'shared_location'];
 
@@ -47,16 +46,14 @@ const COMPOSED_FIELDS_DROPPED_ON_UPDATE: ReadonlySet<string> = new Set(
   [...SERVER_OWNED_FIELDS].filter((field) => !COMPOSER_OWNED_FIELDS.has(field)),
 );
 
-export const toComposerContent = ({
-  mentionedUsers,
-  scheduledMessage,
-}: EditedScheduledMessageComposition): DraftMessage => {
+export const toComposerContent = (
+  scheduledMessage: ScheduledMessageResponse,
+): DraftMessage => {
   const { id, message } = scheduledMessage;
 
   const content: DraftMessage = {
     ...pickFields(message, COMPOSER_CONTENT_FIELD_NAMES),
     id,
-    mentioned_users: mentionedUsers,
   };
 
   return content;
