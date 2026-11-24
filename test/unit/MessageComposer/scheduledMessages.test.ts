@@ -179,7 +179,7 @@ describe('MessageComposer scheduled messages', () => {
       composer.textComposer.setText('see you tomorrow');
       const composerId = composer.id;
 
-      const result = await composer.scheduledMessageComposition.schedule(scheduledAt);
+      const result = await composer.scheduleMessage(scheduledAt);
 
       expect(sendSpy).toHaveBeenCalledWith(
         { id: channelId, type: channelType },
@@ -200,7 +200,7 @@ describe('MessageComposer scheduled messages', () => {
       const channelSendSpy = vi.spyOn(channel, 'sendMessage');
       composer.textComposer.setText('see you tomorrow');
 
-      await composer.scheduledMessageComposition.schedule(scheduledAt);
+      await composer.scheduleMessage(scheduledAt);
 
       expect(channelSendSpy).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -216,7 +216,7 @@ describe('MessageComposer scheduled messages', () => {
       composer.textComposer.setText('see you tomorrow');
       const composerId = composer.id;
 
-      await composer.scheduledMessageComposition.schedule(scheduledAt);
+      await composer.scheduleMessage(scheduledAt);
 
       expect(composer.textComposer.text).toBe('');
       expect(composer.id).not.toBe(composerId);
@@ -230,7 +230,7 @@ describe('MessageComposer scheduled messages', () => {
       mockScheduledSend(client, generateScheduledMessage());
       composer.textComposer.setText('see you tomorrow');
 
-      await composer.scheduledMessageComposition.schedule(scheduledAt);
+      await composer.scheduleMessage(scheduledAt);
 
       expect(queueTask).not.toHaveBeenCalled();
     });
@@ -240,7 +240,7 @@ describe('MessageComposer scheduled messages', () => {
       const sendSpy = mockScheduledSend(client, generateScheduledMessage());
       composer.textComposer.setText('reply later');
 
-      await composer.scheduledMessageComposition.schedule(scheduledAt);
+      await composer.scheduleMessage(scheduledAt);
 
       expect(sentRequest(sendSpy)).toEqual(
         expect.objectContaining({
@@ -259,7 +259,7 @@ describe('MessageComposer scheduled messages', () => {
       composer.textComposer.setText('see you tomorrow');
       composer.state.partialNext({ draftId: 'draft-1' });
 
-      await composer.scheduledMessageComposition.schedule(scheduledAt);
+      await composer.scheduleMessage(scheduledAt);
 
       await vi.waitFor(() =>
         expect(deleteDraftSpy).toHaveBeenCalledWith({ parent_id: undefined }),
@@ -271,7 +271,7 @@ describe('MessageComposer scheduled messages', () => {
       mockScheduledSend(client, null);
       composer.textComposer.setText('too late to schedule');
 
-      const result = await composer.scheduledMessageComposition.schedule(scheduledAt);
+      const result = await composer.scheduleMessage(scheduledAt);
 
       expect(result).toEqual({ status: 'sent' });
       expect(client.scheduledMessageStore.values()).toEqual([]);
@@ -282,7 +282,7 @@ describe('MessageComposer scheduled messages', () => {
       const { client, composer } = setup();
       const sendSpy = mockScheduledSend(client, generateScheduledMessage());
 
-      const result = await composer.scheduledMessageComposition.schedule(scheduledAt);
+      const result = await composer.scheduleMessage(scheduledAt);
 
       expect(result).toEqual({ status: 'nothing-to-send' });
       expect(sendSpy).not.toHaveBeenCalled();
@@ -296,7 +296,7 @@ describe('MessageComposer scheduled messages', () => {
       composer.textComposer.setText('see you tomorrow');
       const composerId = composer.id;
 
-      const result = await composer.scheduledMessageComposition.schedule(scheduledAt);
+      const result = await composer.scheduleMessage(scheduledAt);
 
       expect(result).toEqual({ error, status: 'failed' });
       expect(composer.textComposer.text).toBe('see you tomorrow');
@@ -319,7 +319,7 @@ describe('MessageComposer scheduled messages', () => {
       const addWarningSpy = vi.spyOn(client.notifications, 'addWarning');
       composer.textComposer.setText('/giphy cats');
 
-      const result = await composer.scheduledMessageComposition.schedule(scheduledAt);
+      const result = await composer.scheduleMessage(scheduledAt);
 
       expect(result).toEqual({ status: 'blocked' });
       expect(sendSpy).not.toHaveBeenCalled();
@@ -335,7 +335,7 @@ describe('MessageComposer scheduled messages', () => {
       const addWarningSpy = vi.spyOn(client.notifications, 'addWarning');
       composer.textComposer.state.partialNext({ command: giphyCommand, text: 'cats' });
 
-      const result = await composer.scheduledMessageComposition.schedule(scheduledAt);
+      const result = await composer.scheduleMessage(scheduledAt);
 
       expect(result).toEqual({ status: 'blocked' });
       expect(sendSpy).not.toHaveBeenCalled();
@@ -350,7 +350,7 @@ describe('MessageComposer scheduled messages', () => {
       const addWarningSpy = vi.spyOn(client.notifications, 'addWarning');
       composer.state.partialNext({ pollId: 'poll-1' });
 
-      const result = await composer.scheduledMessageComposition.schedule(scheduledAt);
+      const result = await composer.scheduleMessage(scheduledAt);
 
       expect(result.status).toBe('scheduled');
       expect(sentRequest(sendSpy)).toEqual(
@@ -374,7 +374,7 @@ describe('MessageComposer scheduled messages', () => {
         message_id: 'm-1',
       } as never);
 
-      const result = await composer.scheduledMessageComposition.schedule(scheduledAt);
+      const result = await composer.scheduleMessage(scheduledAt);
 
       expect(result).toEqual({ status: 'blocked' });
       expect(sendSpy).not.toHaveBeenCalled();
@@ -435,7 +435,7 @@ describe('MessageComposer scheduled messages', () => {
         attachments: [uploadAttachment('uploading')],
       });
 
-      const result = await composer.scheduledMessageComposition.schedule(scheduledAt);
+      const result = await composer.scheduleMessage(scheduledAt);
 
       expect(result).toEqual({ status: 'nothing-to-send' });
       expect(sendSpy).not.toHaveBeenCalled();
@@ -456,7 +456,7 @@ describe('MessageComposer scheduled messages', () => {
         attachments: [uploadAttachment('uploading')],
       });
 
-      const result = await composer.scheduledMessageComposition.schedule(scheduledAt);
+      const result = await composer.scheduleMessage(scheduledAt);
 
       expect(result).toEqual(expect.objectContaining({ status: 'scheduled' }));
       expect(sentRequest(sendSpy)).toEqual(
@@ -482,7 +482,7 @@ describe('MessageComposer scheduled messages', () => {
         attachments: [uploadAttachment('failed')],
       });
 
-      const result = await composer.scheduledMessageComposition.schedule(scheduledAt);
+      const result = await composer.scheduleMessage(scheduledAt);
 
       expect(result).toEqual({ error: expect.any(Error), status: 'failed' });
       expect(sendSpy).not.toHaveBeenCalled();
@@ -537,7 +537,7 @@ describe('MessageComposer scheduled messages', () => {
         await startComposerUpload();
       const sendSpy = mockScheduledSend(client, generateScheduledMessage());
 
-      const scheduling = composer.scheduledMessageComposition.schedule(scheduledAt);
+      const scheduling = composer.scheduleMessage(scheduledAt);
       await vi.waitFor(() => expect(uploadSpy).toHaveBeenCalledTimes(2));
       finishUpload();
       await uploading;
@@ -563,7 +563,7 @@ describe('MessageComposer scheduled messages', () => {
       const scheduledMessage = generateScheduledMessage();
       mockScheduledSend(client, scheduledMessage);
 
-      const scheduling = composer.scheduledMessageComposition.schedule(scheduledAt);
+      const scheduling = composer.scheduleMessage(scheduledAt);
       await vi.waitFor(() => expect(uploadSpy).toHaveBeenCalledTimes(2));
 
       expect(composer.compositionIsEmpty).toBe(true);
@@ -592,7 +592,7 @@ describe('MessageComposer scheduled messages', () => {
           }) as never,
       );
 
-      const scheduling = composer.scheduledMessageComposition.schedule(scheduledAt);
+      const scheduling = composer.scheduleMessage(scheduledAt);
       await vi.waitFor(() => expect(uploadSpy).toHaveBeenCalledTimes(2));
       finishUpload();
       await uploading;
@@ -614,11 +614,9 @@ describe('MessageComposer scheduled messages', () => {
     it('does nothing while a scheduled message is being edited', async () => {
       const { client, composer } = setup();
       const sendSpy = vi.spyOn(client, 'sendMessage');
-      await composer.scheduledMessageComposition.editScheduledMessage(
-        generateScheduledMessage(),
-      );
+      await composer.editScheduledMessage(generateScheduledMessage());
 
-      const result = await composer.scheduledMessageComposition.schedule(scheduledAt);
+      const result = await composer.scheduleMessage(scheduledAt);
 
       expect(result).toEqual({ status: 'nothing-to-send' });
       expect(sendSpy).not.toHaveBeenCalled();
@@ -630,7 +628,7 @@ describe('MessageComposer scheduled messages', () => {
       const { composer } = setup();
       composer.textComposer.setText('see you tomorrow');
 
-      expect(composer.scheduledMessageComposition.scheduleBlockReason).toBeUndefined();
+      expect(composer.scheduleBlockReason).toBeUndefined();
     });
 
     it('is command for a typed slash command', () => {
@@ -638,32 +636,28 @@ describe('MessageComposer scheduled messages', () => {
       addGiphyCommand(channel);
       composer.textComposer.setText('/giphy cats');
 
-      expect(composer.scheduledMessageComposition.scheduleBlockReason).toBe(
-        ScheduledMessageBlockReason.Command,
-      );
+      expect(composer.scheduleBlockReason).toBe(ScheduledMessageBlockReason.Command);
     });
 
     it('is command for a selected command', () => {
       const { composer } = setup();
       composer.textComposer.state.partialNext({ command: giphyCommand, text: 'cats' });
 
-      expect(composer.scheduledMessageComposition.scheduleBlockReason).toBe(
-        ScheduledMessageBlockReason.Command,
-      );
+      expect(composer.scheduleBlockReason).toBe(ScheduledMessageBlockReason.Command);
     });
 
     it('ignores a slash command the channel does not know', () => {
       const { composer } = setup();
       composer.textComposer.setText('/giphy cats');
 
-      expect(composer.scheduledMessageComposition.scheduleBlockReason).toBeUndefined();
+      expect(composer.scheduleBlockReason).toBeUndefined();
     });
 
     it('is nothing for a poll', () => {
       const { composer } = setup();
       composer.state.partialNext({ pollId: 'poll-1' });
 
-      expect(composer.scheduledMessageComposition.scheduleBlockReason).toBeUndefined();
+      expect(composer.scheduleBlockReason).toBeUndefined();
     });
 
     it('is shared_location for a shared location', () => {
@@ -675,7 +669,7 @@ describe('MessageComposer scheduled messages', () => {
         message_id: 'm-1',
       } as never);
 
-      expect(composer.scheduledMessageComposition.scheduleBlockReason).toBe(
+      expect(composer.scheduleBlockReason).toBe(
         ScheduledMessageBlockReason.SharedLocation,
       );
     });
@@ -686,15 +680,13 @@ describe('MessageComposer scheduled messages', () => {
       const { channel, composer } = setup();
       const scheduledMessage = generateScheduledMessage();
       const sendSpy = vi.spyOn(channel, 'sendMessage');
-      await composer.scheduledMessageComposition.editScheduledMessage(scheduledMessage);
+      await composer.editScheduledMessage(scheduledMessage);
 
       const result = await composer.send();
 
       expect(result).toBe('nothing-to-send');
       expect(sendSpy).not.toHaveBeenCalled();
-      expect(composer.scheduledMessageComposition.editedScheduledMessage).toBe(
-        scheduledMessage,
-      );
+      expect(composer.editedScheduledMessage).toBe(scheduledMessage);
     });
 
     it('pre-fills the composer from the scheduled message', async () => {
@@ -724,11 +716,9 @@ describe('MessageComposer scheduled messages', () => {
         },
       });
 
-      await composer.scheduledMessageComposition.editScheduledMessage(scheduledMessage);
+      await composer.editScheduledMessage(scheduledMessage);
 
-      expect(composer.scheduledMessageComposition.editedScheduledMessage).toBe(
-        scheduledMessage,
-      );
+      expect(composer.editedScheduledMessage).toBe(scheduledMessage);
       expect(composer.textComposer.text).toBe('hi @Known User and @Fetched User');
       expect(composer.attachmentManager.attachments).toEqual([
         expect.objectContaining({ image_url: 'https://cdn.example.com/a.png' }),
@@ -760,7 +750,7 @@ describe('MessageComposer scheduled messages', () => {
         },
       } as never);
 
-      await composer.scheduledMessageComposition.editScheduledMessage(
+      await composer.editScheduledMessage(
         generateScheduledMessage({
           message: { text: 'reply', custom: {}, quoted_message_id: 'quoted-2' },
         }),
@@ -785,11 +775,9 @@ describe('MessageComposer scheduled messages', () => {
         },
       });
 
-      await composer.scheduledMessageComposition.editScheduledMessage(scheduledMessage);
+      await composer.editScheduledMessage(scheduledMessage);
 
-      expect(composer.scheduledMessageComposition.editedScheduledMessage).toBe(
-        scheduledMessage,
-      );
+      expect(composer.editedScheduledMessage).toBe(scheduledMessage);
       expect(composer.quotedMessage).toEqual({ id: 'quoted-3' });
       expect(composer.textComposer.mentionedUsers).toEqual([
         expect.objectContaining({ id: 'unknown' }),
@@ -818,10 +806,10 @@ describe('MessageComposer scheduled messages', () => {
         updated_at: msToNs(Date.UTC(2026, 9, 16)),
       });
       const updateSpy = mockScheduledUpdate(client, updated);
-      await composer.scheduledMessageComposition.editScheduledMessage(scheduledMessage);
+      await composer.editScheduledMessage(scheduledMessage);
       composer.textComposer.setText('see you the day after');
 
-      const result = await composer.scheduledMessageComposition.update();
+      const result = await composer.updateScheduledMessage();
 
       const message = updatedMessage(updateSpy);
       expect(updateSpy.mock.calls[0][0]).toEqual({ id: 'sm-1' });
@@ -848,7 +836,7 @@ describe('MessageComposer scheduled messages', () => {
     it('drops content removed in the composer from the update', async () => {
       const { client, composer } = setup();
       const updateSpy = mockScheduledUpdate(client, generateScheduledMessage());
-      await composer.scheduledMessageComposition.editScheduledMessage(
+      await composer.editScheduledMessage(
         generateScheduledMessage({
           message: {
             text: 'with attachment',
@@ -863,7 +851,7 @@ describe('MessageComposer scheduled messages', () => {
         ),
       );
 
-      await composer.scheduledMessageComposition.update();
+      await composer.updateScheduledMessage();
 
       expect(updatedMessage(updateSpy)).not.toHaveProperty('attachments');
     });
@@ -873,13 +861,11 @@ describe('MessageComposer scheduled messages', () => {
       mockScheduledUpdate(client, generateScheduledMessage());
       composer.textComposer.setText('my draft');
       composer.state.partialNext({ draftId: 'draft-1' });
-      await composer.scheduledMessageComposition.editScheduledMessage(
-        generateScheduledMessage(),
-      );
+      await composer.editScheduledMessage(generateScheduledMessage());
 
-      await composer.scheduledMessageComposition.update();
+      await composer.updateScheduledMessage();
 
-      expect(composer.scheduledMessageComposition.editedScheduledMessage).toBeUndefined();
+      expect(composer.editedScheduledMessage).toBeUndefined();
       expect(composer.textComposer.text).toBe('my draft');
       expect(composer.draftId).toBe('draft-1');
     });
@@ -890,14 +876,12 @@ describe('MessageComposer scheduled messages', () => {
       vi.spyOn(client.uploadManager, 'upload').mockResolvedValue({
         file: 'https://cdn.example.com/a.png',
       } as never);
-      await composer.scheduledMessageComposition.editScheduledMessage(
-        generateScheduledMessage(),
-      );
+      await composer.editScheduledMessage(generateScheduledMessage());
       composer.attachmentManager.state.partialNext({
         attachments: [uploadAttachment('uploading')],
       });
 
-      const result = await composer.scheduledMessageComposition.update();
+      const result = await composer.updateScheduledMessage();
 
       expect(result).toEqual(expect.objectContaining({ status: 'scheduled' }));
       expect(updatedMessage(updateSpy)).toEqual(
@@ -917,18 +901,16 @@ describe('MessageComposer scheduled messages', () => {
         new Error('upload failed'),
       );
       const scheduledMessage = generateScheduledMessage();
-      await composer.scheduledMessageComposition.editScheduledMessage(scheduledMessage);
+      await composer.editScheduledMessage(scheduledMessage);
       composer.attachmentManager.state.partialNext({
         attachments: [uploadAttachment('failed')],
       });
 
-      const result = await composer.scheduledMessageComposition.update();
+      const result = await composer.updateScheduledMessage();
 
       expect(result).toEqual({ error: expect.any(Error), status: 'failed' });
       expect(updateSpy).not.toHaveBeenCalled();
-      expect(composer.scheduledMessageComposition.editedScheduledMessage).toBe(
-        scheduledMessage,
-      );
+      expect(composer.editedScheduledMessage).toBe(scheduledMessage);
       expect(addErrorSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           options: expect.objectContaining({
@@ -944,15 +926,13 @@ describe('MessageComposer scheduled messages', () => {
       vi.spyOn(client, 'updateScheduledMessage').mockRejectedValue(error);
       const addErrorSpy = vi.spyOn(client.notifications, 'addError');
       const scheduledMessage = generateScheduledMessage();
-      await composer.scheduledMessageComposition.editScheduledMessage(scheduledMessage);
+      await composer.editScheduledMessage(scheduledMessage);
       composer.textComposer.setText('edited');
 
-      const result = await composer.scheduledMessageComposition.update();
+      const result = await composer.updateScheduledMessage();
 
       expect(result).toEqual({ error, status: 'failed' });
-      expect(composer.scheduledMessageComposition.editedScheduledMessage).toBe(
-        scheduledMessage,
-      );
+      expect(composer.editedScheduledMessage).toBe(scheduledMessage);
       expect(composer.textComposer.text).toBe('edited');
       expect(addErrorSpy).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -968,13 +948,11 @@ describe('MessageComposer scheduled messages', () => {
       const { composer } = setup();
       composer.textComposer.setText('my draft');
       composer.state.partialNext({ draftId: 'draft-1' });
-      await composer.scheduledMessageComposition.editScheduledMessage(
-        generateScheduledMessage(),
-      );
+      await composer.editScheduledMessage(generateScheduledMessage());
 
-      composer.scheduledMessageComposition.cancelEdit();
+      composer.cancelScheduledMessageEdit();
 
-      expect(composer.scheduledMessageComposition.editedScheduledMessage).toBeUndefined();
+      expect(composer.editedScheduledMessage).toBeUndefined();
       expect(composer.textComposer.text).toBe('my draft');
       expect(composer.draftId).toBe('draft-1');
     });
@@ -982,19 +960,17 @@ describe('MessageComposer scheduled messages', () => {
     it('keeps the first restore point when another scheduled message is edited', async () => {
       const { composer } = setup();
       composer.textComposer.setText('my draft');
-      await composer.scheduledMessageComposition.editScheduledMessage(
-        generateScheduledMessage(),
-      );
-      await composer.scheduledMessageComposition.editScheduledMessage(
+      await composer.editScheduledMessage(generateScheduledMessage());
+      await composer.editScheduledMessage(
         generateScheduledMessage({ id: 'sm-2', message: { text: 'second', custom: {} } }),
       );
 
-      composer.scheduledMessageComposition.cancelEdit();
+      composer.cancelScheduledMessageEdit();
 
       expect(composer.textComposer.text).toBe('my draft');
     });
 
-    it('fills the composer through initState and keeps the scheduled values', async () => {
+    it('fills the composer through initState in the scheduled message mode', async () => {
       const { composer } = setup();
       const initStateSpy = vi.spyOn(composer, 'initState');
       const scheduledMessage = generateScheduledMessage({
@@ -1006,33 +982,27 @@ describe('MessageComposer scheduled messages', () => {
         },
       });
 
-      await composer.scheduledMessageComposition.editScheduledMessage(scheduledMessage);
+      await composer.editScheduledMessage(scheduledMessage);
 
-      expect(initStateSpy).toHaveBeenCalledTimes(1);
       expect(initStateSpy).toHaveBeenCalledWith({
-        composition: expect.objectContaining({
-          channel_cid: cid,
-          message: expect.objectContaining({ id: 'sm-1', text: 'see you tomorrow' }),
-        }),
-        stateOverrides: expect.objectContaining({
-          draftId: null,
-          showReplyInChannel: true,
-        }),
+        composition: { mentionedUsers: [], quotedMessage: null, scheduledMessage },
       });
+      expect(composer.lastChange).toEqual({
+        draftUpdate: null,
+        stateUpdate: scheduledMessage.updated_at,
+      });
+      expect(composer.textComposer.text).toBe('see you tomorrow');
+      expect(composer.editedMessage).toBeUndefined();
       expect(composer.draftId).toBeNull();
       expect(composer.pollId).toBe('poll-1');
       expect(composer.showReplyInChannel).toBe(true);
-      expect(composer.scheduledMessageComposition.editedScheduledMessage).toBe(
-        scheduledMessage,
-      );
+      expect(composer.editedScheduledMessage).toBe(scheduledMessage);
     });
 
     it('disables commands while a scheduled message is edited', async () => {
       const { composer } = setup();
 
-      await composer.scheduledMessageComposition.editScheduledMessage(
-        generateScheduledMessage(),
-      );
+      await composer.editScheduledMessage(generateScheduledMessage());
 
       expect(composer.getCommandDisabledReason(giphyCommand)).toBe('editing');
       expect(composer.isCommandDisabled(giphyCommand)).toBe(true);
@@ -1043,16 +1013,14 @@ describe('MessageComposer scheduled messages', () => {
       addGiphyCommand(channel);
       const updateSpy = vi.spyOn(client, 'updateScheduledMessage');
       const addWarningSpy = vi.spyOn(client.notifications, 'addWarning');
-      await composer.scheduledMessageComposition.editScheduledMessage(
-        generateScheduledMessage(),
-      );
+      await composer.editScheduledMessage(generateScheduledMessage());
       composer.textComposer.setText('/giphy cats');
 
-      const result = await composer.scheduledMessageComposition.update();
+      const result = await composer.updateScheduledMessage();
 
       expect(result).toEqual({ status: 'blocked' });
       expect(updateSpy).not.toHaveBeenCalled();
-      expect(composer.scheduledMessageComposition.editedScheduledMessage).toBeDefined();
+      expect(composer.editedScheduledMessage).toBeDefined();
       expect(addWarningSpy).toHaveBeenCalledWith(
         blockedWarning(ScheduledMessageBlockReason.Command),
       );
@@ -1064,9 +1032,7 @@ describe('MessageComposer scheduled messages', () => {
       const deleteDraftSpy = vi.spyOn(channel, 'deleteDraft');
       const getDraftSpy = vi.spyOn(channel, 'getDraft');
       composer.state.partialNext({ draftId: 'draft-1' });
-      await composer.scheduledMessageComposition.editScheduledMessage(
-        generateScheduledMessage(),
-      );
+      await composer.editScheduledMessage(generateScheduledMessage());
 
       await composer.createDraft();
       await composer.deleteDraft();
@@ -1098,7 +1064,7 @@ describe('MessageComposer scheduled messages', () => {
         composer.textComposer.setText('my draft');
         composer.state.partialNext({ draftId: 'draft-1' });
         const scheduledMessage = generateScheduledMessage();
-        await composer.scheduledMessageComposition.editScheduledMessage(scheduledMessage);
+        await composer.editScheduledMessage(scheduledMessage);
         return { client, composer, scheduledMessage };
       };
 
@@ -1107,16 +1073,12 @@ describe('MessageComposer scheduled messages', () => {
 
         client.dispatchEvent(draftEvent('draft.updated', 'newer draft'));
 
-        expect(composer.scheduledMessageComposition.editedScheduledMessage).toBe(
-          scheduledMessage,
-        );
+        expect(composer.editedScheduledMessage).toBe(scheduledMessage);
         expect(composer.textComposer.text).toBe('see you tomorrow');
 
-        composer.scheduledMessageComposition.cancelEdit();
+        composer.cancelScheduledMessageEdit();
 
-        expect(
-          composer.scheduledMessageComposition.editedScheduledMessage,
-        ).toBeUndefined();
+        expect(composer.editedScheduledMessage).toBeUndefined();
         expect(composer.textComposer.text).toBe('newer draft');
         expect(composer.draftId).toBe('draft-2');
       });
@@ -1126,16 +1088,12 @@ describe('MessageComposer scheduled messages', () => {
 
         client.dispatchEvent(draftEvent('draft.deleted', 'my draft'));
 
-        expect(composer.scheduledMessageComposition.editedScheduledMessage).toBe(
-          scheduledMessage,
-        );
+        expect(composer.editedScheduledMessage).toBe(scheduledMessage);
         expect(composer.textComposer.text).toBe('see you tomorrow');
 
-        composer.scheduledMessageComposition.cancelEdit();
+        composer.cancelScheduledMessageEdit();
 
-        expect(
-          composer.scheduledMessageComposition.editedScheduledMessage,
-        ).toBeUndefined();
+        expect(composer.editedScheduledMessage).toBeUndefined();
         expect(composer.textComposer.text).toBe('');
         expect(composer.draftId).toBeNull();
       });
@@ -1145,7 +1103,7 @@ describe('MessageComposer scheduled messages', () => {
 
         client.dispatchEvent(draftEvent('draft.deleted', 'my draft'));
         client.dispatchEvent(draftEvent('draft.updated', 'written again'));
-        composer.scheduledMessageComposition.cancelEdit();
+        composer.cancelScheduledMessageEdit();
 
         expect(composer.textComposer.text).toBe('written again');
       });
@@ -1156,8 +1114,8 @@ describe('MessageComposer scheduled messages', () => {
       const updateSpy = vi.spyOn(client, 'updateScheduledMessage');
       composer.textComposer.setText('my draft');
 
-      const result = await composer.scheduledMessageComposition.update();
-      composer.scheduledMessageComposition.cancelEdit();
+      const result = await composer.updateScheduledMessage();
+      composer.cancelScheduledMessageEdit();
 
       expect(result).toEqual({ status: 'nothing-to-send' });
       expect(updateSpy).not.toHaveBeenCalled();
@@ -1170,12 +1128,10 @@ describe('MessageComposer scheduled messages', () => {
       const { composer } = setup();
       const failedMessage = generateFailedMessage();
 
-      await composer.scheduledMessageComposition.editScheduledMessage(failedMessage);
+      await composer.editScheduledMessage(failedMessage);
 
       expect(composer.textComposer.text).toBe('see you tomorrow');
-      expect(composer.scheduledMessageComposition.editedScheduledMessage).toBe(
-        failedMessage,
-      );
+      expect(composer.editedScheduledMessage).toBe(failedMessage);
       expect(composer.draftId).toBeNull();
     });
 
@@ -1184,10 +1140,8 @@ describe('MessageComposer scheduled messages', () => {
       const { client, composer } = setup();
       const updateSpy = vi.spyOn(client, 'updateScheduledMessage');
 
-      await composer.scheduledMessageComposition.editScheduledMessage(
-        generateFailedMessage(),
-      );
-      const result = await composer.scheduledMessageComposition.update();
+      await composer.editScheduledMessage(generateFailedMessage());
+      const result = await composer.updateScheduledMessage();
 
       expect(result).toEqual({ status: 'nothing-to-send' });
       expect(updateSpy).not.toHaveBeenCalled();
@@ -1199,9 +1153,9 @@ describe('MessageComposer scheduled messages', () => {
         message: { custom: {}, parent_id: 'parent-1', text: 'see you tomorrow' },
       });
       const sendSpy = mockScheduledSend(client, generateScheduledMessage({ id: 'sm-2' }));
-      await composer.scheduledMessageComposition.editScheduledMessage(failedReply);
+      await composer.editScheduledMessage(failedReply);
 
-      await composer.scheduledMessageComposition.schedule(scheduledAt);
+      await composer.scheduleMessage(scheduledAt);
 
       expect(sentRequest(sendSpy)).toEqual(
         expect.objectContaining({
@@ -1218,10 +1172,10 @@ describe('MessageComposer scheduled messages', () => {
       const deleteSpy = vi
         .spyOn(channel, 'deleteScheduledMessage')
         .mockResolvedValue(failedMessage);
-      await composer.scheduledMessageComposition.editScheduledMessage(failedMessage);
+      await composer.editScheduledMessage(failedMessage);
       const composerId = composer.id;
 
-      const result = await composer.scheduledMessageComposition.schedule(scheduledAt);
+      const result = await composer.scheduleMessage(scheduledAt);
 
       expect(sentRequest(sendSpy)).toEqual(
         expect.objectContaining({
@@ -1234,7 +1188,7 @@ describe('MessageComposer scheduled messages', () => {
         status: 'scheduled',
       });
       expect(deleteSpy).toHaveBeenCalledWith(failedMessage.id);
-      expect(composer.scheduledMessageComposition.editedScheduledMessage).toBeUndefined();
+      expect(composer.editedScheduledMessage).toBeUndefined();
     });
 
     it('restores the earlier composition after scheduling', async () => {
@@ -1244,11 +1198,9 @@ describe('MessageComposer scheduled messages', () => {
         generateFailedMessage(),
       );
       composer.textComposer.setText('my draft');
-      await composer.scheduledMessageComposition.editScheduledMessage(
-        generateFailedMessage(),
-      );
+      await composer.editScheduledMessage(generateFailedMessage());
 
-      await composer.scheduledMessageComposition.schedule(scheduledAt);
+      await composer.scheduleMessage(scheduledAt);
 
       expect(composer.textComposer.text).toBe('my draft');
     });
@@ -1259,15 +1211,13 @@ describe('MessageComposer scheduled messages', () => {
       const error = generateAPIError(4, 'boom');
       vi.spyOn(client, 'sendMessage').mockRejectedValue(error);
       const deleteSpy = vi.spyOn(channel, 'deleteScheduledMessage');
-      await composer.scheduledMessageComposition.editScheduledMessage(failedMessage);
+      await composer.editScheduledMessage(failedMessage);
 
-      const result = await composer.scheduledMessageComposition.schedule(scheduledAt);
+      const result = await composer.scheduleMessage(scheduledAt);
 
       expect(result).toEqual({ error, status: 'failed' });
       expect(deleteSpy).not.toHaveBeenCalled();
-      expect(composer.scheduledMessageComposition.editedScheduledMessage).toBe(
-        failedMessage,
-      );
+      expect(composer.editedScheduledMessage).toBe(failedMessage);
       expect(composer.textComposer.text).toBe('see you tomorrow');
     });
 
@@ -1280,13 +1230,9 @@ describe('MessageComposer scheduled messages', () => {
       const newScheduledMessage = generateScheduledMessage({ id: 'sm-2' });
       mockScheduledSend(client, newScheduledMessage);
       vi.spyOn(channel, 'deleteScheduledMessage').mockRejectedValue(new Error('gone'));
-      await composer.scheduledMessageComposition.editScheduledMessage(
-        generateFailedMessage(),
-      );
+      await composer.editScheduledMessage(generateFailedMessage());
 
-      await expect(
-        composer.scheduledMessageComposition.schedule(scheduledAt),
-      ).resolves.toEqual({
+      await expect(composer.scheduleMessage(scheduledAt)).resolves.toEqual({
         scheduledMessage: newScheduledMessage,
         status: 'scheduled',
       });
@@ -1314,16 +1260,14 @@ describe('MessageComposer scheduled messages', () => {
           }) as never,
       );
       composer.textComposer.setText('my draft');
-      await composer.scheduledMessageComposition.editScheduledMessage(
-        generateFailedMessage(),
-      );
+      await composer.editScheduledMessage(generateFailedMessage());
       composer.attachmentManager.state.partialNext({
         attachments: [uploadAttachment('uploading')],
       });
 
-      const scheduling = composer.scheduledMessageComposition.schedule(scheduledAt);
+      const scheduling = composer.scheduleMessage(scheduledAt);
       await vi.waitFor(() => expect(uploadSpy).toHaveBeenCalled());
-      composer.scheduledMessageComposition.cancelEdit();
+      composer.cancelScheduledMessageEdit();
       finishUpload({ file: 'https://cdn.example.com/a.png' });
 
       await expect(scheduling).resolves.toEqual({
@@ -1337,13 +1281,11 @@ describe('MessageComposer scheduled messages', () => {
       const { composer } = setup();
       composer.textComposer.setText('my draft');
       composer.state.partialNext({ draftId: 'draft-1' });
-      await composer.scheduledMessageComposition.editScheduledMessage(
-        generateFailedMessage(),
-      );
+      await composer.editScheduledMessage(generateFailedMessage());
 
-      composer.scheduledMessageComposition.cancelEdit();
+      composer.cancelScheduledMessageEdit();
 
-      expect(composer.scheduledMessageComposition.editedScheduledMessage).toBeUndefined();
+      expect(composer.editedScheduledMessage).toBeUndefined();
       expect(composer.textComposer.text).toBe('my draft');
       expect(composer.draftId).toBe('draft-1');
     });
@@ -1353,9 +1295,7 @@ describe('MessageComposer scheduled messages', () => {
       const createDraftSpy = vi.spyOn(channel, 'createDraft');
       const deleteDraftSpy = vi.spyOn(channel, 'deleteDraft');
       composer.state.partialNext({ draftId: 'draft-1' });
-      await composer.scheduledMessageComposition.editScheduledMessage(
-        generateFailedMessage(),
-      );
+      await composer.editScheduledMessage(generateFailedMessage());
 
       await composer.createDraft();
       await composer.deleteDraft();
@@ -1385,15 +1325,13 @@ describe('MessageComposer scheduled messages', () => {
           .spyOn(channel, 'deleteScheduledMessage')
           .mockResolvedValue(failedMessage);
         composer.textComposer.setText('my draft');
-        await composer.scheduledMessageComposition.editScheduledMessage(failedMessage);
+        await composer.editScheduledMessage(failedMessage);
         const composerId = composer.id;
 
         const sending = composer.send();
         await vi.waitFor(() => expect(sendRequest).toHaveBeenCalled());
 
-        expect(
-          composer.scheduledMessageComposition.editedScheduledMessage,
-        ).toBeUndefined();
+        expect(composer.editedScheduledMessage).toBeUndefined();
         expect(composer.textComposer.text).toBe('my draft');
         expect(deleteSpy).not.toHaveBeenCalled();
 
@@ -1416,9 +1354,7 @@ describe('MessageComposer scheduled messages', () => {
         const { channel, client, composer } = setup();
         stubSendRequest(channel, () => Promise.reject(new Error('boom')));
         const deleteSpy = vi.spyOn(channel, 'deleteScheduledMessage');
-        await composer.scheduledMessageComposition.editScheduledMessage(
-          generateFailedMessage(),
-        );
+        await composer.editScheduledMessage(generateFailedMessage());
 
         const result = await composer.send();
 
@@ -1439,11 +1375,11 @@ describe('MessageComposer scheduled messages', () => {
       composer.registerSubscriptions();
       composer.textComposer.setText('my draft');
       const scheduledMessage = generateScheduledMessage();
-      await composer.scheduledMessageComposition.editScheduledMessage(scheduledMessage);
+      await composer.editScheduledMessage(scheduledMessage);
 
       client.dispatchEvent(scheduledEvent(type, scheduledMessage));
 
-      expect(composer.scheduledMessageComposition.editedScheduledMessage).toBeUndefined();
+      expect(composer.editedScheduledMessage).toBeUndefined();
       expect(composer.textComposer.text).toBe('my draft');
       expect(addWarningSpy).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -1459,7 +1395,7 @@ describe('MessageComposer scheduled messages', () => {
       const { client, composer } = setup();
       composer.registerSubscriptions();
       const scheduledMessage = generateScheduledMessage();
-      await composer.scheduledMessageComposition.editScheduledMessage(scheduledMessage);
+      await composer.editScheduledMessage(scheduledMessage);
 
       client.dispatchEvent(
         scheduledEvent(
@@ -1468,16 +1404,14 @@ describe('MessageComposer scheduled messages', () => {
         ),
       );
 
-      expect(composer.scheduledMessageComposition.editedScheduledMessage).toBe(
-        scheduledMessage,
-      );
+      expect(composer.editedScheduledMessage).toBe(scheduledMessage);
     });
 
     it('keeps the newest stored copy of the edited message', async () => {
       const { client, composer } = setup();
       composer.registerSubscriptions();
       const scheduledMessage = generateScheduledMessage();
-      await composer.scheduledMessageComposition.editScheduledMessage(scheduledMessage);
+      await composer.editScheduledMessage(scheduledMessage);
       const newer = generateScheduledMessage({
         updated_at: msToNs(Date.UTC(2026, 9, 16)),
       });
@@ -1488,7 +1422,7 @@ describe('MessageComposer scheduled messages', () => {
       client.dispatchEvent(scheduledEvent(ScheduledMessageEventType.Updated, newer));
       client.dispatchEvent(scheduledEvent(ScheduledMessageEventType.Updated, older));
 
-      expect(composer.scheduledMessageComposition.editedScheduledMessage).toBe(newer);
+      expect(composer.editedScheduledMessage).toBe(newer);
       expect(composer.textComposer.text).toBe('see you tomorrow');
     });
 
@@ -1496,21 +1430,19 @@ describe('MessageComposer scheduled messages', () => {
       const { client, composer } = setup();
       composer.registerSubscriptions();
       const failedMessage = generateFailedMessage();
-      await composer.scheduledMessageComposition.editScheduledMessage(failedMessage);
+      await composer.editScheduledMessage(failedMessage);
 
       client.dispatchEvent(
         scheduledEvent(ScheduledMessageEventType.Failed, failedMessage),
       );
 
-      expect(composer.scheduledMessageComposition.editedScheduledMessage).toBe(
-        failedMessage,
-      );
+      expect(composer.editedScheduledMessage).toBe(failedMessage);
 
       client.dispatchEvent(
         scheduledEvent(ScheduledMessageEventType.Deleted, failedMessage),
       );
 
-      expect(composer.scheduledMessageComposition.editedScheduledMessage).toBeUndefined();
+      expect(composer.editedScheduledMessage).toBeUndefined();
     });
   });
 
@@ -1528,16 +1460,14 @@ describe('MessageComposer scheduled messages', () => {
     it('keeps the edit and restores the newer draft when the edit ends', async () => {
       const { composer } = setup();
       composer.textComposer.setText('my draft');
-      await composer.scheduledMessageComposition.editScheduledMessage(
-        generateScheduledMessage(),
-      );
+      await composer.editScheduledMessage(generateScheduledMessage());
 
       composer.initStateFromChannelResponse(channelResponseWithDraft('newer draft'));
 
       expect(composer.textComposer.text).toBe('see you tomorrow');
-      expect(composer.scheduledMessageComposition.editedScheduledMessage).toBeDefined();
+      expect(composer.editedScheduledMessage).toBeDefined();
 
-      composer.scheduledMessageComposition.cancelEdit();
+      composer.cancelScheduledMessageEdit();
 
       expect(composer.textComposer.text).toBe('newer draft');
     });
@@ -1545,13 +1475,11 @@ describe('MessageComposer scheduled messages', () => {
     it('keeps a failed message being scheduled again', async () => {
       const { composer } = setup();
       const failedMessage = generateFailedMessage();
-      await composer.scheduledMessageComposition.editScheduledMessage(failedMessage);
+      await composer.editScheduledMessage(failedMessage);
 
       composer.initStateFromChannelResponse(channelResponseWithDraft('newer draft'));
 
-      expect(composer.scheduledMessageComposition.editedScheduledMessage).toBe(
-        failedMessage,
-      );
+      expect(composer.editedScheduledMessage).toBe(failedMessage);
       expect(composer.textComposer.text).toBe('see you tomorrow');
     });
   });

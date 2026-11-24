@@ -6,7 +6,8 @@ import type {
   ScheduledMessageContentResponse,
   ScheduledMessageResponse,
 } from '../gen/models';
-import type { DraftMessage, DraftResponse, LocalMessage, UserResponse } from '../types';
+import type { DraftMessage, LocalMessage, UserResponse } from '../types';
+import type { EditedScheduledMessageComposition } from './types';
 
 const SCHEDULED_MESSAGE_SERVER_FIELDS = ['id', 'mml', 'shared_location'];
 
@@ -16,19 +17,23 @@ const SERVER_OWNED_FIELDS: ReadonlySet<string> = new Set([
   ...SCHEDULED_MESSAGE_SERVER_FIELDS,
 ]);
 
-const COMPOSER_OWNED_FIELD_NAMES = [
+const COMPOSER_CONTENT_FIELD_NAMES = [
   'attachments',
   'custom',
   'mentioned_channel',
   'mentioned_group_ids',
   'mentioned_here',
   'mentioned_roles',
-  'mentioned_users',
   'parent_id',
   'poll_id',
   'quoted_message_id',
   'show_in_channel',
   'text',
+] as const satisfies ReadonlyArray<keyof ScheduledMessageContentResponse>;
+
+const COMPOSER_OWNED_FIELD_NAMES = [
+  ...COMPOSER_CONTENT_FIELD_NAMES,
+  'mentioned_users',
 ] as const satisfies ReadonlyArray<keyof ScheduledMessageContentResponse>;
 
 const COMPOSER_OWNED_FIELDS: ReadonlySet<string> = new Set(COMPOSER_OWNED_FIELD_NAMES);
@@ -42,31 +47,19 @@ const COMPOSED_FIELDS_DROPPED_ON_UPDATE: ReadonlySet<string> = new Set(
   [...SERVER_OWNED_FIELDS].filter((field) => !COMPOSER_OWNED_FIELDS.has(field)),
 );
 
-export const toScheduledMessageDraft = (
-  scheduledMessage: ScheduledMessageResponse,
-): DraftMessage => {
+export const toComposerContent = ({
+  mentionedUsers,
+  scheduledMessage,
+}: EditedScheduledMessageComposition): DraftMessage => {
   const { id, message } = scheduledMessage;
 
-  return {
-    ...pickFields(message, COMPOSER_OWNED_FIELD_NAMES),
-    custom: message.custom ?? {},
+  const content: DraftMessage = {
+    ...pickFields(message, COMPOSER_CONTENT_FIELD_NAMES),
     id,
-    text: message.text,
-  } as DraftMessage;
-};
+    mentioned_users: mentionedUsers,
+  };
 
-export const toScheduledMessageComposition = (
-  scheduledMessage: ScheduledMessageResponse,
-): DraftResponse => {
-  const { cid, created_at, message } = scheduledMessage;
-  const { parent_id } = message;
-
-  return {
-    channel_cid: cid,
-    created_at,
-    message: toScheduledMessageDraft(scheduledMessage),
-    parent_id,
-  } as DraftResponse;
+  return content;
 };
 
 export const toScheduledMessagePayload = (
@@ -79,12 +72,12 @@ export const toScheduledMessagePayload = (
   const preservedFields = omitFields(storedMessage, STORED_FIELDS_REPLACED_ON_UPDATE);
   const composedFields = omitFields(composedMessage, COMPOSED_FIELDS_DROPPED_ON_UPDATE);
 
-  const scheduledMessagePayload = {
+  const scheduledMessagePayload: MessageRequest = {
     ...preservedFields,
     ...(pinExpires === undefined ? {} : { pin_expires: nsToDate(pinExpires) }),
     ...composedFields,
     parent_id: parentId,
-  } as MessageRequest;
+  };
 
   return scheduledMessagePayload;
 };
