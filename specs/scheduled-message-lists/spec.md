@@ -155,8 +155,8 @@ messages, and optimistic local messages have no server timestamp yet.
   list and to the manager's lists. The event that follows reaches every connection of the user,
   including this one. It carries the same `updated_at`, so the store takes it as a tie and the lists
   re-render once more with an equal copy; it cannot reorder anything or bring anything back.
-- **Threads:** the channel's list holds thread replies too (`message.parent_id`); a thread view
-  filters it with `getThreadScheduledMessages(items, parentId)`, which already exists.
+- **Threads:** the channel's list holds thread replies too (`message.parent_id`); a thread's
+  `ScheduledMessagesView` filters it by `parentId`.
 
 ### 3. The manager owns the lists the integrator registers (`client.scheduledMessagePaginators`)
 
