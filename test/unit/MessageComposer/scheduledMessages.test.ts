@@ -1061,9 +1061,7 @@ describe('MessageComposer scheduled messages', () => {
 
       await composer.editScheduledMessage(scheduledMessage);
 
-      expect(initStateSpy).toHaveBeenCalledWith({
-        composition: { mentionedUsers: [], quotedMessage: null, scheduledMessage },
-      });
+      expect(initStateSpy).toHaveBeenCalledWith({ composition: scheduledMessage });
       expect(composer.lastChange).toEqual({
         draftUpdate: null,
         stateUpdate: scheduledMessage.updated_at,

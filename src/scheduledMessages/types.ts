@@ -7,7 +7,6 @@ import type {
 import type {
   DeleteScheduledMessageResponse,
   MessageRequest,
-  ScheduledMessageResponse,
   SendMessageRequest,
   SendMessageResponse,
   SendScheduledMessageNowResponse,
@@ -20,16 +19,9 @@ import type {
   LocalMessage,
   SendMessageOptions,
   StreamResponse,
-  UserResponse,
 } from '../types';
 import type { ScheduledMessagePaginator } from '../pagination/paginators/ScheduledMessagePaginator';
 import type { ScheduledMessagePaginatorsManager } from './ScheduledMessagePaginatorsManager';
-
-export type EditedScheduledMessageComposition = {
-  mentionedUsers: UserResponse[];
-  quotedMessage: LocalMessage | null;
-  scheduledMessage: ScheduledMessageResponse;
-};
 
 export type ScheduledMessagePaginatorsManagerState = {
   /** A registered list's last query failed with error 114 (feature off). */

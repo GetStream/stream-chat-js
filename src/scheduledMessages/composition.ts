@@ -8,7 +8,6 @@ import type {
   SharedLocationResponseData,
 } from '../gen/models';
 import type { DraftMessage, LocalMessage, UserResponse } from '../types';
-import type { EditedScheduledMessageComposition } from './types';
 
 const SCHEDULED_MESSAGE_SERVER_FIELDS = ['id', 'mml'];
 
@@ -80,10 +79,9 @@ const toComposerLocation = ({
   };
 };
 
-export const toComposerContent = ({
-  mentionedUsers,
-  scheduledMessage,
-}: EditedScheduledMessageComposition): DraftMessage => {
+export const toComposerContent = (
+  scheduledMessage: ScheduledMessageResponse,
+): DraftMessage => {
   const { id, message } = scheduledMessage;
   const sharedLocation = toComposerLocation(scheduledMessage);
 
@@ -91,7 +89,6 @@ export const toComposerContent = ({
     ...pickFields(message, COMPOSER_CONTENT_FIELD_NAMES),
     ...(sharedLocation ? { shared_location: sharedLocation } : {}),
     id,
-    mentioned_users: mentionedUsers,
   };
 
   return content;
