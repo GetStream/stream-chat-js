@@ -372,21 +372,6 @@ export class MessageOperations {
     return handler ? handler(params, defaultRequest) : defaultRequest(params);
   }
 
-  private async withSettledScheduledUploads(
-    localMessage: LocalMessage,
-    message: MessageRequest,
-  ): Promise<MessageRequest> {
-    const settle = this.ctx.settlePendingUploads;
-    const attachments = localMessage.attachments;
-    if (!settle || !attachments?.length) return message;
-
-    const { attachments: settled, failureReason } = await settle(attachments);
-    if (failureReason) throw failureReason;
-    if (settled === attachments) return message;
-
-    return { ...message, attachments: settled };
-  }
-
   private async runScheduled<R extends { scheduled_message?: ScheduledMessageResponse }>(
     kind: ScheduledMessageOperationKind,
     id: string | undefined,
@@ -409,13 +394,20 @@ export class MessageOperations {
   }: ScheduleMessageParams): Promise<StreamResponse<SendMessageResponse>> {
     return await this.runScheduled('schedule', undefined, () =>
       this.sequenceRequests('schedule', async () => {
-        const settledMessage = localMessage
-          ? await this.withSettledScheduledUploads(localMessage, message)
-          : message;
+        let outgoingMessage = message;
+
+        if (localMessage) {
+          const settled = await this.withSettledUploads<'schedule'>({
+            localMessage,
+            message,
+          });
+          if (settled.failureReason) throw settled.failureReason;
+          outgoingMessage = settled.params.message ?? message;
+        }
 
         const request: SendMessageRequest = {
           ...options,
-          message: sanitizeOutgoingAttachments(settledMessage),
+          message: sanitizeOutgoingAttachments(outgoingMessage),
         };
 
         return await this.resolveScheduledRequest(
@@ -431,13 +423,19 @@ export class MessageOperations {
     id: string,
     { localMessage, request }: UpdateScheduledMessageParams,
   ): Promise<ScheduledMessageResponse> {
-    const settledMessage =
-      localMessage && request.message
-        ? await this.withSettledScheduledUploads(localMessage, request.message)
-        : request.message;
+    let outgoingMessage = request.message;
 
-    const sanitizedRequest = settledMessage
-      ? { ...request, message: sanitizeOutgoingAttachments(settledMessage) }
+    if (localMessage && outgoingMessage) {
+      const settled = await this.withSettledUploads<'schedule'>({
+        localMessage,
+        message: outgoingMessage,
+      });
+      if (settled.failureReason) throw settled.failureReason;
+      outgoingMessage = settled.params.message ?? outgoingMessage;
+    }
+
+    const sanitizedRequest = outgoingMessage
+      ? { ...request, message: sanitizeOutgoingAttachments(outgoingMessage) }
       : request;
 
     const { scheduled_message: scheduledMessage } = await this.runScheduled(

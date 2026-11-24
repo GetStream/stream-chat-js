@@ -12,9 +12,7 @@ import type { QueueableType } from '../offline-support/types';
 import type { Channel } from '../channel';
 import type { StreamChat } from '../client';
 
-export type OperationKind = 'send' | 'retry' | 'update' | 'delete';
-
-export type SequencedOperationKind = OperationKind | 'schedule';
+export type OperationKind = 'send' | 'retry' | 'update' | 'delete' | 'schedule';
 
 export type MessageOperationSpec = {
   send: {
@@ -33,12 +31,16 @@ export type MessageOperationSpec = {
     options: DeleteMessageOptions;
     requestResult: { message: MessageResponse };
   };
+  schedule: {
+    options: SendMessageOptions;
+    requestResult: SendMessageAPIResponse;
+  };
 };
 
 export type OperationParams<K extends OperationKind> = {
   localMessage: LocalMessage;
   options?: MessageOperationSpec[K]['options'];
-} & (K extends 'send' | 'retry' ? { message?: MessageRequest } : {});
+} & (K extends 'send' | 'retry' | 'schedule' ? { message?: MessageRequest } : {});
 
 export type OperationResponse = { message: MessageResponse };
 
@@ -90,10 +92,7 @@ export type MessageOperationsContext = {
    * Lets the owner serialize requests: the server dates a message on arrival, so a short text sent after
    * a photo would otherwise be dated first. Wraps the request only; call it once and return its result.
    */
-  sequenceRequests?: <T>(
-    kind: SequencedOperationKind,
-    request: () => Promise<T>,
-  ) => Promise<T>;
+  sequenceRequests?: <T>(kind: OperationKind, request: () => Promise<T>) => Promise<T>;
 
   /**
    * Resolves any attachment upload still in flight, returning the attachments with their URLs written
