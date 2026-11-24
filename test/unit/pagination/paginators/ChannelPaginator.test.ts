@@ -11,6 +11,7 @@ import {
   type Interval,
   PaginatorCursor,
   type StreamChat,
+  type TimestampNS,
 } from '../../../../src';
 import { getClientWithUser } from '../../test-utils/getClient';
 import { generateMsg } from '../../test-utils/generateMessage';
@@ -1240,6 +1241,50 @@ describe('ChannelPaginator', () => {
           ...requestOptions,
         }),
       });
+    });
+
+    it('keeps the cached channels when a live one arrives during the first query after the sync', async () => {
+      await setUpOfflineDb({ isSynced: true });
+      getChannelsForQuery.mockResolvedValue({
+        channels: [
+          generateChannel({
+            channel: {
+              id: 'cached-a',
+              type: 'type',
+              last_message_at: '2026-01-02T00:00:00.000Z',
+            },
+          }),
+          generateChannel({
+            channel: {
+              id: 'cached-b',
+              type: 'type',
+              last_message_at: '2026-01-01T00:00:00.000Z',
+            },
+          }),
+        ],
+      });
+      let resolveQuery!: (value: { channels: Channel[]; duration: string }) => void;
+      vi.spyOn(client, 'queryChannelsAndHydrate').mockReturnValue(
+        new Promise((resolve) => (resolveQuery = resolve)) as never,
+      );
+      const paginator = makePaginator();
+
+      const query = paginator.toTail();
+      await vi.waitFor(() => expect(paginator.items).toHaveLength(2));
+      // Newer than the cached channels: the list sorts on the message paginator's latest message.
+      const newestCached = paginator.items![0].messagePaginator.latestMessageAt!;
+      const live = client.channel('type', 'live');
+      live.messagePaginator.setQueriedLatestMessageAt((newestCached + 1) as TimestampNS);
+      paginator.ingestItem(live);
+
+      expect(paginator.items?.map((channel) => channel.id)).toEqual([
+        'live',
+        'cached-a',
+        'cached-b',
+      ]);
+      resolveQuery({ channels: [live], duration: '0' });
+      await query;
+      expect(paginator.items?.map((channel) => channel.id)).toEqual(['live']);
     });
 
     describe('cached messages', () => {
@@ -3227,6 +3272,263 @@ describe('ChannelPaginator', () => {
         'c5',
         'c6',
       ]);
+    });
+  });
+
+  // Every publish of the list in each offline flow, in order: a flicker, a row that moves or one
+  // that disappears changes these. `a` and `b` are cached; the server no longer returns `a` and has
+  // a newer `c`.
+  describe('offline flows, publish by publish', () => {
+    type Step =
+      | 'sync-ok'
+      | 'sync-fail'
+      | 'recover'
+      | 'pull'
+      | 'toTail'
+      | 'server-changes';
+
+    const run = async ({
+      synced,
+      firstQueryFails = false,
+      steps = [],
+      liveMidQuery = false,
+    }: {
+      synced: boolean;
+      firstQueryFails?: boolean;
+      steps?: Step[];
+      liveMidQuery?: boolean;
+    }) => {
+      vi.spyOn(utils, 'sleep').mockResolvedValue(undefined);
+      const offlineDb = new MockOfflineDB({ client });
+      client.setOfflineDBApi(offlineDb);
+      (offlineDb.initializeDB as unknown as MockInstance).mockReturnValue(true);
+      await offlineDb.init(client.userId as string);
+      offlineDb.syncManager.isSynced = synced;
+      (offlineDb.upsertCidsForQuery as unknown as MockInstance).mockResolvedValue(true);
+      const scheduled = vi.spyOn(
+        offlineDb.syncManager,
+        'scheduleSyncStatusChangeCallback',
+      );
+      (offlineDb.getChannelsForQuery as unknown as MockInstance).mockResolvedValue({
+        channels: [
+          generateChannel({
+            channel: {
+              id: 'a',
+              type: 'type',
+              last_message_at: '2026-01-02T00:00:00.000Z',
+            },
+          }),
+          generateChannel({
+            channel: {
+              id: 'b',
+              type: 'type',
+              last_message_at: '2026-01-01T00:00:00.000Z',
+            },
+          }),
+        ],
+      });
+      const newerThanA = (by: number) =>
+        (client.channel('type', 'a').messagePaginator.latestMessageAt! +
+          by) as TimestampNS;
+
+      let fail = firstQueryFails;
+      // After `server-changes`, the server no longer returns `b` and has a newer `d`.
+      let serverChanged = false;
+      let releaseQuery: (() => void) | undefined;
+      vi.spyOn(client, 'queryChannelsAndHydrate').mockImplementation(async () => {
+        if (liveMidQuery && !releaseQuery) {
+          await new Promise<void>((resolve) => (releaseQuery = resolve));
+        }
+        if (fail) throw new Error('offline');
+        const c = client.channel('type', 'c');
+        c.messagePaginator.setQueriedLatestMessageAt(newerThanA(1000));
+        if (serverChanged) {
+          const d = client.channel('type', 'd');
+          d.messagePaginator.setQueriedLatestMessageAt(newerThanA(2000));
+          return { channels: [d, c], duration: '0' } as never;
+        }
+        return { channels: [c, client.channel('type', 'b')], duration: '0' } as never;
+      });
+
+      const paginator = new ChannelPaginator({
+        client,
+        filters: { type: 'type' },
+        sort: [{ field: 'last_message_at', direction: -1 }],
+      });
+      const log: string[] = [];
+      paginator.state.subscribe(({ isLoading, items }) => {
+        const ids = items ? `[${items.map((channel) => channel.id)}]` : '-';
+        log.push(`${isLoading ? 'loading' : 'idle'} ${ids}`);
+      });
+
+      const first = paginator.toTail();
+      if (liveMidQuery) {
+        await vi.waitFor(() => expect(releaseQuery).toBeDefined());
+        const live = client.channel('type', 'live');
+        live.messagePaginator.setQueriedLatestMessageAt(newerThanA(500));
+        log.push('live ingest');
+        paginator.ingestItem(live);
+        releaseQuery!();
+      }
+      await first;
+      for (const step of steps) {
+        log.push(step);
+        if (step === 'server-changes') {
+          serverChanged = true;
+          continue;
+        }
+        if (step === 'sync-ok' || step === 'sync-fail') {
+          fail = step === 'sync-fail';
+          offlineDb.syncManager.isSynced = true;
+          await scheduled.mock.calls.at(-1)![1]();
+        }
+        fail = false;
+        if (step === 'recover') await paginator.recoverLoadedItems();
+        if (step === 'pull')
+          await paginator.toTail({ keepPreviousItems: true, reset: 'yes' });
+        if (step === 'toTail') await paginator.toTail();
+      }
+      return log;
+    };
+
+    describe('cold start, before the sync', () => {
+      const seeded = ['idle -', 'idle [a,b]', 'idle [a,b]'];
+      const failed = ['sync-fail', 'idle [a,b]', 'loading [a,b]', 'idle [a,b]'];
+
+      it('shows the cached channels, then the server page', async () => {
+        expect(await run({ synced: false, steps: ['sync-ok'] })).toEqual([
+          ...seeded,
+          'sync-ok',
+          'idle [a,b]',
+          'loading [a,b]',
+          'idle [c,b]',
+        ]);
+      });
+
+      it('recovers after a failed query', async () => {
+        expect(await run({ synced: false, steps: ['sync-fail', 'recover'] })).toEqual([
+          ...seeded,
+          ...failed,
+          'recover',
+          'idle [a,b]',
+          // The server page takes the cached channels' place in one publish.
+          'idle [c,b]',
+          'idle [c,b]',
+        ]);
+      });
+
+      it('refreshes after a failed query', async () => {
+        expect(await run({ synced: false, steps: ['sync-fail', 'pull'] })).toEqual([
+          ...seeded,
+          ...failed,
+          'pull',
+          'idle [a,b]',
+          'loading [a,b]',
+          // `a`, which the server no longer returns, is gone.
+          'idle [c,b]',
+        ]);
+      });
+
+      it('queries again after a failed query', async () => {
+        expect(await run({ synced: false, steps: ['sync-fail', 'toTail'] })).toEqual([
+          ...seeded,
+          ...failed,
+          'toTail',
+          // Cached channels only: the query is a refresh keeping them, as pull-to-refresh is.
+          'idle [a,b]',
+          'loading [a,b]',
+          'idle [c,b]',
+        ]);
+      });
+    });
+
+    describe('loaded from the server', () => {
+      const loaded = ['idle -', 'loading -', 'loading [a,b]', 'idle [c,b]'];
+
+      // The server no longer returns `b` and has a newer `d`.
+      it('recovers after a reconnect', async () => {
+        expect(await run({ synced: true, steps: ['server-changes', 'recover'] })).toEqual(
+          [
+            ...loaded,
+            'server-changes',
+            'recover',
+            'idle [c,b]',
+            'idle [d,c,b]',
+            'idle [d,c,b]',
+            'idle [d,c,b]',
+            'idle [d,c]',
+            'idle [d,c]',
+          ],
+        );
+      });
+
+      // Known: the refresh merges into the loaded channels, keeping `b`. A reconnect drops it.
+      it('refreshes', async () => {
+        expect(await run({ synced: true, steps: ['server-changes', 'pull'] })).toEqual([
+          ...loaded,
+          'server-changes',
+          'pull',
+          'idle [c,b]',
+          'loading [c,b]',
+          'idle [d,c,b]',
+        ]);
+      });
+    });
+
+    describe('after the sync', () => {
+      const shown = ['idle -', 'loading -', 'loading [a,b]'];
+
+      it('shows the cached channels while the query runs, then the server page', async () => {
+        expect(await run({ synced: true })).toEqual([...shown, 'idle [c,b]']);
+      });
+
+      it('recovers after a failed query', async () => {
+        expect(
+          await run({ synced: true, firstQueryFails: true, steps: ['recover'] }),
+        ).toEqual([
+          ...shown,
+          'idle [a,b]',
+          'recover',
+          'idle [a,b]',
+          'idle [c,b]',
+          'idle [c,b]',
+        ]);
+      });
+
+      it('refreshes after a failed query', async () => {
+        expect(
+          await run({ synced: true, firstQueryFails: true, steps: ['pull'] }),
+        ).toEqual([
+          ...shown,
+          'idle [a,b]',
+          'pull',
+          'idle [a,b]',
+          'loading [a,b]',
+          'idle [c,b]',
+        ]);
+      });
+
+      it('queries again after a failed query', async () => {
+        expect(
+          await run({ synced: true, firstQueryFails: true, steps: ['toTail'] }),
+        ).toEqual([
+          ...shown,
+          'idle [a,b]',
+          'toTail',
+          'idle [a,b]',
+          'loading [a,b]',
+          'idle [c,b]',
+        ]);
+      });
+
+      it('keeps the cached channels and a live one that arrives while the query runs', async () => {
+        expect(await run({ synced: true, liveMidQuery: true })).toEqual([
+          ...shown,
+          'live ingest',
+          'loading [live,a,b]',
+          'idle [c,live,b]',
+        ]);
+      });
     });
   });
 });
