@@ -1802,7 +1802,7 @@ Common pattern for every generated or overridden `Channel` method: the trailing 
 **Kind:** type-shape · **Impact:** high · **PR:** #1813
 
 - **v9:** one list per manager; `new ChannelManager({ client, eventHandlerOverrides?, options?, queryChannelsOverride? })` or `client.createChannelManager(...)`; any number per client; `readonly state: StateStore<{ channels, initialized, pagination, error }>` (`ChannelManagerState`). The class carried the JSDoc `tags` `@internal` but was exported and used by the UI SDKs (v10 drops the tag).
-- **v10:** a different class (former rc `ChannelPaginatorsOrchestrator`) holding N `ChannelPaginator` lists plus the client's channel store. The client builds exactly one, `client.channelManager`; ctor `({ client, paginators?, eventHandlers?, ownershipResolver? })`; `state: StateStore<{ paginators: ChannelPaginator[] }>`; `getPaginatorById`, `insertPaginator`, `removePaginator`, `setPaginators`, `clearPaginators`. List state lives on each `paginator.state`. Statics `getDefaultHandlers()`, `defaultEventHandlers` (protected).
+- **v10:** a different class (former rc `ChannelPaginatorsOrchestrator`) holding N `ChannelPaginator` lists plus the client's channel store. The client builds exactly one, `client.channelManager`; ctor `({ client, paginators?, eventHandlers?, ownershipResolver? })`; `state: StateStore<{ paginators: ChannelPaginator[] }>`; `getPaginatorById`, `insertPaginator`, `removePaginator`, `setPaginators`, `clearPaginators`. List state lives on each `paginator.state`. Assigning `paginator.staticFilters`, `sort` or `options` so that the list's query changes (anything but `limit`, `offset`, `member_limit`, `message_limit` and `undefined` values inside the filters or sort) resets the list to `items: undefined`, and the results of a query still running are ignored; the next `toTail()` or `reload()` loads the first page of the new query. Any `resetState()` of a `ChannelPaginator` also clears `paginator.predefinedFilter` until the next first page reports it. A list with `options.predefined_filter` that has neither a page nor `predefinedFilter` matches no channel, so events add none to it before its first page. Statics `getDefaultHandlers()`, `defaultEventHandlers` (protected).
 - **Migrate:** use `client.channelManager`; create one `new ChannelPaginator({ client, filters, sort, id, paginatorOptions })` per list and `client.channelManager.insertPaginator({ paginator })` / `removePaginator(id)` / `setPaginators([...])`. Read list state from `paginator.state`:
 
   | v9 `manager.state`                | v10                                                               |
@@ -1811,7 +1811,7 @@ Common pattern for every generated or overridden `Channel` method: the trailing 
   | `initialized`                     | `paginator.state.items !== undefined` / `paginator.isInitialized` |
   | `pagination.hasNext`              | `paginator.state.hasMoreTail`                                     |
   | `pagination.isLoading`            | `paginator.state.isLoading`                                       |
-  | `pagination.isLoadingNext`        | none (`isLoading && items.length > 0`)                            |
+  | `pagination.isLoadingNext`        | `isLoading && loadingDirection === 'tailward'` (since 10.2)       |
   | `pagination.filters/sort/options` | `paginator.staticFilters` / `sort` / `options`                    |
   | `error`                           | `paginator.state.lastQueryError`                                  |
 
@@ -2028,16 +2028,16 @@ Client-level `queryThreads` / `getThread` becoming raw: [threads and reactions](
 - **v9:** `thread.state.getLatestValue().replies`, `state.pagination` (`ThreadRepliesPagination`: `isLoadingNext`, `isLoadingPrev`, `nextCursor`, `prevCursor`), `thread.loadNextPage({ limit })`, `thread.loadPrevPage({ limit })`, `thread.queryReplies(options)` (default limit 50).
 - **v10:** removed from `Thread` / `ThreadState`. Replies live in `thread.messagePaginator` (a `MessagePaginator`, page size 50, seeded from `latest_replies`).
 
-  | v9                                           | v10                                                             |
-  | -------------------------------------------- | --------------------------------------------------------------- |
-  | `state.replies`                              | `thread.messagePaginator.state.getLatestValue().items ?? []`    |
-  | `loadPrevPage()` (older, `id_lt`)            | `thread.messagePaginator.toTail()`                              |
-  | `loadNextPage()` (newer, `id_gt`)            | `thread.messagePaginator.toHead()`                              |
-  | `pagination.prevCursor !== null`             | `messagePaginator.state.hasMoreTail`                            |
-  | `pagination.nextCursor !== null`             | `messagePaginator.state.hasMoreHead`                            |
-  | `pagination.isLoadingPrev` / `isLoadingNext` | `messagePaginator.state.isLoading` (one flag)                   |
-  | `queryReplies(opts)`                         | `client.getReplies({ parent_id }, { limit, id_lt, ... })` (raw) |
-  | type `ThreadRepliesPagination`               | `PaginatorState` ([paginator state](#paginator-state))          |
+  | v9                                           | v10                                                                          |
+  | -------------------------------------------- | ---------------------------------------------------------------------------- |
+  | `state.replies`                              | `thread.messagePaginator.state.getLatestValue().items ?? []`                 |
+  | `loadPrevPage()` (older, `id_lt`)            | `thread.messagePaginator.toTail()`                                           |
+  | `loadNextPage()` (newer, `id_gt`)            | `thread.messagePaginator.toHead()`                                           |
+  | `pagination.prevCursor !== null`             | `messagePaginator.state.hasMoreTail`                                         |
+  | `pagination.nextCursor !== null`             | `messagePaginator.state.hasMoreHead`                                         |
+  | `pagination.isLoadingPrev` / `isLoadingNext` | `isLoading` with `loadingDirection` `'tailward'` / `'headward'` (since 10.2) |
+  | `queryReplies(opts)`                         | `client.getReplies({ parent_id }, { limit, id_lt, ... })` (raw)              |
+  | type `ThreadRepliesPagination`               | `PaginatorState` ([paginator state](#paginator-state))                       |
 
 - **Migrate:** per table.
 - **Source:** `src/thread.ts:51-76,126,245-278`, `src/gen/chat/ChatApi.ts:1044`, `src/pagination/paginators/MessageIntervalPaginator.ts:483` (v10); `src/thread.ts:30-62,582-648`, `src/index.ts:27-32` (v9)
@@ -2155,7 +2155,7 @@ Client-level `queryThreads` / `getThread` becoming raw: [threads and reactions](
   | `state.threads`                                         | `client.threads.paginator.state.getLatestValue().items ?? []`                            |
   | `state.ready`                                           | `paginator.state.items !== undefined` (not `isInitialized`)                              |
   | `pagination.isLoading` (first load)                     | `paginator.isLoading && !items?.length`                                                  |
-  | `pagination.isLoadingNext`                              | `paginator.isLoading && items.length > 0`                                                |
+  | `pagination.isLoadingNext`                              | `paginator.isLoading && paginator.loadingDirection === 'tailward'` (since 10.2)          |
   | `pagination.isLoading` during a reload of a loaded list | no flag; await `client.threads.reload()`                                                 |
   | `pagination.nextCursor`                                 | `paginator.state.hasMoreTail`                                                            |
   | `loadNextPage()`                                        | `client.threads.paginator.toTail()` (no-op before first load and at the end)             |
@@ -2526,7 +2526,7 @@ Poll data types and `PollResponse` renaming: [poll types](#poll-types). State ti
 **Kind:** type-shape · **Impact:** medium
 
 - **v9:** `PaginatorState<T = any> = { hasNext, hasPrev, isLoading, items, lastQueryError?, cursor?: { next, prev }, offset? }`; `paginator.cursor.next/.prev`; getters `hasNext`, `hasPrev`; `initialState`.
-- **v10:** `PaginatorState<T>` (type argument now required) `= { hasMoreHead, hasMoreTail, isLoading, items, lastQueryError?, cursor?: PaginatorCursor, offset? }`; `PaginatorCursor = { tailward, headward }` (`undefined` = not requested yet, `null` = exhausted); getters `hasMoreTail`, `hasMoreHead`; `hasNext` / `hasPrev` removed; `initialState` follows the new shape.
+- **v10:** `PaginatorState<T>` (type argument now required) `= { hasMoreHead, hasMoreTail, isLoading, loadingDirection?, items, lastQueryError?, cursor?: PaginatorCursor, offset? }` (`loadingDirection` since 10.2: `'headward'` or `'tailward'` while a query loads a page at that edge of the loaded items, `undefined` for a first page, a refresh or a jump); `PaginatorCursor = { tailward, headward }` (`undefined` = not requested yet, `null` = exhausted); getters `hasMoreTail`, `hasMoreHead`; `hasNext` / `hasPrev` removed; `initialState` follows the new shape.
 - **Migrate:** `hasNext` -> `hasMoreTail`, `hasPrev` -> `hasMoreHead` (getter and `state`), `cursor.next` -> `cursor.tailward`, `cursor.prev` -> `cursor.headward`; `PaginatorState` -> `PaginatorState<Item>`. Selectors reading `hasNext` from `state` now get `undefined`. Search sources (`BaseSearchSource` and its subclasses) are not paginators and keep `hasNext`.
 - **Source:** `src/pagination/paginators/BasePaginator.ts:169-176,256-264,685-709,732-742` (v10); `src/pagination/BasePaginator.ts:5,19-27,56-62,72-82` (v9)
 
@@ -2570,7 +2570,7 @@ Poll data types and `PollResponse` renaming: [poll types](#poll-types). State ti
 **Kind:** behavior · **Impact:** low
 
 - **v9:** each page appended to `items` in server order, no dedup; `items` reset only by `resetState()` or when `undefined`; offset mode left `hasPrev` at `true`, `hasNext = items.length === pageSize`; `prev` could run while loading; errors only stored in `lastQueryError`.
-- **v10:** pages are ingested into interval storage keyed by `getItemId` (default `item.id`): duplicates collapse, items are ordered by the paginator comparator, a changed query shape (deep-equal of `getNextQueryShape()`) is treated as a first page and resets state first. Offset mode: `hasMoreHead = initialOffset > 0`, `hasMoreTail = items.length >= pageSize`. Optional `retryCount` and `throwErrors`.
+- **v10:** pages are ingested into interval storage keyed by `getItemId` (default `item.id`): duplicates collapse, items are ordered by the paginator comparator, a changed query shape (deep-equal of `getNextQueryShape()`) is treated as a first page and resets state first. An empty first page leaves a list without items (`items: undefined`) loaded and empty (`items: []`), also with `keepPreviousItems`, and with `updateState: false` unless the page is at a caller's `queryShape` or a later query claimed the active interval; only a list that has items keeps them. The results of a query still running when `resetState()` runs are ignored: its page and error never reach the reset state, and it throws nothing, also with `throwErrors`. The rest of its response is still applied, so a `ChannelPaginator` query still hydrates its channels into the client's channel store. Offset mode: `hasMoreHead = initialOffset > 0`, `hasMoreTail = items.length >= pageSize`. Optional `retryCount` and `throwErrors`.
 - **Migrate:** none for consumers of built-in paginators; custom subclasses must expose a stable id and a comparator matching server order.
 - **Source:** `src/pagination/paginators/BasePaginator.ts:3034-3063,3098-3136,3278-3300` (v10); `src/pagination/BasePaginator.ts:104-129,150-156` (v9)
 
@@ -3738,6 +3738,9 @@ Changes where code written for v9 can type-check (or run untyped) against v10 an
 | Composer          | a custom attachment alone is sendable content; a `file` with no `uploadState` is no longer sent                                                                                                 | [non-upload-attachments](#non-upload-attachments)                                 |
 | Utilities         | `formatMessage` memoized, no `Date` conversion                                                                                                                                                  | [format-message](#format-message)                                                 |
 | Utilities         | `logChatPromiseExecution` logs through `chatLoggerSystem`                                                                                                                                       | [log-chat-promise-execution](#log-chat-promise-execution)                         |
+| Channel list      | assigning `staticFilters`, `sort` or `options` that change the query resets the list to `items: undefined`                                                                                      | [channel-manager](#channel-manager)                                               |
+| Pagination        | an empty first page leaves a list without items at `[]`, also with `keepPreviousItems` or `updateState: false`                                                                                  | [paginator-items](#paginator-items)                                               |
+| Pagination        | the results of a query still running when `resetState()` runs are ignored (page and error)                                                                                                      | [paginator-items](#paginator-items)                                               |
 
 <a id="internal-surface"></a>
 

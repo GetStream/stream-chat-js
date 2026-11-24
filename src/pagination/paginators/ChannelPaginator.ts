@@ -31,7 +31,7 @@ import type {
 } from '../../types';
 import type { FieldToDataResolver, PathResolver } from '../types.normalization';
 import { resolveDotPathValue } from '../utility.normalization';
-import { isEqual } from '../../utils/mergeWith/mergeWithCore';
+import { isClassInstance, isEqual } from '../../utils/mergeWith/mergeWithCore';
 
 const hasSameItems = (current: Channel[] | undefined, next: Channel[] | undefined) => {
   if (current === next) return false;
@@ -105,7 +105,23 @@ export type ChannelPaginatorOptions = {
   store?: EntityStore<Channel>;
 };
 
-/** The query without its page: shapes with the same identity continue one pagination. */
+/** A copy without `undefined` object values, which JSON drops from a request body. */
+const withoutUndefinedValues = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(withoutUndefinedValues);
+  if (!value || typeof value !== 'object' || isClassInstance(value)) return value;
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([, entry]) => entry !== undefined)
+      .map(([key, entry]) => [key, withoutUndefinedValues(entry)]),
+  );
+};
+
+/**
+ * The query without its page: shapes with the same identity send the same request and continue
+ * one pagination. `undefined` values inside a request field (filters, sort) are left out. A
+ * top-level `undefined` is kept: `client.queryChannels()` lets it override a default (`watch`,
+ * `state`).
+ */
 const getQueryIdentity = (queryShape: ChannelQueryShape | undefined) => {
   if (!queryShape) return queryShape;
   const {
@@ -116,7 +132,9 @@ const getQueryIdentity = (queryShape: ChannelQueryShape | undefined) => {
 
     ...identity
   } = queryShape;
-  return identity;
+  return Object.fromEntries(
+    Object.entries(identity).map(([key, value]) => [key, withoutUndefinedValues(value)]),
+  );
 };
 
 const hasPaginationQueryShapeChanged: PaginationQueryShapeChangeIdentifier<
@@ -457,21 +475,59 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
     return this._channelStateOptions;
   }
 
+  /** Sets the filters the list queries; a change resets the list (see `changeQuery`). */
   set staticFilters(filters: ChannelFilters | undefined) {
-    this._staticFilters = filters;
+    this.changeQuery(() => {
+      this._staticFilters = filters;
+    });
   }
 
+  /** Sets the sort the list queries and orders by; a change resets the list (see `changeQuery`). */
   set sort(sort: SortParamRequest[] | undefined) {
-    this._sort = sort;
-    this.sortComparator = this.buildSortComparator(this.effectiveSort);
+    this.changeQuery(() => {
+      this._sort = sort;
+      this.sortComparator = this.buildSortComparator(this.effectiveSort);
+    });
   }
 
+  /** Sets the request options; one that changes the query resets the list (see `changeQuery`). */
   set options(options: ChannelPaginatorRequestOptions | undefined) {
-    this._options = options;
+    this.changeQuery(() => {
+      this._options = options;
+    });
   }
 
   set channelStateOptions(options: ChannelStateOptions | undefined) {
     this._channelStateOptions = options;
+  }
+
+  /**
+   * Applies a change to a query input (filters, sort, options) and resets the list with
+   * `resetState()` when the query identity changes (`queryChangeDiscardsPages`). It compares the
+   * whole query before and after, so setting an equal value or only a page-size option keeps the
+   * loaded pages.
+   *
+   * After a reset the list stays "never queried" until `toTail()` or `reload()` loads the new
+   * query's first page. A query still running for the old query is ignored; a debounced query
+   * stays scheduled and runs with the new query.
+   */
+  private changeQuery(applyChange: () => void) {
+    const queryBefore = this.getNextQueryShape();
+    applyChange();
+    if (this.queryChangeDiscardsPages(queryBefore)) this.resetState();
+  }
+
+  /**
+   * Whether the next query has another identity than `queryBefore`
+   * (`hasPaginationQueryShapeChanged`). The identity is the filters, the sort and the request
+   * options, such as `watch` or `predefined_filter`. It leaves out `limit` and `offset` (the page)
+   * and `member_limit` and `message_limit` (how much of each channel loads).
+   */
+  private queryChangeDiscardsPages(queryBefore: ChannelQueryShape): boolean {
+    return this.config.hasPaginationQueryShapeChanged(
+      queryBefore,
+      this.getNextQueryShape(),
+    );
   }
 
   get sortComparatorFactory(): ChannelSortComparatorFactory | undefined {
@@ -507,7 +563,24 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
       baseFilters: { ...this.effectiveFilters },
     });
 
+  /**
+   * Whether the list runs a `predefined_filter` query and holds neither a page nor the filter the
+   * server reported for it (`predefinedFilter`): its `staticFilters` do not say which channels it
+   * holds. A list holding items without that filter (loaded through `doRequest`, or from an offline
+   * cache stored without it) matches by `staticFilters`.
+   */
+  private get awaitsPredefinedFilter(): boolean {
+    return (
+      !!this._options?.predefined_filter && !this._predefinedFilter && !this.hasResults
+    );
+  }
+
+  /**
+   * Whether `channel` belongs to the list. Nothing does while a list with
+   * `options.predefined_filter` holds neither a page nor `predefinedFilter`.
+   */
   matchesFilter(channel: Channel): boolean {
+    if (this.awaitsPredefinedFilter) return false;
     const filters = this.buildMatchFilters();
 
     // Like `queryChannels`, exclude hidden channels unless the filter asks for them. Not a synthetic
@@ -638,6 +711,7 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
       return undefined;
 
     const { stateOptions: _, ...request } = queryShape;
+    const checkWasStateResetDuringQuery = this.makeStateResetWatcher();
 
     try {
       const cachedQuery = await this.client.offlineDb.getChannelsForQuery({
@@ -645,7 +719,8 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
         options: request,
       });
 
-      if (cachedQuery) {
+      // the cache of a query started before a reset must not reach the list or the channel store
+      if (cachedQuery && !checkWasStateResetDuringQuery()) {
         if (cachedQuery.predefinedFilter) {
           this.applyPredefinedFilterResponse(cachedQuery.predefinedFilter);
         }
@@ -657,7 +732,8 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
       }
     } catch (error) {
       chatLoggerSystem.getLogger('channel').error((error as Error).message);
-      if (this.config.throwErrors) throw error;
+      // a query started before a reset reports nothing
+      if (this.config.throwErrors && !checkWasStateResetDuringQuery()) throw error;
     }
     return;
   };
@@ -717,6 +793,7 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
       return;
     }
     this._queryAwaitingSync = queryShape;
+    const checkWasStateResetDuringQuery = this.makeStateResetWatcher();
 
     if (!this.isInitialized) {
       let cachedChannels: Channel[] | undefined;
@@ -729,6 +806,8 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
         this._queryAwaitingSync = undefined;
         throw error;
       }
+      // the list's flags and loading state belong to the queries started since the reset
+      if (checkWasStateResetDuringQuery()) return;
       if (cachedChannels?.length) {
         // Seed via `setItems`, which ingests the page into the interval/index storage.
         // TODO: Maybe find a better way to do this rather than 2 partialNext invocations
@@ -770,6 +849,7 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
     this._itemsLoadedFromOfflineDB = false;
     const queryShape = preparedQueryShape ?? this.getNextQueryShape();
     const { stateOptions, ...request } = queryShape;
+    const checkWasStateResetDuringQuery = this.makeStateResetWatcher();
     let items: Channel[];
     if (this.config.doRequest) {
       items = (await this.config.doRequest(queryShape)).items;
@@ -780,7 +860,10 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
         withResponse: true,
       });
       items = response.channels;
-      this._pendingPredefinedFilter = response.predefined_filter;
+      // the response of a query started before a reset describes no query the list runs
+      if (!checkWasStateResetDuringQuery()) {
+        this._pendingPredefinedFilter = response.predefined_filter;
+      }
     }
     return { items };
   };
@@ -954,11 +1037,22 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
     this.removeItem({ id, item: channel as Channel });
   }
 
+  /**
+   * Returns the list to "never queried": no channels, no loaded pages, no `predefinedFilter`, and
+   * no record of queries in progress. A query running meanwhile is ignored; a debounced query
+   * stays scheduled.
+   */
   resetState() {
-    super.resetState();
-    this._itemIndex.clear();
+    // Cleared before `super.resetState()` notifies `paginator.state` subscribers: one may call
+    // `toTail()` there, and clearing afterwards would wipe what that query set.
     this._queryAwaitingSync = undefined;
     this._tailQueryAwaitingRecovery = false;
+    this._itemsLoadedFromOfflineDB = false;
+    this._replaceOfflineSeedOnResponse = false;
+    this._pendingPredefinedFilter = undefined;
+    if (this._predefinedFilter) this.applyPredefinedFilterResponse(undefined);
+    super.resetState();
+    this._itemIndex.clear();
   }
 
   removeItem(params: { id?: string; item?: Channel }): ItemCoordinates {
