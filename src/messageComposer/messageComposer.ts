@@ -1237,7 +1237,11 @@ export class MessageComposer extends WithSubscriptions {
     }
   };
 
-  /** Clears the composer, or only detaches the poll when `retainsCompositionOnSubmit`. */
+  /**
+   * Clears the composer, or only detaches the poll when `retainsCompositionOnSubmit`.
+   *
+   * @internal
+   */
   releaseSubmittedComposition = () => {
     if (this.retainsCompositionOnSubmit) {
       this.state.partialNext({
@@ -1264,6 +1268,7 @@ export class MessageComposer extends WithSubscriptions {
     });
   };
 
+  /** @internal */
   reportSubmitFailure = (type: CoreNotificationType, message: string, error: unknown) => {
     this.client.notifications.addError({
       message,
