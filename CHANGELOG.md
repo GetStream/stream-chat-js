@@ -1,3 +1,9 @@
+## [10.3.1](https://github.com/GetStream/stream-chat-js/compare/v10.3.0...v10.3.1) (2026-11-25)
+
+### Bug Fixes
+
+* **MessageComposer:** send a bounced message again after it is edited ([#2041](https://github.com/GetStream/stream-chat-js/issues/2041)) ([cd1284c](https://github.com/GetStream/stream-chat-js/commit/cd1284c0da85047922f6f3ce393d5fc0f897cdd5)), closes [#1990](https://github.com/GetStream/stream-chat-js/issues/1990)
+
 ## [10.3.0](https://github.com/GetStream/stream-chat-js/compare/v10.2.0...v10.3.0) (2026-11-25)
 
 ### Features
