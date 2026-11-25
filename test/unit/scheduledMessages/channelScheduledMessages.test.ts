@@ -622,6 +622,52 @@ describe("a channel's scheduled messages", () => {
     });
   });
 
+  describe('channel requests', () => {
+    it('schedules through the channel send endpoint', async () => {
+      const { channel, client } = setup();
+      const sm = generateScheduledMessage();
+      const scheduledAt = new Date(Date.now() + 60 * 60 * 1000);
+      const response = {
+        duration: '',
+        message: { id: sm.id, text: 'see you tomorrow' },
+        scheduled_message: sm,
+      };
+      const sendSpy = vi
+        .spyOn(client, 'sendMessage')
+        .mockResolvedValue(response as never);
+
+      const result = await channel.scheduleMessage({
+        message: { id: sm.id, text: 'see you tomorrow' },
+        scheduled_at: scheduledAt,
+      });
+
+      expect(sendSpy).toHaveBeenCalledWith(
+        { id: channel.id, type: channel.type },
+        expect.objectContaining({
+          message: expect.objectContaining({ id: sm.id, text: 'see you tomorrow' }),
+          scheduled_at: scheduledAt,
+        }),
+        undefined,
+      );
+      expect(result).toBe(response);
+    });
+
+    it.each([
+      ['updateScheduledMessage', { scheduled_at: new Date(Date.now() + 60 * 1000) }],
+      ['deleteScheduledMessage', undefined],
+      ['sendScheduledMessageNow', undefined],
+    ] as const)('passes %s straight to the client', async (method, request) => {
+      const { channel, client } = setup();
+      const response = { duration: '', scheduled_message: generateScheduledMessage() };
+      const clientSpy = vi.spyOn(client, method).mockResolvedValue(response as never);
+
+      const result = await channel[method]({ id: 'sm-1' }, request as never);
+
+      expect(clientSpy).toHaveBeenCalledWith({ id: 'sm-1' }, request);
+      expect(result).toBe(response);
+    });
+  });
+
   describe('actions', () => {
     const setupWithMessage = () => {
       const context = setup();
