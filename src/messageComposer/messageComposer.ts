@@ -1286,9 +1286,10 @@ export class MessageComposer extends WithSubscriptions {
    * reported through `client.notifications`.
    */
   send = async (): Promise<MessageComposerSubmitResult> => {
-    // A bounced message opened for editing is sent again as a new message, not saved as an edit.
-    const resendsBouncedMessage = this.editedMessage?.type === 'error';
-    if (this.hasEditInProgress && !resendsBouncedMessage) return 'nothing-to-send';
+    // A message the server rejected (`type: 'error'`, for instance a bounced one) exists only
+    // locally, so opened for editing it is sent again as a new message, not saved as an edit.
+    const resendsRejectedMessage = this.editedMessage?.type === 'error';
+    if (this.hasEditInProgress && !resendsRejectedMessage) return 'nothing-to-send';
 
     const composition = await this.compose();
     if (!composition?.message) return 'nothing-to-send';
