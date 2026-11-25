@@ -1288,8 +1288,13 @@ describe('ChannelPaginator', () => {
     });
 
     describe('cached messages', () => {
-      const preloadWithMessageLimit = async (cachedMessageCount: number) => {
-        await setUpOfflineDb({ isSynced: false });
+      // Before the sync the list is seeded from the cache and the query waits; after it, the cached
+      // page shows while the query runs (the preload). Both must read the cached messages the same.
+      const preloadWithMessageLimit = async (
+        cachedMessageCount: number,
+        { synced = false } = {},
+      ) => {
+        await setUpOfflineDb({ isSynced: synced });
         getChannelsForQuery.mockResolvedValue({
           channels: [
             generateChannel({
@@ -1310,9 +1315,25 @@ describe('ChannelPaginator', () => {
           sort: [{ field: 'last_message_at', direction: -1 }],
         });
 
-        await paginator.toTail();
+        if (!synced) {
+          await paginator.toTail();
+          return paginator.items![0];
+        }
 
-        return paginator.items![0];
+        // read while the first query runs, before the server page replaces the cached one
+        let resolveQuery: (value: {
+          channels: Channel[];
+          duration: string;
+        }) => void = () => undefined;
+        vi.spyOn(client, 'queryChannelsAndHydrate').mockImplementation(
+          () => new Promise((resolve) => (resolveQuery = resolve)),
+        );
+        const query = paginator.toTail();
+        await vi.waitFor(() => expect(paginator.items).toHaveLength(1));
+        const channel = paginator.items![0];
+        resolveQuery({ channels: [], duration: '0' });
+        await query;
+        return channel;
       };
 
       it('reads a full cached page as having older messages', async () => {
@@ -1323,6 +1344,18 @@ describe('ChannelPaginator', () => {
 
       it('reads a short cached page as the start of the channel', async () => {
         const channel = await preloadWithMessageLimit(8);
+
+        expect(channel.messagePaginator.state.getLatestValue().hasMoreTail).toBe(false);
+      });
+
+      it('reads a full cached page as having older messages after the sync', async () => {
+        const channel = await preloadWithMessageLimit(10, { synced: true });
+
+        expect(channel.messagePaginator.state.getLatestValue().hasMoreTail).toBe(true);
+      });
+
+      it('reads a short cached page as the start of the channel after the sync', async () => {
+        const channel = await preloadWithMessageLimit(8, { synced: true });
 
         expect(channel.messagePaginator.state.getLatestValue().hasMoreTail).toBe(false);
       });
@@ -3615,6 +3648,179 @@ describe('ChannelPaginator', () => {
           'idle [c,live,b]',
         ]);
       });
+    });
+  });
+
+  // The cached page has no pagination position: the first server page replaces it from offset 0,
+  // and the next page continues after that page, never after the cached one.
+  describe('the offline page: requests, live updates and an empty server page', () => {
+    const setUp = async ({
+      synced,
+      serverIds = ['c', 'b', 'e', 'f'],
+    }: {
+      synced: boolean;
+      serverIds?: string[];
+    }) => {
+      vi.spyOn(utils, 'sleep').mockResolvedValue(undefined);
+      const offlineDb = new MockOfflineDB({ client });
+      client.setOfflineDBApi(offlineDb);
+      (offlineDb.initializeDB as unknown as MockInstance).mockReturnValue(true);
+      await offlineDb.init(client.userId as string);
+      offlineDb.syncManager.isSynced = synced;
+      (offlineDb.upsertCidsForQuery as unknown as MockInstance).mockResolvedValue(true);
+      const scheduled = vi.spyOn(
+        offlineDb.syncManager,
+        'scheduleSyncStatusChangeCallback',
+      );
+      (offlineDb.getChannelsForQuery as unknown as MockInstance).mockResolvedValue({
+        channels: [
+          generateChannel({
+            channel: {
+              id: 'a',
+              type: 'type',
+              last_message_at: '2026-01-02T00:00:00.000Z',
+            },
+          }),
+          generateChannel({
+            channel: {
+              id: 'b',
+              type: 'type',
+              last_message_at: '2026-01-01T00:00:00.000Z',
+            },
+          }),
+        ],
+      });
+
+      // The list sorts on each channel's latest message. Newest first: `c`, the cached `a` (which
+      // the server no longer returns), `b`, then `e` and `f`.
+      const latestMessageAt: Record<string, number> = {
+        a: 3000,
+        b: 2000,
+        c: 4000,
+        e: 1000,
+        f: 500,
+      };
+      const setLatestMessageAt = (id: string) => {
+        const channel = client.channel('type', id);
+        channel.messagePaginator.setQueriedLatestMessageAt(
+          latestMessageAt[id] as TimestampNS,
+        );
+        return channel;
+      };
+      setLatestMessageAt('a');
+      setLatestMessageAt('b');
+
+      const server = {
+        fails: false,
+        hold: undefined as Promise<void> | undefined,
+      };
+      const query = vi
+        .spyOn(client, 'queryChannelsAndHydrate')
+        .mockImplementation(async (request) => {
+          if (server.hold) await server.hold;
+          if (server.fails) throw new Error('offline');
+          const offset = request.offset ?? 0;
+          const ids = serverIds.slice(offset, offset + (request.limit ?? 10));
+          return { channels: ids.map(setLatestMessageAt), duration: '0' } as never;
+        });
+
+      const paginator = new ChannelPaginator({
+        client,
+        filters: { type: 'type' },
+        paginatorOptions: { pageSize: 2 },
+        sort: [{ field: 'last_message_at', direction: -1 }],
+      });
+      const requests = () =>
+        query.mock.calls.map(([request]) => [request.offset, request.limit]);
+      const ids = () => paginator.items?.map((channel) => channel.id);
+      const completeSync = async () => {
+        offlineDb.syncManager.isSynced = true;
+        await scheduled.mock.calls.at(-1)![1]();
+      };
+      return { completeSync, ids, paginator, requests, server, setLatestMessageAt };
+    };
+
+    it('after the sync, asks for offset 0 first and continues after the server page', async () => {
+      const { ids, paginator, requests } = await setUp({ synced: true });
+
+      await paginator.toTail();
+      expect(ids()).toEqual(['c', 'b']);
+
+      await paginator.toTail();
+      expect(requests()).toEqual([
+        [0, 2],
+        [2, 2],
+      ]);
+      expect(ids()).toEqual(['c', 'b', 'e', 'f']);
+    });
+
+    it('before the sync, sends nothing for a scroll over the cached page, then asks for offset 0 once', async () => {
+      const { completeSync, ids, paginator, requests } = await setUp({ synced: false });
+
+      await paginator.toTail();
+      expect(ids()).toEqual(['a', 'b']);
+      // scrolling to the end of the cached rows while the sync runs
+      await paginator.toTail();
+      expect(requests()).toEqual([]);
+
+      await completeSync();
+      expect(requests()).toEqual([[0, 2]]);
+      expect(ids()).toEqual(['c', 'b']);
+
+      await paginator.toTail();
+      expect(requests()).toEqual([
+        [0, 2],
+        [2, 2],
+      ]);
+    });
+
+    it('after a failed first query, asks for offset 0 again and replaces the cached page', async () => {
+      const { ids, paginator, requests, server } = await setUp({ synced: true });
+      server.fails = true;
+      await paginator.toTail();
+      expect(ids()).toEqual(['a', 'b']);
+      // every attempt of the failed query asked for the first page
+      const failedAttempts = requests();
+      expect(new Set(failedAttempts.map(String))).toEqual(new Set(['0,2']));
+
+      server.fails = false;
+      await paginator.toTail();
+      expect(ids()).toEqual(['c', 'b']);
+      await paginator.toTail();
+
+      expect(requests()).toEqual([...failedAttempts, [0, 2], [2, 2]]);
+      expect(ids()).toEqual(['c', 'b', 'e', 'f']);
+    });
+
+    it('keeps a cached channel a live event touched during the first query, until the next recovery', async () => {
+      // Accepted: a live event says the channel is current, so the server page merges with it
+      // even when the page does not return it. A mute change re-ingests every listed channel.
+      const { ids, paginator, server, setLatestMessageAt } = await setUp({
+        synced: true,
+      });
+      let release: () => void = () => undefined;
+      server.hold = new Promise((resolve) => (release = resolve));
+
+      const first = paginator.toTail();
+      await vi.waitFor(() => expect(ids()).toEqual(['a', 'b']));
+      // the cache holds no messages, so `a` gets its latest message here
+      paginator.ingestItem(setLatestMessageAt('a'));
+      release();
+      server.hold = undefined;
+      await first;
+      expect(ids()).toEqual(['c', 'a', 'b']);
+
+      await paginator.recoverLoadedItems();
+      expect(ids()).toEqual(['c', 'b', 'e']);
+    });
+
+    it('drops the cached channels when the first server page is empty', async () => {
+      const { ids, paginator } = await setUp({ synced: true, serverIds: [] });
+
+      await paginator.toTail();
+
+      expect(ids()).toEqual([]);
+      expect(paginator.isLoading).toBe(false);
     });
   });
 
