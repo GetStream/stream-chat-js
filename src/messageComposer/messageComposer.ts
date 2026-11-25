@@ -374,7 +374,7 @@ export class MessageComposer extends WithSubscriptions {
   }
 
   private get pausesDrafts() {
-    return !!this.editedMessage || this.scheduledMessageComposition.pausesDrafts;
+    return !!this.editedMessage || !!this.editedScheduledMessage;
   }
 
   get editedScheduledMessage(): ScheduledMessageResponse | undefined {

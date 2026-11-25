@@ -56,7 +56,7 @@ export class ScheduledMessageComposition extends WithSubscriptions {
     this.composer = composer;
   }
 
-  get editedScheduledMessage(): ScheduledMessageResponse | undefined {
+  private get editedScheduledMessage(): ScheduledMessageResponse | undefined {
     return this.composer.editedScheduledMessage;
   }
 
@@ -84,10 +84,6 @@ export class ScheduledMessageComposition extends WithSubscriptions {
     }
 
     return undefined;
-  }
-
-  get pausesDrafts(): boolean {
-    return !!this.editedScheduledMessage;
   }
 
   get blocksNewComposition(): boolean {
@@ -209,18 +205,15 @@ export class ScheduledMessageComposition extends WithSubscriptions {
 
     if (composer.hasEditInProgress) return { status: 'nothing-to-send' };
 
-    if (this.scheduleBlockReason) {
-      await composer.compose({ sendOptions: { scheduled_at: scheduledAt } });
-      return { status: 'blocked' };
-    }
-
     const { failedScheduledMessage } = this;
 
     const composition = await composer.compose({
       sendOptions: { scheduled_at: scheduledAt },
     });
 
-    if (!composition?.message) return { status: 'nothing-to-send' };
+    if (!composition?.message) {
+      return { status: this.scheduleBlockReason ? 'blocked' : 'nothing-to-send' };
+    }
 
     const { localMessage, sendOptions } = composition;
 
@@ -288,14 +281,11 @@ export class ScheduledMessageComposition extends WithSubscriptions {
       scheduled_at: nsToDate(editedScheduledMessage.scheduled_at),
     };
 
-    if (this.scheduleBlockReason) {
-      await composer.compose({ sendOptions });
-      return { status: 'blocked' };
-    }
-
     const composition = await composer.compose({ sendOptions });
 
-    if (!composition?.message) return { status: 'nothing-to-send' };
+    if (!composition?.message) {
+      return { status: this.scheduleBlockReason ? 'blocked' : 'nothing-to-send' };
+    }
 
     if (this.editedScheduledMessage?.id !== editedScheduledMessage.id) {
       return { status: 'nothing-to-send' };
