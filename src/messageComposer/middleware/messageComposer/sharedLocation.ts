@@ -7,6 +7,15 @@ import type {
   MessageCompositionMiddleware,
 } from './types';
 
+/**
+ * When the message is sent: the requested send time (a scheduled save passes the send time of the
+ * scheduled message it updates), or `undefined` for now.
+ */
+const getSendTime = (state: MessageComposerMiddlewareState): Date | undefined => {
+  const scheduledAt = state.sendOptions.scheduled_at;
+  return scheduledAt ? new Date(scheduledAt) : undefined;
+};
+
 export const createSharedLocationCompositionMiddleware = (
   composer: MessageComposer,
 ): MessageCompositionMiddleware => ({
@@ -18,7 +27,10 @@ export const createSharedLocationCompositionMiddleware = (
       forward,
     }: MiddlewareHandlerParams<MessageComposerMiddlewareState>) => {
       const { locationComposer } = composer;
-      const location = locationComposer.validLocation;
+      // a live location shared in a scheduled message starts sharing when the message is sent
+      const location = locationComposer.validateLocation({
+        sharingStartsAt: getSendTime(state),
+      });
       if (!locationComposer || !location || !composer.client.user) return forward();
       const timestamp = nowNs();
 

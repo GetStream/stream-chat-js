@@ -5,10 +5,11 @@ import type {
   MessageRequest,
   ScheduledMessageContentResponse,
   ScheduledMessageResponse,
+  SharedLocationResponseData,
 } from '../gen/models';
 import type { DraftMessage, LocalMessage, UserResponse } from '../types';
 
-const SCHEDULED_MESSAGE_SERVER_FIELDS = ['id', 'mml', 'shared_location'];
+const SCHEDULED_MESSAGE_SERVER_FIELDS = ['id', 'mml'];
 
 const SERVER_OWNED_FIELDS: ReadonlySet<string> = new Set([
   ...Object.keys(RESERVED_UPDATED_MESSAGE_FIELDS),
@@ -33,6 +34,7 @@ const COMPOSER_CONTENT_FIELD_NAMES = [
 const COMPOSER_OWNED_FIELD_NAMES = [
   ...COMPOSER_CONTENT_FIELD_NAMES,
   'mentioned_users',
+  'shared_location',
 ] as const satisfies ReadonlyArray<keyof ScheduledMessageContentResponse>;
 
 const COMPOSER_OWNED_FIELDS: ReadonlySet<string> = new Set(COMPOSER_OWNED_FIELD_NAMES);
@@ -46,13 +48,46 @@ const COMPOSED_FIELDS_DROPPED_ON_UPDATE: ReadonlySet<string> = new Set(
   [...SERVER_OWNED_FIELDS].filter((field) => !COMPOSER_OWNED_FIELDS.has(field)),
 );
 
+/**
+ * The scheduled message's location in the shape the location composer reads, keyed to the
+ * scheduled message. A location without coordinates is not one the composer can send, so it is left out.
+ */
+const toComposerLocation = ({
+  cid,
+  created_at,
+  id,
+  message,
+  updated_at,
+  user,
+}: ScheduledMessageResponse): SharedLocationResponseData | undefined => {
+  const location = message.shared_location;
+  if (!location) return undefined;
+
+  const { created_by_device_id, end_at, latitude, longitude } = location;
+  if (latitude === undefined || longitude === undefined) return undefined;
+
+  return {
+    channel_cid: cid,
+    created_at,
+    created_by_device_id,
+    ...(end_at === undefined ? {} : { end_at }),
+    latitude,
+    longitude,
+    message_id: id,
+    updated_at,
+    user_id: user.id,
+  };
+};
+
 export const toComposerContent = (
   scheduledMessage: ScheduledMessageResponse,
 ): DraftMessage => {
   const { id, message } = scheduledMessage;
+  const sharedLocation = toComposerLocation(scheduledMessage);
 
   const content: DraftMessage = {
     ...pickFields(message, COMPOSER_CONTENT_FIELD_NAMES),
+    ...(sharedLocation ? { shared_location: sharedLocation } : {}),
     id,
   };
 
