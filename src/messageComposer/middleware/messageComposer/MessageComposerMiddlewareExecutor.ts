@@ -36,6 +36,7 @@ import {
 } from './customData';
 import { createUserDataInjectionMiddleware } from './userDataInjection';
 import { createPollOnlyCompositionMiddleware } from './pollOnly';
+import { createScheduledMessageCompositionMiddleware } from './scheduledMessage';
 import { createSharedLocationCompositionMiddleware } from './sharedLocation';
 
 export class MessageComposerMiddlewareExecutor extends MiddlewareExecutor<
@@ -48,6 +49,7 @@ export class MessageComposerMiddlewareExecutor extends MiddlewareExecutor<
     //  or adding custom composer components (apart from AttachmentsManager, TextComposer etc.)
     this.use([
       createUserDataInjectionMiddleware(composer),
+      createScheduledMessageCompositionMiddleware(composer),
       createPollOnlyCompositionMiddleware(composer),
       createTextComposerCompositionMiddleware(composer),
       createAttachmentsCompositionMiddleware(composer),

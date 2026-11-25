@@ -5,7 +5,11 @@ import { queueOrRun } from './offline-support/queueableOperations';
 import { MessageComposer } from './messageComposer';
 import { MessageReceiptsTracker } from './messageDelivery';
 import type { ReadStoreReconcileMeta } from './messageDelivery';
-import { MessagePaginator, PinnedMessagePaginator } from './pagination/paginators';
+import {
+  MessagePaginator,
+  PinnedMessagePaginator,
+  ScheduledMessagePaginator,
+} from './pagination/paginators';
 import {
   createMessageOperations,
   reflectMessageMarkEvent,
@@ -13,7 +17,12 @@ import {
 } from './messageOperations';
 import type { MessageOperations } from './messageOperations';
 import type { OperationRequestFn } from './messageOperations/types';
+import type { ScheduledMessageRequestHandlers } from './scheduledMessages/types';
+import { getScheduledMessageLimitsFromServerConfig } from './scheduledMessages/limits';
+import { getScheduledMessageFromEvent } from './scheduledMessages/eventHandlers';
+import { ScheduledMessagesView } from './scheduledMessages/ScheduledMessagesView';
 import {
+  channelCanScheduleMessages,
   channelHasReadEvents,
   formatMessage,
   generateChannelTempCid,
@@ -21,8 +30,10 @@ import {
   invokeEventListener,
   isThreadOnlyReply,
   logChatPromiseExecution,
+  runDetached,
   sanitizeOutgoingAttachments,
 } from './utils';
+import { getCarriedActiveMemberCount } from './utils/activeMemberCount';
 import { asTimestampNS, nowNs } from './utils/time';
 import { abortError, waitUnlessAborted } from './utils/abort';
 import { normalizeUploadFile } from './upload-utils';
@@ -81,6 +92,7 @@ import type {
   ChannelPushPreferencesResponse as Gen_ChannelPushPreferencesResponse,
   MuteChannelRequest as Gen_MuteChannelRequest,
   UnmuteChannelRequest as Gen_UnmuteChannelRequest,
+  ScheduledMessageResponse,
   UploadChannelFileRequest,
   UploadChannelRequest,
   WSEvent,
@@ -126,7 +138,7 @@ export type ChannelConfig = {
     sendMessageRequest?: OperationRequestFn<'send'>;
     retrySendMessageRequest?: OperationRequestFn<'retry'>;
     updateMessageRequest?: OperationRequestFn<'update'>;
-  };
+  } & ScheduledMessageRequestHandlers;
   /**
    * Typing indicators. Defaults to enabled. ANDed with the channel type's `typing_events`. Read by
    * {@link Channel.keystroke} and {@link Channel.stopTyping}.
@@ -150,6 +162,7 @@ export type ChannelConfig = {
    * Message reminders. Defaults to enabled. ANDed with the channel type's `user_message_reminders`.
    */
   userMessageReminders: { enabled: boolean };
+  scheduledMessages: { enabled: boolean };
   /** Delivery receipts. Defaults to enabled. ANDed with the channel type's `delivery_events`. */
   deliveryEvents: { enabled: boolean };
   /**
@@ -179,6 +192,7 @@ const ownDeclarativeConfig = (
     readEvents,
     replies,
     requestHandlers,
+    scheduledMessages,
     typingEvents,
     userMessageReminders,
   } = slice;
@@ -188,6 +202,7 @@ const ownDeclarativeConfig = (
     readEvents,
     replies,
     requestHandlers,
+    scheduledMessages,
     typingEvents,
     userMessageReminders,
   } as Partial<ChannelConfig>;
@@ -199,6 +214,7 @@ export const DEFAULT_CHANNEL_CONFIG: ChannelConfig = deepFreezeConfig({
   markTypes: [],
   readEvents: { enabled: true, localUnreadCountEnabled: false },
   replies: { enabled: true },
+  scheduledMessages: { enabled: true },
   typingEvents: { enabled: true },
   userMessageReminders: { enabled: true },
 });
@@ -232,6 +248,17 @@ export class Channel extends ChannelApi {
   public readonly messageOperations: MessageOperations;
   public readonly messagePaginator: MessagePaginator;
   public readonly pinnedMessagesPaginator: PinnedMessagePaginator;
+  /**
+   * The current user's scheduled messages in this channel, thread replies included. Filled by the
+   * channel query (`include_scheduled_messages`), so it queries only when the response leaves them
+   * out. Events can define `items` before a page loads: check `hasLoadedPage`.
+   */
+  public readonly scheduledMessagesPaginator: ScheduledMessagePaginator;
+  /**
+   * The channel's own scheduled messages: a view of `scheduledMessagesPaginator` without the
+   * thread replies it holds too. A thread's are `thread.scheduledMessages`.
+   */
+  public readonly scheduledMessages: ScheduledMessagesView;
   public readonly cooldownTimer: CooldownTimer;
   private unsubscribeConfiguration?: Unsubscribe;
   private unsubscribeServerConfig?: Unsubscribe;
@@ -307,6 +334,21 @@ export class Channel extends ChannelApi {
       channel: this,
       paginatorOptions: { declarativeConfig: declarativeConfig?.pinnedMessagesPaginator },
     });
+    this.scheduledMessagesPaginator = new ScheduledMessagePaginator({
+      client,
+      // a channel created from its members gets its cid from its first query (`storeUnderServerCid`)
+      filter: { cid: this.cid },
+      id: `scheduled-message-paginator-${this.cid}`,
+      paginatorOptions: {
+        declarativeConfig: declarativeConfig?.scheduledMessagesPaginator,
+      },
+    });
+
+    this.scheduledMessages = new ScheduledMessagesView({
+      paginator: this.scheduledMessagesPaginator,
+      scope: { type: 'channel' },
+    });
+    this.scheduledMessages.registerSubscriptions();
 
     this.messageReceiptsTracker = new MessageReceiptsTracker({ channel: this });
     this.messageReceiptsTracker.registerSubscriptions();
@@ -376,6 +418,11 @@ export class Channel extends ChannelApi {
       deliveryEvents: { enabled: channelConfig?.delivery_events },
       readEvents: { enabled: channelConfig?.read_events },
       replies: { enabled: channelConfig?.replies },
+      scheduledMessages: {
+        enabled: channelConfig
+          ? !!getScheduledMessageLimitsFromServerConfig(channelConfig)
+          : undefined,
+      },
       typingEvents: { enabled: channelConfig?.typing_events },
       userMessageReminders: { enabled: channelConfig?.user_message_reminders },
     };
@@ -408,6 +455,9 @@ export class Channel extends ChannelApi {
     // No shared key: the pinned paginator has a single parent.
     this.pinnedMessagesPaginator.initializeConfig(
       declarativeConfig?.pinnedMessagesPaginator,
+    );
+    this.scheduledMessagesPaginator.initializeConfig(
+      declarativeConfig?.scheduledMessagesPaginator,
     );
 
     // Shared key with a per-parent override, as for `messagePaginator`.
@@ -469,6 +519,63 @@ export class Channel extends ChannelApi {
       { ...request, message: sanitizeOutgoingAttachments(request.message) },
       requestOptions,
     );
+  }
+
+  /**
+   * Fills the list from a channel query's `scheduled_messages`.
+   *
+   * @internal
+   */
+  hydrateScheduledMessages(
+    scheduledMessages: ScheduledMessageResponse[],
+    itemIdsAtRequest?: ReadonlySet<string>,
+  ) {
+    // a response landing after logout would bring the previous user's messages back
+    if (this.pendingDisposal || !this.config.scheduledMessages.enabled) return;
+    this.scheduledMessagesPaginator.hydrate(scheduledMessages, itemIdsAtRequest);
+  }
+
+  /** Without the field (over 100, or unreadable), a list that had loaded reloads itself. */
+  private applyScheduledMessagesFromResponse(
+    scheduledMessages: ScheduledMessageResponse[] | undefined,
+    itemIdsAtRequest: ReadonlySet<string> | undefined,
+  ) {
+    if (scheduledMessages) {
+      this.hydrateScheduledMessages(scheduledMessages, itemIdsAtRequest);
+      return;
+    }
+    const paginator = this.scheduledMessagesPaginator;
+    if (this.pendingDisposal || !paginator.hasLoadedPage || paginator.isLoading) return;
+    runDetached(paginator.reload(), { context: 'reloadScheduledMessages' });
+  }
+
+  ensureScheduledMessagesLoaded() {
+    const paginator = this.scheduledMessagesPaginator;
+    if (
+      this.pendingDisposal ||
+      !this.scheduledMessagesEnabled ||
+      paginator.hasLoadedPage ||
+      paginator.isLoading
+    ) {
+      return;
+    }
+    runDetached(paginator.reload(), { context: 'ensureScheduledMessagesLoaded' });
+  }
+
+  async scheduleMessage(...args: Parameters<ChannelApi['sendMessage']>) {
+    return await this.sendMessage(...args);
+  }
+
+  async updateScheduledMessage(...args: Parameters<ChatApi['updateScheduledMessage']>) {
+    return await this.getClient().updateScheduledMessage(...args);
+  }
+
+  async deleteScheduledMessage(...args: Parameters<ChatApi['deleteScheduledMessage']>) {
+    return await this.getClient().deleteScheduledMessage(...args);
+  }
+
+  async sendScheduledMessageNow(...args: Parameters<ChatApi['sendScheduledMessageNow']>) {
+    return await this.getClient().sendScheduledMessageNow(...args);
   }
 
   async sendReaction(...args: Parameters<ChatApi['sendReaction']>) {
@@ -1179,6 +1286,10 @@ export class Channel extends ChannelApi {
     return this.config.readEvents.enabled && channelHasReadEvents(this);
   }
 
+  get scheduledMessagesEnabled(): boolean {
+    return this.config.scheduledMessages.enabled && channelCanScheduleMessages(this);
+  }
+
   /**
    * Marks read through `MessageDeliveryReporter`: uses the `markReadRequest` handler if set, marks
    * read locally when read events are off and `localUnreadCountEnabled` is set, and drops the
@@ -1251,11 +1362,16 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Reads `state.data`. Assigning publishes `data`, `memberCount` and `ownCapabilities` in one update.
-   * If the object omits `member_count` or `own_capabilities`, the last known values are carried onto
-   * a copy (the assigned object is not changed). Editing `channel.data.x` in place does not reach
-   * the state. `ownCapabilities` keeps its array while the capabilities stay the same (in any
-   * order), so a subscriber to it is notified only when they change.
+   * Reads `state.data`. Assigning publishes `data`, `memberCount`, `activeMemberCount` and
+   * `ownCapabilities` in one update. If the object omits `member_count`, `active_member_count` or
+   * `own_capabilities`, the last known values are carried onto a copy (the assigned object is not
+   * changed). A carried `active_member_count` moves with `member_count` (shifted by the change in
+   * membership, clamped to `member_count`), since only Query Channels returns it; treat it as a
+   * last-known estimate, refreshed on the next query — it can lag a (de)activation or an
+   * already-deactivated member being added or removed. Editing
+   * `channel.data.x` in place does not reach the state. `ownCapabilities` keeps its array while the
+   * capabilities stay the same (in any order), so a subscriber to it is notified only when they
+   * change.
    */
   get data(): Partial<ChannelResponse> | undefined {
     return this.state.getLatestValue().data;
@@ -1263,6 +1379,7 @@ export class Channel extends ChannelApi {
 
   set data(next: Partial<ChannelResponse> | undefined) {
     const {
+      activeMemberCount: previousActiveMemberCount,
       data: previous,
       memberCount: previousMemberCount,
       ownCapabilities: previousOwnCapabilities,
@@ -1271,27 +1388,40 @@ export class Channel extends ChannelApi {
       typeof next?.member_count !== 'number' && typeof previous?.member_count === 'number'
         ? previous.member_count
         : undefined;
+    const carriedActiveMemberCount = next
+      ? getCarriedActiveMemberCount({ next, previous })
+      : undefined;
     // `own_capabilities` stays undefined until known, so "not loaded" isn't read as "none"
     const carriedCapabilities =
       !Array.isArray(next?.own_capabilities) && Array.isArray(previous?.own_capabilities)
         ? [...previous.own_capabilities]
         : undefined;
 
+    const carriesMemberCount = carriedMemberCount !== undefined;
+    const carriesActiveMemberCount = carriedActiveMemberCount !== undefined;
+    const carriesValues =
+      carriesMemberCount || carriesActiveMemberCount || !!carriedCapabilities;
+
     const data =
-      next && (carriedMemberCount !== undefined || carriedCapabilities)
+      next && carriesValues
         ? {
             ...next,
-            ...(carriedMemberCount !== undefined && { member_count: carriedMemberCount }),
+            ...(carriesMemberCount && { member_count: carriedMemberCount }),
+            ...(carriesActiveMemberCount && {
+              active_member_count: carriedActiveMemberCount,
+            }),
             ...(carriedCapabilities && { own_capabilities: carriedCapabilities }),
           }
         : next;
 
     const memberCount = data?.member_count ?? carriedMemberCount;
+    const activeMemberCount = data ? data.active_member_count : previousActiveMemberCount;
     const ownCapabilities = data?.own_capabilities ?? carriedCapabilities ?? [];
     const toKey = (capabilities: readonly string[]) => [...capabilities].sort().join();
     const haveSameOwnCapabilities =
       toKey(previousOwnCapabilities) === toKey(ownCapabilities);
     this.state.partialNext({
+      activeMemberCount,
       data,
       memberCount: memberCount ?? previousMemberCount,
       ownCapabilities: haveSameOwnCapabilities
@@ -1785,6 +1915,8 @@ export class Channel extends ChannelApi {
     const { channelManager } = this.getClient();
     const storedUnder = this.cid;
     this.cid = serverCid;
+    if (storedUnder !== serverCid)
+      this.scheduledMessagesPaginator.filter = { cid: serverCid };
     const isStoredUnderOldCid =
       storedUnder !== serverCid && channelManager.get(storedUnder) === this;
     // A disconnected channel is replaced by this instance, not superseded by it.
@@ -1854,10 +1986,19 @@ export class Channel extends ChannelApi {
       const externalQuery = placeMessages
         ? this.messagePaginator.prepareExternalQuery(options.messages)
         : undefined;
+      // free when the app has no scheduled messages: the server omits the field
+      const includeScheduledMessages =
+        this.config.scheduledMessages.enabled &&
+        options.include_scheduled_messages !== false;
+      // tells messages arriving during the request apart, so the response does not drop them
+      const scheduledMessageIdsAtRequest = this.scheduledMessagesPaginator.getItemIds();
       const state = await this.requestChannelState(
-        externalQuery
-          ? { ...options, messages: externalQuery.messagePaginationParams }
-          : options,
+        {
+          ...(includeScheduledMessages && { include_scheduled_messages: true }),
+          ...(externalQuery
+            ? { ...options, messages: externalQuery.messagePaginationParams }
+            : options),
+        },
         requestOptions,
         { placesNewestPage: externalQuery?.isNewestPage ?? false },
       );
@@ -1876,6 +2017,13 @@ export class Channel extends ChannelApi {
         });
       }
       if (placedFirstPage) this.messagePaginator.seedUnreadSnapshot();
+      if (includeScheduledMessages) {
+        // a channel created from members may have been superseded by the stored instance
+        (this.supersededBy ?? this).applyScheduledMessagesFromResponse(
+          state.scheduled_messages,
+          scheduledMessageIdsAtRequest,
+        );
+      }
       return state;
     });
   }
@@ -2722,7 +2870,12 @@ export class Channel extends ChannelApi {
             event.channel?.frozen !== undefined &&
             event.channel.frozen !== channel.data?.frozen;
           if (isFrozenChanged) {
-            this.query({ state: false, messages: { limit: 0 }, watchers: { limit: 0 } });
+            this.query({
+              include_scheduled_messages: false,
+              messages: { limit: 0 },
+              state: false,
+              watchers: { limit: 0 },
+            });
           }
           const newChannelData = {
             ...event.channel,
@@ -2789,6 +2942,17 @@ export class Channel extends ChannelApi {
             user: { ...(member?.user || {}), ...event.user },
           },
         };
+        break;
+      }
+      case 'scheduled_message.created':
+      case 'scheduled_message.deleted':
+      case 'scheduled_message.failed':
+      case 'scheduled_message.sent':
+      case 'scheduled_message.updated': {
+        // the registered lists hear it from `client.scheduledMessagePaginators`
+        const scheduledMessage = getScheduledMessageFromEvent(event);
+        if (scheduledMessage)
+          this.scheduledMessagesPaginator.ingestItem(scheduledMessage);
         break;
       }
       default:
@@ -3004,9 +3168,11 @@ export class Channel extends ChannelApi {
     this.unsubscribeServerConfig = undefined;
     this.messageReceiptsTracker.unregisterSubscriptions();
     this.cooldownTimer.unregisterSubscriptions();
+    this.scheduledMessages.unregisterSubscriptions();
     // Otherwise the message store keeps this channel and its messages alive through its subscribers.
     this.messagePaginator.dispose();
     this.pinnedMessagesPaginator.dispose();
+    this.scheduledMessagesPaginator.dispose();
 
     // One update, last, so subscribers see both together. A deleted channel must not be re-watched.
     this._lastWatchOptions = undefined;

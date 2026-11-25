@@ -2161,6 +2161,7 @@ describe('ChannelPaginator', () => {
           limit: 22,
           message_limit: 3,
           offset: 0,
+          include_scheduled_messages: true,
         },
         undefined,
       );
@@ -2417,6 +2418,91 @@ describe('ChannelPaginator', () => {
 
       expect(paginator.lastQueryError).toBeDefined();
       expect(paginator.predefinedFilter?.filter).toEqual({ archived: false });
+    });
+
+    describe('a predefined-filter list before the server reports its filter', () => {
+      const MESSAGING_ONLY = { name: 'messaging_only', filter: { type: 'messaging' } };
+
+      // the query's response, sent once the query is out
+      const respondLater = () => {
+        let respond: (() => void) | undefined;
+        vi.spyOn(client, 'queryChannelsAndHydrate').mockImplementation(
+          () =>
+            new Promise((resolve) => {
+              respond = () =>
+                resolve({
+                  channels: [new Channel(client, 'messaging', 'm1', {})],
+                  duration: '0.1ms',
+                  predefined_filter: MESSAGING_ONLY,
+                } as never);
+            }),
+        );
+        return async () => {
+          await vi.waitFor(() => expect(respond).toBeDefined());
+          respond?.();
+        };
+      };
+
+      it('takes no channel from events while its first page loads', async () => {
+        const paginator = new ChannelPaginator({
+          client,
+          requestOptions: { predefined_filter: 'messaging_only' },
+        });
+        const respond = respondLater();
+        const query = paginator.toTail();
+
+        paginator.ingestItem(new Channel(client, 'livestream', 'x', {}));
+        await respond();
+        await query;
+
+        expect(paginator.items?.map((channel) => channel.cid)).toEqual(['messaging:m1']);
+      });
+
+      it('takes no channel from events while its first page loads after a reset', async () => {
+        const paginator = new ChannelPaginator({
+          client,
+          requestOptions: { predefined_filter: 'messaging_only' },
+        });
+        let respond = respondLater();
+        let query = paginator.toTail();
+        await respond();
+        await query;
+
+        paginator.resetState();
+        respond = respondLater();
+        query = paginator.reload();
+        paginator.ingestItem(new Channel(client, 'livestream', 'x', {}));
+        await respond();
+        await query;
+
+        expect(paginator.items?.map((channel) => channel.cid)).toEqual(['messaging:m1']);
+      });
+
+      it.each([
+        ['a page loaded through doRequest', { doRequest: async () => ({ items: [] }) }],
+        // the server's response carries no `predefined_filter`
+        ['a page reported without its filter', {}],
+      ])(
+        'matches by its static filters once it holds %s',
+        async (_, paginatorOptions) => {
+          vi.spyOn(client, 'queryChannelsAndHydrate').mockResolvedValue({
+            channels: [],
+            duration: '0.1ms',
+          });
+          const paginator = new ChannelPaginator({
+            client,
+            filters: { type: 'messaging' },
+            requestOptions: { predefined_filter: 'messaging_only' },
+            paginatorOptions,
+          });
+          const channel = new Channel(client, 'messaging', 'm2', {});
+          expect(paginator.matchesFilter(channel)).toBe(false);
+
+          await paginator.toTail();
+
+          expect(paginator.matchesFilter(channel)).toBe(true);
+        },
+      );
     });
 
     it('ignores the response metadata when items are fetched through doRequest', async () => {
@@ -3529,6 +3615,624 @@ describe('ChannelPaginator', () => {
           'idle [c,live,b]',
         ]);
       });
+    });
+  });
+
+  describe('lastQueryError while retrying', () => {
+    const publishedErrors = (paginator: ChannelPaginator) => {
+      const errors: Array<Error | undefined> = [];
+      paginator.state.subscribeWithSelector(
+        ({ lastQueryError }) => ({ lastQueryError }),
+        ({ lastQueryError }) => errors.push(lastQueryError),
+      );
+      // drop the value the subscription is called with right away
+      errors.length = 0;
+      return errors;
+    };
+
+    it('is not published by a failed attempt the retry recovers from', async () => {
+      vi.spyOn(utils, 'sleep').mockResolvedValue(undefined);
+      vi.spyOn(client, 'queryChannelsAndHydrate')
+        .mockRejectedValueOnce(new Error('503'))
+        .mockResolvedValue({ channels: [], duration: '0.1ms' });
+      const paginator = new ChannelPaginator({ client });
+      const errors = publishedErrors(paginator);
+
+      await paginator.toTail();
+
+      expect(errors).toEqual([]);
+    });
+
+    it('is published once, when every attempt failed', async () => {
+      vi.spyOn(utils, 'sleep').mockResolvedValue(undefined);
+      const queryChannels = vi
+        .spyOn(client, 'queryChannelsAndHydrate')
+        .mockRejectedValue(new Error('503'));
+      const paginator = new ChannelPaginator({ client });
+      const errors = publishedErrors(paginator);
+
+      await paginator.toTail();
+
+      expect(queryChannels).toHaveBeenCalledTimes(DEFAULT_QUERY_CHANNELS_RETRY_COUNT + 1);
+      expect(errors).toEqual([new Error('503')]);
+    });
+  });
+
+  describe('an empty page after a failed first page', () => {
+    it('leaves the list loaded and empty when connection recovery finds no channels', async () => {
+      const paginator = new ChannelPaginator({
+        client,
+        paginatorOptions: { retryCount: 0 },
+      });
+      client.channelManager.setPaginators([paginator]);
+      const queryChannels = vi
+        .spyOn(client, 'queryChannelsAndHydrate')
+        .mockRejectedValueOnce(new Error('offline'))
+        .mockResolvedValue({ channels: [], duration: '0.1ms' });
+      await paginator.toTail();
+      expect(paginator.lastQueryError).toEqual(new Error('offline'));
+      expect(paginator.isInitialized).toBe(true);
+
+      await client.channelManager.recover();
+
+      expect(queryChannels).toHaveBeenCalledTimes(2);
+      expect(paginator.items).toEqual([]);
+      expect(paginator.lastQueryError).toBeUndefined();
+      expect(paginator.isLoading).toBe(false);
+    });
+  });
+
+  describe('changing what the list queries', () => {
+    const typeA1 = () => new Channel(client, 'a', 'a1', {});
+    const typeA2 = () => new Channel(client, 'a', 'a2', {});
+    const typeB1 = () => new Channel(client, 'b', 'b1', {});
+
+    /** A list of type `a` loaded to its end: two channels, fewer than a page. */
+    const setupLoadedList = async () => {
+      const queryChannels = vi
+        .spyOn(client, 'queryChannelsAndHydrate')
+        .mockResolvedValueOnce({ channels: [typeA1(), typeA2()], duration: '0.1ms' })
+        .mockResolvedValue({ channels: [typeB1()], duration: '0.1ms' });
+      const paginator = new ChannelPaginator({
+        client,
+        filters: { type: 'a' },
+        sort: [{ direction: -1, field: 'created_at' }],
+      });
+      await paginator.toTail();
+      expect(paginator.items?.map((channel) => channel.cid)).toEqual(['a:a1', 'a:a2']);
+      expect(paginator.hasMoreTail).toBe(false);
+      return { paginator, queryChannels };
+    };
+
+    const expectFirstPageOfNewQuery = async ({
+      paginator,
+      queryChannels,
+    }: Awaited<ReturnType<typeof setupLoadedList>>) => {
+      // the list waits for a first page of the new query, as a never-queried one does
+      expect(paginator.items).toBeUndefined();
+      expect(paginator.isInitialized).toBe(false);
+
+      await paginator.toTail();
+
+      expect(queryChannels).toHaveBeenCalledTimes(2);
+      expect(queryChannels.mock.calls[1][0]).toEqual(
+        expect.objectContaining({ offset: 0 }),
+      );
+      expect(paginator.items?.map((channel) => channel.cid)).toEqual(['b:b1']);
+    };
+
+    it('resets the list when its filters change', async () => {
+      const loaded = await setupLoadedList();
+
+      loaded.paginator.staticFilters = { type: 'b' };
+
+      await expectFirstPageOfNewQuery(loaded);
+      expect(loaded.queryChannels.mock.calls[1][0]).toEqual(
+        expect.objectContaining({ filter_conditions: { type: 'b' } }),
+      );
+    });
+
+    it('resets the list when its sort changes', async () => {
+      const loaded = await setupLoadedList();
+
+      loaded.paginator.sort = [{ direction: 1, field: 'created_at' }];
+
+      await expectFirstPageOfNewQuery(loaded);
+      expect(loaded.queryChannels.mock.calls[1][0]).toEqual(
+        expect.objectContaining({ sort: [{ direction: 1, field: 'created_at' }] }),
+      );
+    });
+
+    it('resets the list when its request options change', async () => {
+      const loaded = await setupLoadedList();
+
+      loaded.paginator.options = { predefined_filter: 'other' };
+
+      await expectFirstPageOfNewQuery(loaded);
+    });
+
+    it('keeps the list when a setter leaves the query as it was', async () => {
+      const { paginator } = await setupLoadedList();
+      const before = paginator.state.getLatestValue();
+
+      paginator.staticFilters = { type: 'a' };
+      paginator.sort = [{ direction: -1, field: 'created_at' }];
+      paginator.options = { limit: 50 };
+
+      expect(paginator.state.getLatestValue()).toBe(before);
+    });
+
+    it('keeps the list when the filters gain only undefined values, which the request never sends', async () => {
+      const { paginator } = await setupLoadedList();
+      const before = paginator.state.getLatestValue();
+
+      paginator.staticFilters = { type: 'a', members: undefined };
+
+      expect(paginator.state.getLatestValue()).toBe(before);
+    });
+
+    it('resets the list when an option set to undefined drops its default from the request', async () => {
+      const loaded = await setupLoadedList();
+
+      // `watch: undefined` overrides the client's default `watch: true`
+      loaded.paginator.options = { watch: undefined };
+
+      await expectFirstPageOfNewQuery(loaded);
+    });
+
+    /** A query of the list whose response the test releases, as `{ channels }`. */
+    const deferQuery = (queryChannels: MockInstance) => {
+      let release: (channels: Channel[]) => void = () => undefined;
+      queryChannels.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            release = (channels) => resolve({ channels, duration: '0.1ms' });
+          }),
+      );
+      return (channels: Channel[]) => release(channels);
+    };
+
+    it('ignores a first page of the old query still running when the filters change', async () => {
+      const queryChannels = vi
+        .spyOn(client, 'queryChannelsAndHydrate')
+        .mockResolvedValue({ channels: [typeB1()], duration: '0.1ms' });
+      const releaseOldPage = deferQuery(queryChannels);
+      const paginator = new ChannelPaginator({ client, filters: { type: 'a' } });
+      const oldQuery = paginator.toTail();
+      await utils.sleep(0);
+      expect(paginator.isLoading).toBe(true);
+
+      paginator.staticFilters = { type: 'b' };
+
+      // waiting for a first page, so a list UI queries again
+      expect(paginator.items).toBeUndefined();
+      expect(paginator.isLoading).toBe(false);
+      releaseOldPage([typeA1()]);
+      await oldQuery;
+      expect(paginator.items).toBeUndefined();
+      expect(paginator.isInitialized).toBe(false);
+
+      await paginator.toTail();
+      expect(paginator.items?.map((channel) => channel.cid)).toEqual(['b:b1']);
+    });
+
+    it('ignores a reload of the old query that lands after the first page of the new one', async () => {
+      const { paginator, queryChannels } = await setupLoadedList();
+      const releaseOldReload = deferQuery(queryChannels);
+      const oldReload = paginator.reload();
+      await utils.sleep(0);
+
+      paginator.staticFilters = { type: 'b' };
+      await paginator.toTail();
+      releaseOldReload([typeA2()]);
+      await oldReload;
+
+      expect(paginator.items?.map((channel) => channel.cid)).toEqual(['b:b1']);
+      expect(paginator.isLoading).toBe(false);
+    });
+
+    it('lets a reload() after the change load the first page of the new query', async () => {
+      const loaded = await setupLoadedList();
+
+      loaded.paginator.staticFilters = { type: 'b' };
+      await loaded.paginator.reload();
+
+      expect(loaded.queryChannels.mock.calls[1][0]).toEqual(
+        expect.objectContaining({ filter_conditions: { type: 'b' }, offset: 0 }),
+      );
+      expect(loaded.paginator.items?.map((channel) => channel.cid)).toEqual(['b:b1']);
+    });
+  });
+
+  describe('a query deferred until the offline sync', () => {
+    const setUpUnsyncedOfflineDb = async () => {
+      client.setOfflineDBApi(new MockOfflineDB({ client }));
+      (client.offlineDb!.initializeDB as unknown as MockInstance).mockReturnValue(true);
+      await client.offlineDb!.init(client.userId as string);
+      client.offlineDb!.syncManager.isSynced = false;
+      (client.offlineDb!.upsertCidsForQuery as unknown as MockInstance).mockResolvedValue(
+        true,
+      );
+      // the first read returns once released, later reads find nothing
+      let releaseCache: () => void = () => undefined;
+      const getChannelsForQuery = (
+        client.offlineDb!.getChannelsForQuery as unknown as MockInstance
+      )
+        .mockResolvedValue(null)
+        .mockReturnValueOnce(
+          new Promise((resolve) => {
+            releaseCache = () =>
+              resolve({
+                channels: [generateChannel({ channel: { id: 'cached', type: 'a' } })],
+              });
+          }),
+        );
+      const scheduleCallback = vi.spyOn(
+        client.offlineDb!.syncManager,
+        'scheduleSyncStatusChangeCallback',
+      );
+      const queryChannels = vi
+        .spyOn(client, 'queryChannelsAndHydrate')
+        .mockResolvedValue({ channels: [], duration: '0.1ms' });
+      return {
+        getChannelsForQuery,
+        queryChannels,
+        releaseCache: () => releaseCache(),
+        scheduleCallback,
+      };
+    };
+
+    it('ignores the cached page when the state is reset during the cache read', async () => {
+      const { queryChannels, releaseCache, scheduleCallback } =
+        await setUpUnsyncedOfflineDb();
+      const paginator = new ChannelPaginator({ client, filters: { type: 'a' } });
+      const query = paginator.toTail();
+      await utils.sleep(0);
+
+      paginator.resetState();
+      releaseCache();
+      await query;
+
+      expect(paginator.items).toBeUndefined();
+      // the cache of the query the reset cleared reaches neither the list nor the channel store
+      expect(client.channelManager.get('a:cached')).toBeUndefined();
+      // the query ends: the list's queries since the reset own its loading state
+      expect(paginator.isLoading).toBe(false);
+      expect(scheduleCallback).not.toHaveBeenCalled();
+      expect(queryChannels).not.toHaveBeenCalled();
+    });
+
+    it('throws nothing when the cache read fails after the state is reset', async () => {
+      const { getChannelsForQuery } = await setUpUnsyncedOfflineDb();
+      let rejectCache: (error: Error) => void = () => undefined;
+      getChannelsForQuery.mockReset().mockReturnValueOnce(
+        new Promise((_, reject) => {
+          rejectCache = reject;
+        }),
+      );
+      const paginator = new ChannelPaginator({
+        client,
+        filters: { type: 'a' },
+        paginatorOptions: { throwErrors: true },
+      });
+      const query = paginator.toTail();
+      await utils.sleep(0);
+
+      paginator.resetState();
+      rejectCache(new Error('db'));
+
+      await expect(query).resolves.toBeUndefined();
+      expect(paginator.items).toBeUndefined();
+    });
+
+    it('leaves the loading state to the query started after a reset during the cache read', async () => {
+      const { queryChannels, releaseCache } = await setUpUnsyncedOfflineDb();
+      const paginator = new ChannelPaginator({ client, filters: { type: 'a' } });
+      const ignoredQuery = paginator.toTail();
+      await utils.sleep(0);
+      // the sync completes while the deferred query reads the cache
+      client.offlineDb!.syncManager.isSynced = true;
+      let releaseFirstPage: () => void = () => undefined;
+      queryChannels.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            releaseFirstPage = () =>
+              resolve({
+                channels: [new Channel(client, 'b', 'b1', {})],
+                duration: '0.1ms',
+              });
+          }),
+      );
+
+      paginator.staticFilters = { type: 'b' };
+      const firstPage = paginator.toTail();
+      await utils.sleep(0);
+      releaseCache();
+      await ignoredQuery;
+
+      expect(paginator.isLoading).toBe(true);
+      expect(queryChannels).toHaveBeenCalledTimes(1);
+      releaseFirstPage();
+      await firstPage;
+      expect(paginator.items?.map((channel) => channel.cid)).toEqual(['b:b1']);
+    });
+
+    it('keeps a channel of the new query that arrives while its first page loads, after the filters change during the refresh of a cached list', async () => {
+      const { queryChannels, releaseCache } = await setUpUnsyncedOfflineDb();
+      const paginator = new ChannelPaginator({ client, filters: { type: 'a' } });
+      const seeding = paginator.toTail();
+      releaseCache();
+      await seeding;
+      expect(paginator.items?.map((channel) => channel.cid)).toEqual(['a:cached']);
+      client.offlineDb!.syncManager.isSynced = true;
+      let releaseRefresh: () => void = () => undefined;
+      queryChannels.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            releaseRefresh = () =>
+              resolve({
+                channels: [new Channel(client, 'a', 'a1', {})],
+                duration: '0.1ms',
+              });
+          }),
+      );
+      const refresh = paginator.toTail();
+      await utils.sleep(0);
+
+      paginator.staticFilters = { type: 'b' };
+      releaseRefresh();
+      await refresh;
+      let releaseFirstPage: () => void = () => undefined;
+      queryChannels.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            releaseFirstPage = () =>
+              resolve({
+                channels: [new Channel(client, 'b', 'b1', {})],
+                duration: '0.1ms',
+              });
+          }),
+      );
+      const firstPage = paginator.toTail();
+      await utils.sleep(0);
+      paginator.ingestItem(new Channel(client, 'b', 'b0', {}));
+      releaseFirstPage();
+      await firstPage;
+
+      expect(paginator.items?.map((channel) => channel.cid).sort()).toEqual([
+        'b:b0',
+        'b:b1',
+      ]);
+    });
+
+    it('reads the cache of the new query when the filters of a cached list change', async () => {
+      const { getChannelsForQuery, releaseCache } = await setUpUnsyncedOfflineDb();
+      const paginator = new ChannelPaginator({ client, filters: { type: 'a' } });
+      const seeding = paginator.toTail();
+      releaseCache();
+      await seeding;
+      expect(paginator.items?.map((channel) => channel.cid)).toEqual(['a:cached']);
+      client.offlineDb!.syncManager.isSynced = true;
+
+      paginator.staticFilters = { type: 'b' };
+      await paginator.toTail();
+
+      expect(getChannelsForQuery).toHaveBeenCalledTimes(2);
+      expect(getChannelsForQuery.mock.lastCall?.[0].options).toEqual(
+        expect.objectContaining({ filter_conditions: { type: 'b' } }),
+      );
+    });
+
+    it("runs the list's current query once the sync completes after a reset", async () => {
+      const { queryChannels, releaseCache, scheduleCallback } =
+        await setUpUnsyncedOfflineDb();
+      const paginator = new ChannelPaginator({ client, filters: { type: 'a' } });
+      const query = paginator.toTail();
+      releaseCache();
+      await query;
+      expect(paginator.items?.map((channel) => channel.cid)).toEqual(['a:cached']);
+
+      paginator.staticFilters = { type: 'b' };
+      expect(paginator.items).toBeUndefined();
+      client.offlineDb!.syncManager.isSynced = true;
+      await scheduleCallback.mock.calls[0][1]();
+
+      expect(queryChannels).toHaveBeenCalledTimes(1);
+      expect(queryChannels.mock.calls[0][0]).toEqual(
+        expect.objectContaining({ filter_conditions: { type: 'b' }, offset: 0 }),
+      );
+      expect(paginator.items).toEqual([]);
+    });
+  });
+
+  describe('a reset while a query runs', () => {
+    it('forgets the predefined filter the server reported for the old query', async () => {
+      vi.spyOn(client, 'queryChannelsAndHydrate').mockResolvedValue({
+        channels: [],
+        duration: '0.1ms',
+        predefined_filter: {
+          filter: { type: 'a' },
+          name: 'a',
+          sort: [{ direction: 1, field: 'created_at' }],
+        },
+      } as never);
+      const paginator = new ChannelPaginator({
+        client,
+        filters: { type: 'b' },
+        requestOptions: { predefined_filter: 'a' },
+      });
+      await paginator.toTail();
+      expect(paginator.predefinedFilter?.name).toBe('a');
+
+      paginator.options = {};
+
+      expect(paginator.predefinedFilter).toBeUndefined();
+      expect(paginator.effectiveFilters).toEqual({ type: 'b' });
+    });
+
+    it('drops a next page held by a recovery when the state is reset', async () => {
+      const queryChannels = vi
+        .spyOn(client, 'queryChannelsAndHydrate')
+        .mockResolvedValueOnce({
+          channels: [new Channel(client, 'a', 'a1', {})],
+          duration: '0.1ms',
+        });
+      const paginator = new ChannelPaginator({
+        client,
+        filters: { type: 'a' },
+        paginatorOptions: { pageSize: 1 },
+      });
+      await paginator.toTail();
+      let releaseRecoveryPage: () => void = () => undefined;
+      queryChannels.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            releaseRecoveryPage = () =>
+              resolve({
+                channels: [new Channel(client, 'a', 'a1', {})],
+                duration: '0.1ms',
+              });
+          }),
+      );
+      const recovery = paginator.recoverLoadedItems();
+      await utils.sleep(0);
+      // held until the recovery ends
+      await paginator.toTail();
+
+      paginator.resetState();
+      releaseRecoveryPage();
+      await recovery;
+      await utils.sleep(0);
+
+      expect(queryChannels).toHaveBeenCalledTimes(2);
+      expect(paginator.items).toBeUndefined();
+    });
+
+    it('keeps a next page a state subscriber asks for in reaction to the reset during a recovery', async () => {
+      const queryChannels = vi
+        .spyOn(client, 'queryChannelsAndHydrate')
+        .mockResolvedValueOnce({
+          channels: [new Channel(client, 'a', 'a1', {})],
+          duration: '0.1ms',
+        });
+      const paginator = new ChannelPaginator({
+        client,
+        filters: { type: 'a' },
+        paginatorOptions: { pageSize: 1 },
+      });
+      await paginator.toTail();
+      let releaseNextPage: () => void = () => undefined;
+      queryChannels.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            releaseNextPage = () =>
+              resolve({
+                channels: [new Channel(client, 'a', 'a2', {})],
+                duration: '0.1ms',
+              });
+          }),
+      );
+      const nextPage = paginator.toTail();
+      await utils.sleep(0);
+      const recovery = paginator.recoverLoadedItems();
+      queryChannels.mockResolvedValue({
+        channels: [new Channel(client, 'b', 'b1', {})],
+        duration: '0.1ms',
+      });
+      // a list UI asking for the first page as soon as the list is emptied
+      let firstPageOfNewQuery: Promise<unknown> | undefined;
+      const unsubscribe = paginator.state.subscribeWithSelector(
+        ({ items }) => ({ items }),
+        ({ items }) => {
+          if (items === undefined && !firstPageOfNewQuery) {
+            firstPageOfNewQuery = paginator.toTail();
+          }
+        },
+      );
+
+      paginator.staticFilters = { type: 'b' };
+      releaseNextPage();
+      await Promise.all([nextPage, recovery, firstPageOfNewQuery]);
+      unsubscribe();
+
+      await vi.waitFor(() =>
+        expect(paginator.items?.map((channel) => channel.cid)).toEqual(['b:b1']),
+      );
+      // the next page the subscriber asked for runs once the recovery ends
+      await vi.waitFor(() =>
+        expect(queryChannels.mock.lastCall?.[0]).toEqual(
+          expect.objectContaining({ filter_conditions: { type: 'b' }, offset: 1 }),
+        ),
+      );
+    });
+
+    it('ends the loading state when the reset happens during the offline preload', async () => {
+      client.setOfflineDBApi(new MockOfflineDB({ client }));
+      (client.offlineDb!.initializeDB as unknown as MockInstance).mockReturnValue(true);
+      await client.offlineDb!.init(client.userId as string);
+      client.offlineDb!.syncManager.isSynced = true;
+      (client.offlineDb!.upsertCidsForQuery as unknown as MockInstance).mockResolvedValue(
+        true,
+      );
+      let releaseCache: () => void = () => undefined;
+      (client.offlineDb!.getChannelsForQuery as unknown as MockInstance)
+        .mockResolvedValue(null)
+        .mockReturnValueOnce(
+          new Promise((resolve) => {
+            releaseCache = () => resolve(null);
+          }),
+        );
+      const queryChannels = vi
+        .spyOn(client, 'queryChannelsAndHydrate')
+        .mockResolvedValue({
+          channels: [new Channel(client, 'a', 'a1', {})],
+          duration: '0.1ms',
+        });
+      const paginator = new ChannelPaginator({ client });
+      const ignoredQuery = paginator.toTail();
+      await utils.sleep(0);
+
+      paginator.resetState();
+      releaseCache();
+      await ignoredQuery;
+
+      expect(paginator.isLoading).toBe(false);
+      expect(queryChannels).not.toHaveBeenCalled();
+
+      await paginator.toTail();
+      expect(queryChannels).toHaveBeenCalledTimes(1);
+      expect(paginator.items?.map((channel) => channel.cid)).toEqual(['a:a1']);
+    });
+
+    it("ignores the predefined filter the ignored query's response reports", async () => {
+      let releaseResponse: () => void = () => undefined;
+      vi.spyOn(client, 'queryChannelsAndHydrate').mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            releaseResponse = () =>
+              resolve({
+                channels: [],
+                duration: '0.1ms',
+                predefined_filter: { filter: { type: 'stale' }, name: 'stale' },
+              } as never);
+          }),
+      );
+      const paginator = new ChannelPaginator({
+        client,
+        requestOptions: { predefined_filter: 'stale' },
+      });
+      const ignoredQuery = paginator.toTail();
+      await utils.sleep(0);
+
+      paginator.resetState();
+      releaseResponse();
+      await ignoredQuery;
+      paginator.updateConfig({
+        doRequest: async () => ({ items: [new Channel(client, 'a', 'a1', {})] }),
+      });
+      await paginator.toTail();
+
+      expect(paginator.predefinedFilter).toBeUndefined();
     });
   });
 });

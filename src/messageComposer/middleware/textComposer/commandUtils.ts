@@ -66,6 +66,14 @@ export const getCommandByName = (
     .items.find((command) => command.name?.toLowerCase() === normalizedCommandName);
 };
 
+export const getCurrentCommand = (
+  composer: MessageComposer,
+  text = composer.textComposer.text,
+  commandSearchSource: CommandSearchSource = composer.commandSearchSource,
+): Command | undefined =>
+  composer.textComposer.command ??
+  getCommandByName(commandSearchSource, getRawCommandName(text));
+
 export const notifyCommandDisabled = (composer: MessageComposer, command: Command) => {
   const disabledReason = composer.getCommandDisabledReason(command);
   if (!disabledReason) return;

@@ -2391,6 +2391,52 @@ describe('MessagePaginator', () => {
         expect(paginator.hasMoreTail).toBe(true);
       });
 
+      // A list scrolls to the focused message when it renders: kept, the jump's target would be
+      // scrolled to in the newest window, where it is not, instead of the message just sent.
+      it("and drops the focus of the jump it replaces when it is the current user's own send", async () => {
+        (channel as unknown as { userId: string }).userId = 'me';
+        const paginator = new MessagePaginator({ channel, itemIndex });
+        loadJumpedWindow(paginator);
+        await paginator.jumpToMessage('m2');
+        expect(paginator.messageFocusSignal.getLatestValue().signal?.messageId).toBe(
+          'm2',
+        );
+
+        paginator.ingestItem({
+          ...msg('m20', '20'),
+          status: 'sending',
+          user: { id: 'me' },
+        });
+
+        expect(paginator.items?.map((m) => m.id)).toEqual(['m20']);
+        expect(paginator.messageFocusSignal.getLatestValue().signal).toBe(null);
+      });
+
+      it('and keeps the focus of the jump when the message is not shown', async () => {
+        const paginator = new MessagePaginator({ channel, itemIndex });
+        loadJumpedWindow(paginator);
+        await paginator.jumpToMessage('m2');
+
+        paginator.ingestItem(msg('m20', '20'));
+
+        expect(paginator.items?.map((m) => m.id)).toEqual(['m1', 'm2', 'm3']);
+        expect(paginator.messageFocusSignal.getLatestValue().signal?.messageId).toBe(
+          'm2',
+        );
+      });
+
+      it('and drops the focus of an earlier jump when jumping to the latest message', async () => {
+        const paginator = new MessagePaginator({ channel, itemIndex });
+        loadJumpedWindow(paginator);
+        paginator.ingestItem(msg('m20', '20'));
+        await paginator.jumpToMessage('m2');
+
+        expect(await paginator.jumpToTheLatestMessage()).toBe(true);
+
+        expect(paginator.items?.map((m) => m.id)).toEqual(['m20']);
+        expect(paginator.messageFocusSignal.getLatestValue().signal).toBe(null);
+      });
+
       it('and stays shown when a jump requested before the send comes back', async () => {
         (channel as unknown as { userId: string }).userId = 'me';
         const paginator = new MessagePaginator({ channel, itemIndex });
@@ -2513,6 +2559,56 @@ describe('MessagePaginator', () => {
 
           expect(headOf(paginator)).toEqual(['m20']);
           expect(paginator.isActiveIntervalAtHead).toBe(true);
+        });
+      });
+
+      // as after the channel query, but the paginator's own query (`executeQuery`) loaded the page
+      describe("after the paginator's own newest page returned no messages", () => {
+        const failFirstQuery = async (paginator: MessagePaginator) => {
+          (channel.query as unknown as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+            new Error('network'),
+          );
+          await paginator.executeQuery();
+          expect(paginator.items).toBeUndefined();
+        };
+
+        describe.each([
+          ['without a last_message_at', null],
+          // e.g. the history before the user joined is hidden
+          ['with a last_message_at', at('10')],
+        ])('%s', (_, lastMessageAt) => {
+          it.each([
+            ['a first query', async () => undefined, {}],
+            [
+              'a refresh keeping the previous items',
+              async () => undefined,
+              { keepPreviousItems: true },
+            ],
+            [
+              'a refresh keeping the previous items after the first query failed',
+              failFirstQuery,
+              { keepPreviousItems: true },
+            ],
+          ])('%s', async (__, before, params) => {
+            const paginator = new MessagePaginator({ channel, itemIndex });
+            await before(paginator);
+            // as the channel query response sets it
+            paginator.setQueriedLatestMessageAt(lastMessageAt);
+            (channel.query as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+              messages: [],
+            });
+
+            await paginator.executeQuery(params);
+            expect(paginator.items).toEqual([]);
+
+            paginator.ingestItem(msg('m20', '20'));
+            paginator.ingestItem(msg('m21', '21'));
+
+            expect(headOf(paginator)).toEqual(['m20', 'm21']);
+            expect(paginator.items?.map((m) => m.id)).toEqual(['m20', 'm21']);
+            expect(paginator.isActiveIntervalAtHead).toBe(true);
+            expect(paginator.hasMoreTail).toBe(false);
+          });
         });
       });
 
@@ -3595,6 +3691,25 @@ describe('MessagePaginator', () => {
 
       expect(paginator.items?.map((message) => message.id)).toEqual(['m1', 'm2', 'm3']);
       expect(paginator.hasMoreTail).toBe(false);
+    });
+
+    it('reports the tailward loading direction while the older page loads', async () => {
+      const { paginator, m1 } = setupLoadedHead({ isTail: false });
+      paginator.reconcileNewestMessages([m1, m('m2', '02')]);
+      let resolveOlderPage: (value: { messages: MessageResponse[] }) => void = () =>
+        undefined;
+      (channel.getReplies as ReturnType<typeof vi.fn>).mockReturnValue(
+        new Promise((resolve) => {
+          resolveOlderPage = resolve;
+        }),
+      );
+
+      const query = paginator.toTail();
+      expect(paginator.loadingDirection).toBe('tailward');
+
+      resolveOlderPage({ messages: [] });
+      await query;
+      expect(paginator.loadingDirection).toBeUndefined();
     });
 
     it('reconciles in-place edits and appends new messages without a query', () => {
@@ -5142,6 +5257,7 @@ describe('MessagePaginator', () => {
         await flushProbe(paginator);
 
         expect(channel.query).toHaveBeenCalledWith({
+          include_scheduled_messages: false,
           messages: { limit: 1, id_lt: 'm2' },
         });
         expect(paginator.getItem('m1')).toBeUndefined(); // pruned by the probe
@@ -5169,6 +5285,7 @@ describe('MessagePaginator', () => {
         await flushProbe(paginator);
 
         expect(channel.query).toHaveBeenCalledWith({
+          include_scheduled_messages: false,
           messages: { limit: 1, id_lt: 'm3' },
         });
         expect(paginator.getItem('m1')).toBeDefined(); // kept — no data loss on a truncated reload
@@ -5321,6 +5438,7 @@ describe('MessagePaginator', () => {
 
         // The below-window oldest (m1) was probed and is real → kept. Final = the server truth.
         expect(channel.query).toHaveBeenCalledWith({
+          include_scheduled_messages: false,
           messages: { limit: 1, id_lt: 'm2' },
         });
         expect(paginator.getItem('m1')).toBeDefined();
@@ -6522,6 +6640,105 @@ describe('MessagePaginator', () => {
         user: { id: 'me' },
       });
       (channel as unknown as { state: unknown }).state = { read: {} };
+    });
+
+    it('reports no failure when the state is cleared during the jump query', async () => {
+      notifications.addError.mockClear();
+      const paginator = new MessagePaginator({ channel, itemIndex });
+      loadNewestPage(paginator);
+      let releaseResponse: () => void = () => undefined;
+      (channel.query as unknown as ReturnType<typeof vi.fn>).mockReset().mockReturnValue(
+        new Promise((resolve) => {
+          releaseResponse = () => resolve({ messages: [m('m10', 10), m('m11', 11)] });
+        }),
+      );
+
+      const applyChannelState = vi.spyOn(channel, 'applyChannelStateFromResponse');
+
+      const jump = paginator.jumpToMessage('m10');
+      await vi.waitFor(() => expect(channel.query).toHaveBeenCalledTimes(1));
+      paginator.clearStateAndCache();
+      releaseResponse();
+
+      expect(await jump).toBe(false);
+      expect(notifications.addError).not.toHaveBeenCalled();
+      expect(paginator.getItem('m10')).toBeUndefined();
+      // the channel's part of the response is not the cleared list's, so it still applies
+      expect(applyChannelState).toHaveBeenCalledTimes(1);
+    });
+
+    it('ends a jump whose results the clear made ignored although applying its channel state fails', async () => {
+      notifications.addError.mockClear();
+      const paginator = new MessagePaginator({ channel, itemIndex });
+      loadNewestPage(paginator);
+      let releaseResponse: () => void = () => undefined;
+      (channel.query as unknown as ReturnType<typeof vi.fn>).mockReset().mockReturnValue(
+        new Promise((resolve) => {
+          releaseResponse = () => resolve({ messages: [m('m10', 10)] });
+        }),
+      );
+      vi.spyOn(channel, 'applyChannelStateFromResponse').mockImplementation(() => {
+        throw new Error('pending disposal');
+      });
+
+      const jump = paginator.jumpToMessage('m10');
+      await vi.waitFor(() => expect(channel.query).toHaveBeenCalledTimes(1));
+      paginator.clearStateAndCache();
+      releaseResponse();
+
+      expect(await jump).toBe(false);
+      expect(paginator.lastQueryError).toBeUndefined();
+    });
+
+    it('reports no failure when the state is cleared during the jump to the latest message', async () => {
+      notifications.addError.mockClear();
+      const paginator = new MessagePaginator({ channel, itemIndex });
+      let releaseResponse: () => void = () => undefined;
+      (channel.query as unknown as ReturnType<typeof vi.fn>).mockReset().mockReturnValue(
+        new Promise((resolve) => {
+          releaseResponse = () => resolve({ messages: [m('m50', 50), m('m51', 51)] });
+        }),
+      );
+
+      const jump = paginator.jumpToTheLatestMessage();
+      await vi.waitFor(() => expect(channel.query).toHaveBeenCalledTimes(1));
+      paginator.clearStateAndCache();
+      releaseResponse();
+
+      expect(await jump).toBe(false);
+      expect(notifications.addError).not.toHaveBeenCalled();
+      expect(channel.query).toHaveBeenCalledTimes(1);
+    });
+
+    it('jumps nowhere when the state is cleared during the first-unread query', async () => {
+      notifications.addError.mockClear();
+      (channel as unknown as { state: unknown }).state = {
+        read: {
+          me: {
+            first_unread_message_id: null,
+            last_read: convertDateToTimestamp('2020-01-01T00:20:00.000Z'),
+            last_read_message_id: 'm19',
+          },
+        },
+      };
+      const paginator = new MessagePaginator({ channel, itemIndex });
+      loadNewestPage(paginator);
+      let releaseResponse: () => void = () => undefined;
+      (channel.query as unknown as ReturnType<typeof vi.fn>).mockReset().mockReturnValue(
+        new Promise((resolve) => {
+          releaseResponse = () => resolve({ messages: [m('m19', 19), m('m21', 21)] });
+        }),
+      );
+
+      const jump = paginator.jumpToTheFirstUnreadMessage();
+      await vi.waitFor(() => expect(channel.query).toHaveBeenCalledTimes(1));
+      paginator.clearStateAndCache();
+      releaseResponse();
+
+      expect(await jump).toBe(false);
+      // no jump to the last read message into the cleared list
+      expect(channel.query).toHaveBeenCalledTimes(1);
+      expect(notifications.addError).not.toHaveBeenCalled();
     });
 
     it('ends loading when the jump target is not in the response', async () => {

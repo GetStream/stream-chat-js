@@ -42,6 +42,16 @@ describe('ThreadPaginator', () => {
     expect(paginator.items?.[0]).toBe(listed);
   });
 
+  it('reports nothing more to load after an empty last page', async () => {
+    respond([]);
+
+    await client.threads.reload();
+
+    expect(client.threads.paginator.items).toEqual([]);
+    expect(client.threads.paginator.hasMoreHead).toBe(false);
+    expect(client.threads.paginator.hasMoreTail).toBe(false);
+  });
+
   it('publishes isLoading on the first load, like any paginator, with no items until it lands', async () => {
     respond([makeThread()]);
 
