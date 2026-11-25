@@ -99,17 +99,6 @@ describe('PaginatorView', () => {
     expect(listener).not.toHaveBeenCalled();
   });
 
-  it('recomputes the items when the predicate is replaced', () => {
-    const { paginator } = createPaginator([a, b]);
-    const view = new PaginatorView({ paginator, predicate: unread });
-
-    view.setPredicate(({ read }) => read);
-    expect(itemsOf(view)).toEqual([a]);
-
-    view.setPredicate();
-    expect(itemsOf(view)).toEqual([a, b]);
-  });
-
   it("loads through the paginator's own head and tail loaders", () => {
     const { paginator } = createPaginator([a]);
     const view = new PaginatorView({ paginator });

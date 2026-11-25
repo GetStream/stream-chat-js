@@ -116,7 +116,7 @@ describe("a channel's scheduled messages", () => {
     });
 
     it('is not registered with client.scheduledMessagePaginators', () => {
-      const { channel, client } = setup();
+      const { client } = setup();
 
       expect(client.scheduledMessagePaginators.paginators).toEqual([]);
     });
@@ -778,7 +778,9 @@ describe("a channel's scheduled messages", () => {
         .spyOn(client, 'updateScheduledMessage')
         .mockResolvedValue({ duration: '', scheduled_message: updated });
 
-      await channel.updateScheduledMessage(sm.id, { message: { text: 'edited' } });
+      await channel.messageOperations.updateScheduledMessage(sm.id, {
+        request: { message: { text: 'edited' } },
+      });
 
       expect(spy).toHaveBeenCalledWith({ id: sm.id }, { message: { text: 'edited' } });
       expect(listed(channel)).toEqual([updated]);
@@ -791,7 +793,7 @@ describe("a channel's scheduled messages", () => {
         scheduled_message: sm,
       });
 
-      await channel.deleteScheduledMessage(sm.id);
+      await channel.messageOperations.deleteScheduledMessage(sm.id);
 
       expect(listed(channel)).toEqual([]);
       expect(client.scheduledMessageStore.get(sm.id)).toBeUndefined();
@@ -805,7 +807,7 @@ describe("a channel's scheduled messages", () => {
         scheduled_message: sending,
       });
 
-      await channel.sendScheduledMessageNow(sm.id);
+      await channel.messageOperations.sendScheduledMessageNow(sm.id);
 
       expect(listed(channel)).toEqual([sending]);
     });
@@ -821,7 +823,9 @@ describe("a channel's scheduled messages", () => {
         scheduled_message: updated,
       });
 
-      await channel.updateScheduledMessage(sm.id, { message: { text: 'edited' } });
+      await channel.messageOperations.updateScheduledMessage(sm.id, {
+        request: { message: { text: 'edited' } },
+      });
 
       expect(all.items).toEqual([updated]);
     });
@@ -833,8 +837,8 @@ describe("a channel's scheduled messages", () => {
         response.promise as never,
       );
 
-      const updating = channel.updateScheduledMessage(sm.id, {
-        message: { text: 'edited' },
+      const updating = channel.messageOperations.updateScheduledMessage(sm.id, {
+        request: { message: { text: 'edited' } },
       });
       client.dispatchEvent(
         generateEvent('scheduled_message.sent', { ...sm, updated_at: at(20) }),
@@ -854,7 +858,7 @@ describe("a channel's scheduled messages", () => {
         response.promise as never,
       );
 
-      const sending = channel.sendScheduledMessageNow(sm.id);
+      const sending = channel.messageOperations.sendScheduledMessageNow(sm.id);
       client.dispatchEvent(
         generateEvent('scheduled_message.failed', {
           ...sm,
@@ -878,11 +882,14 @@ describe("a channel's scheduled messages", () => {
         [
           'updateScheduledMessage',
           (channel: Channel, id: string) =>
-            channel.updateScheduledMessage(id, { message: { text: 'late edit' } }),
+            channel.messageOperations.updateScheduledMessage(id, {
+              request: { message: { text: 'late edit' } },
+            }),
         ],
         [
           'deleteScheduledMessage',
-          (channel: Channel, id: string) => channel.deleteScheduledMessage(id),
+          (channel: Channel, id: string) =>
+            channel.messageOperations.deleteScheduledMessage(id),
         ],
       ] as const)('is removed from the lists when %s gets a 404', async (method, act) => {
         const { channel, client, sm } = setupWithMessage();
@@ -897,7 +904,9 @@ describe("a channel's scheduled messages", () => {
         const { channel, client, sm } = setupWithMessage();
         vi.spyOn(client, 'deleteScheduledMessage').mockRejectedValue(notFoundError);
 
-        await expect(channel.deleteScheduledMessage(sm.id)).rejects.toBe(notFoundError);
+        await expect(
+          channel.messageOperations.deleteScheduledMessage(sm.id),
+        ).rejects.toBe(notFoundError);
         client.dispatchEvent(generateEvent('scheduled_message.updated', sm));
 
         expect(listed(channel)).toEqual([]);
@@ -907,7 +916,9 @@ describe("a channel's scheduled messages", () => {
         const { channel, client, sm } = setupWithMessage();
         vi.spyOn(client, 'sendScheduledMessageNow').mockRejectedValue(notFoundError);
 
-        await expect(channel.sendScheduledMessageNow(sm.id)).rejects.toBe(notFoundError);
+        await expect(
+          channel.messageOperations.sendScheduledMessageNow(sm.id),
+        ).rejects.toBe(notFoundError);
 
         expect(listed(channel)).toEqual([sm]);
       });
@@ -917,7 +928,9 @@ describe("a channel's scheduled messages", () => {
         const sendingError = generateAPIError(121, 'scheduled_message_sending', 409);
         vi.spyOn(client, 'sendScheduledMessageNow').mockRejectedValue(sendingError);
 
-        await expect(channel.sendScheduledMessageNow(sm.id)).rejects.toBe(sendingError);
+        await expect(
+          channel.messageOperations.sendScheduledMessageNow(sm.id),
+        ).rejects.toBe(sendingError);
 
         expect(listed(channel)).toEqual([sm]);
       });
@@ -953,9 +966,9 @@ describe("a channel's scheduled messages", () => {
           scheduled_message: sm,
         } as never);
 
-        const scheduling = channel.scheduleMessage({
+        const scheduling = channel.messageOperations.scheduleMessage({
           message: { id: sm.id, text: 'later' },
-          scheduled_at: new Date(Date.now() + 60 * 60 * 1000),
+          options: { scheduled_at: new Date(Date.now() + 60 * 60 * 1000) },
         });
         await new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -972,15 +985,19 @@ describe("a channel's scheduled messages", () => {
         [
           'updateScheduledMessage',
           (channel: Channel, id: string) =>
-            channel.updateScheduledMessage(id, { message: { text: 'edited' } }),
+            channel.messageOperations.updateScheduledMessage(id, {
+              request: { message: { text: 'edited' } },
+            }),
         ],
         [
           'deleteScheduledMessage',
-          (channel: Channel, id: string) => channel.deleteScheduledMessage(id),
+          (channel: Channel, id: string) =>
+            channel.messageOperations.deleteScheduledMessage(id),
         ],
         [
           'sendScheduledMessageNow',
-          (channel: Channel, id: string) => channel.sendScheduledMessageNow(id),
+          (channel: Channel, id: string) =>
+            channel.messageOperations.sendScheduledMessageNow(id),
         ],
       ] as const)('does not hold %s behind the send', async (method, act) => {
         const { channel, client, sm } = setupWithMessage();
@@ -1053,7 +1070,7 @@ describe("a channel's scheduled messages", () => {
         scheduled_message: { ...sm, updated_at: at(1) },
       } as never);
 
-      await channel.deleteScheduledMessage(sm.id);
+      await channel.messageOperations.deleteScheduledMessage(sm.id);
 
       expect(listed(channel)).toEqual([]);
       expect(registered.items).toEqual([]);
