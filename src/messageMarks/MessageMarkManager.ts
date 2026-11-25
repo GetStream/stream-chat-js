@@ -43,7 +43,7 @@ export class MessageMarkManager extends WithSubscriptions {
    *
    * @returns The registered paginator.
    */
-  insertPaginator({
+  registerPaginator({
     paginator,
   }: {
     paginator: MessageMarkPaginator;
@@ -79,7 +79,7 @@ export class MessageMarkManager extends WithSubscriptions {
    */
   clear = () => {
     this.unregisterSubscriptions();
-    this.drop(() => true);
+    this.dropPaginator(() => true);
   };
 
   public registerSubscriptions = () => {
@@ -100,7 +100,9 @@ export class MessageMarkManager extends WithSubscriptions {
     this.addUnsubscribeFunction(
       this.client.on('message.deleted', (event) => {
         if (event.hard_delete && event.message?.id) {
-          this.drop(({ paginator }) => paginator.messageId === event.message?.id);
+          this.dropPaginator(
+            ({ paginator }) => paginator.messageId === event.message?.id,
+          );
         }
       }).unsubscribe,
     );
@@ -108,7 +110,7 @@ export class MessageMarkManager extends WithSubscriptions {
       (eventType) =>
         this.addUnsubscribeFunction(
           this.client.on(eventType, (event) => {
-            if (event.cid) this.drop((entry) => entry.cid === event.cid);
+            if (event.cid) this.dropPaginator((entry) => entry.cid === event.cid);
           }).unsubscribe,
         ),
     );
@@ -117,7 +119,7 @@ export class MessageMarkManager extends WithSubscriptions {
       this.client.on('channel.truncated', (event) => {
         if (!event.cid) return;
         const truncatedAt = event.channel?.truncated_at;
-        this.drop(
+        this.dropPaginator(
           ({ cid, createdAt }) =>
             cid === event.cid &&
             (truncatedAt == null || createdAt == null || createdAt < truncatedAt),
@@ -133,9 +135,9 @@ export class MessageMarkManager extends WithSubscriptions {
   }
 
   // Unregisters the lists whose marks are gone. A list still shown empties instead of showing them.
-  private drop(predicate: (entry: Entry) => boolean) {
+  private dropPaginator(shouldDrop: (entry: Entry) => boolean) {
     this.entries.forEach((entry, id) => {
-      if (!predicate(entry)) return;
+      if (!shouldDrop(entry)) return;
       entry.paginator.resetState();
       this.entries.delete(id);
     });

@@ -59,7 +59,7 @@ describe('MessageMarkManager', () => {
   });
 
   const registered = (id: string, filter?: { type: string }, messageId = 'message') =>
-    manager.insertPaginator({
+    manager.registerPaginator({
       paginator: new MessageMarkPaginator(client, { filter, id, messageId }),
     });
 
@@ -95,7 +95,7 @@ describe('MessageMarkManager', () => {
   });
 
   it('gives a list without an id a generated one', () => {
-    const paginator = manager.insertPaginator({
+    const paginator = manager.registerPaginator({
       paginator: new MessageMarkPaginator(client, { messageId: 'message' }),
     });
 
