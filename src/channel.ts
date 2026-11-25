@@ -551,6 +551,22 @@ export class Channel extends ChannelApi {
     runDetached(paginator.reload(), { context: 'ensureScheduledMessagesLoaded' });
   }
 
+  async scheduleMessage(...args: Parameters<ChannelApi['sendMessage']>) {
+    return await this.sendMessage(...args);
+  }
+
+  async updateScheduledMessage(...args: Parameters<ChatApi['updateScheduledMessage']>) {
+    return await this.getClient().updateScheduledMessage(...args);
+  }
+
+  async deleteScheduledMessage(...args: Parameters<ChatApi['deleteScheduledMessage']>) {
+    return await this.getClient().deleteScheduledMessage(...args);
+  }
+
+  async sendScheduledMessageNow(...args: Parameters<ChatApi['sendScheduledMessageNow']>) {
+    return await this.getClient().sendScheduledMessageNow(...args);
+  }
+
   async sendReaction(...args: Parameters<ChatApi['sendReaction']>) {
     return await this.getClient().sendReaction(...args);
   }

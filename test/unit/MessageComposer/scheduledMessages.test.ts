@@ -856,7 +856,7 @@ describe('MessageComposer scheduled messages', () => {
       expect(updatedMessage(updateSpy)).not.toHaveProperty('attachments');
     });
 
-    it('restores the previous draft after a successful update', async () => {
+    it('clears the composer after a successful update', async () => {
       const { client, composer } = setup();
       mockScheduledUpdate(client, generateScheduledMessage());
       composer.textComposer.setText('my draft');
@@ -866,8 +866,8 @@ describe('MessageComposer scheduled messages', () => {
       await composer.updateScheduledMessage();
 
       expect(composer.editedScheduledMessage).toBeUndefined();
-      expect(composer.textComposer.text).toBe('my draft');
-      expect(composer.draftId).toBe('draft-1');
+      expect(composer.textComposer.text).toBe('');
+      expect(composer.draftId).toBeNull();
     });
 
     it('settles a pending upload before saving the edit', async () => {
@@ -944,7 +944,7 @@ describe('MessageComposer scheduled messages', () => {
       );
     });
 
-    it('restores the previous draft when the edit is cancelled', async () => {
+    it('clears the composer when the edit is cancelled', async () => {
       const { composer } = setup();
       composer.textComposer.setText('my draft');
       composer.state.partialNext({ draftId: 'draft-1' });
@@ -953,21 +953,8 @@ describe('MessageComposer scheduled messages', () => {
       composer.cancelScheduledMessageEdit();
 
       expect(composer.editedScheduledMessage).toBeUndefined();
-      expect(composer.textComposer.text).toBe('my draft');
-      expect(composer.draftId).toBe('draft-1');
-    });
-
-    it('keeps the first restore point when another scheduled message is edited', async () => {
-      const { composer } = setup();
-      composer.textComposer.setText('my draft');
-      await composer.editScheduledMessage(generateScheduledMessage());
-      await composer.editScheduledMessage(
-        generateScheduledMessage({ id: 'sm-2', message: { text: 'second', custom: {} } }),
-      );
-
-      composer.cancelScheduledMessageEdit();
-
-      expect(composer.textComposer.text).toBe('my draft');
+      expect(composer.textComposer.text).toBe('');
+      expect(composer.draftId).toBeNull();
     });
 
     it('fills the composer through initState in the scheduled message mode', async () => {
@@ -1066,7 +1053,7 @@ describe('MessageComposer scheduled messages', () => {
         return { client, composer, scheduledMessage };
       };
 
-      it('keeps the edit and loads the newer draft when the edit ends', async () => {
+      it('keeps the edit and ignores an updated draft', async () => {
         const { client, composer, scheduledMessage } = await setupEditWithDraft();
 
         client.dispatchEvent(draftEvent('draft.updated', 'newer draft'));
@@ -1077,11 +1064,11 @@ describe('MessageComposer scheduled messages', () => {
         composer.cancelScheduledMessageEdit();
 
         expect(composer.editedScheduledMessage).toBeUndefined();
-        expect(composer.textComposer.text).toBe('newer draft');
-        expect(composer.draftId).toBe('draft-2');
+        expect(composer.textComposer.text).toBe('');
+        expect(composer.draftId).toBeNull();
       });
 
-      it('keeps the edit and clears the composer when the edit ends', async () => {
+      it('keeps the edit and ignores a deleted draft', async () => {
         const { client, composer, scheduledMessage } = await setupEditWithDraft();
 
         client.dispatchEvent(draftEvent('draft.deleted', 'my draft'));
@@ -1094,16 +1081,6 @@ describe('MessageComposer scheduled messages', () => {
         expect(composer.editedScheduledMessage).toBeUndefined();
         expect(composer.textComposer.text).toBe('');
         expect(composer.draftId).toBeNull();
-      });
-
-      it('uses the latest draft event', async () => {
-        const { client, composer } = await setupEditWithDraft();
-
-        client.dispatchEvent(draftEvent('draft.deleted', 'my draft'));
-        client.dispatchEvent(draftEvent('draft.updated', 'written again'));
-        composer.cancelScheduledMessageEdit();
-
-        expect(composer.textComposer.text).toBe('written again');
       });
     });
 
@@ -1189,7 +1166,7 @@ describe('MessageComposer scheduled messages', () => {
       expect(composer.editedScheduledMessage).toBeUndefined();
     });
 
-    it('restores the earlier composition after scheduling', async () => {
+    it('clears the composer after scheduling', async () => {
       const { channel, client, composer } = setup();
       mockScheduledSend(client, generateScheduledMessage({ id: 'sm-2' }));
       vi.spyOn(channel.messageOperations, 'deleteScheduledMessage').mockResolvedValue(
@@ -1200,7 +1177,7 @@ describe('MessageComposer scheduled messages', () => {
 
       await composer.scheduleMessage(scheduledAt);
 
-      expect(composer.textComposer.text).toBe('my draft');
+      expect(composer.textComposer.text).toBe('');
     });
 
     it('keeps the failed message and the composition when scheduling fails', async () => {
@@ -1277,7 +1254,7 @@ describe('MessageComposer scheduled messages', () => {
       expect(sendSpy).toHaveBeenCalled();
     });
 
-    it('restores the earlier composition when cancelled', async () => {
+    it('clears the composer when cancelled', async () => {
       const { composer } = setup();
       composer.textComposer.setText('my draft');
       composer.state.partialNext({ draftId: 'draft-1' });
@@ -1286,8 +1263,8 @@ describe('MessageComposer scheduled messages', () => {
       composer.cancelScheduledMessageEdit();
 
       expect(composer.editedScheduledMessage).toBeUndefined();
-      expect(composer.textComposer.text).toBe('my draft');
-      expect(composer.draftId).toBe('draft-1');
+      expect(composer.textComposer.text).toBe('');
+      expect(composer.draftId).toBeNull();
     });
 
     it('neither creates nor deletes drafts while holding the failed message', async () => {
@@ -1310,7 +1287,7 @@ describe('MessageComposer scheduled messages', () => {
           requestHandlers: { sendMessageRequest },
         } as never);
 
-      it('deletes the failed message after the send succeeds and restores the earlier composition', async () => {
+      it('deletes the failed message after the send succeeds', async () => {
         const { channel, composer } = setup();
         const failedMessage = generateFailedMessage();
         let resolveSend: (value: unknown) => void = () => undefined;
@@ -1332,7 +1309,7 @@ describe('MessageComposer scheduled messages', () => {
         await vi.waitFor(() => expect(sendRequest).toHaveBeenCalled());
 
         expect(composer.editedScheduledMessage).toBeUndefined();
-        expect(composer.textComposer.text).toBe('my draft');
+        expect(composer.textComposer.text).toBe('');
         expect(deleteSpy).not.toHaveBeenCalled();
 
         resolveSend({
@@ -1369,7 +1346,7 @@ describe('MessageComposer scheduled messages', () => {
       [ScheduledMessageEventType.Sent, ScheduledMessageCompositionEndReason.Sent],
       [ScheduledMessageEventType.Deleted, ScheduledMessageCompositionEndReason.Deleted],
       [ScheduledMessageEventType.Failed, ScheduledMessageCompositionEndReason.Failed],
-    ])('ends the edit and restores the draft on %s', async (type, reason) => {
+    ])('ends the edit and clears the composer on %s', async (type, reason) => {
       const { client, composer } = setup();
       const addWarningSpy = vi.spyOn(client.notifications, 'addWarning');
       composer.registerSubscriptions();
@@ -1380,7 +1357,7 @@ describe('MessageComposer scheduled messages', () => {
       client.dispatchEvent(scheduledEvent(type, scheduledMessage));
 
       expect(composer.editedScheduledMessage).toBeUndefined();
-      expect(composer.textComposer.text).toBe('my draft');
+      expect(composer.textComposer.text).toBe('');
       expect(addWarningSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           options: {
@@ -1457,7 +1434,7 @@ describe('MessageComposer scheduled messages', () => {
         },
       }) as unknown as Parameters<MessageComposer['initStateFromChannelResponse']>[0];
 
-    it('keeps the edit and restores the newer draft when the edit ends', async () => {
+    it('keeps the edit and ignores the draft', async () => {
       const { composer } = setup();
       composer.textComposer.setText('my draft');
       await composer.editScheduledMessage(generateScheduledMessage());
@@ -1469,7 +1446,7 @@ describe('MessageComposer scheduled messages', () => {
 
       composer.cancelScheduledMessageEdit();
 
-      expect(composer.textComposer.text).toBe('newer draft');
+      expect(composer.textComposer.text).toBe('');
     });
 
     it('keeps a failed message being scheduled again', async () => {

@@ -16,7 +16,7 @@ import {
 import { chatLoggerSystem } from '../logger';
 import type { Unsubscribe } from '@stream-io/state-store';
 import type { ScheduledMessageResponse } from '../gen/models';
-import type { DraftResponse, LocalMessage } from '../types';
+import type { LocalMessage } from '../types';
 import type {
   MessageComposer,
   MessageComposerSnapshot,
@@ -32,8 +32,6 @@ const END_REASON_BY_SCHEDULED_MESSAGE_EVENT = {
 } as const;
 
 type ScheduledMessageEndEventType = keyof typeof END_REASON_BY_SCHEDULED_MESSAGE_EVENT;
-
-type ScheduledMessageEditRestore = () => void;
 
 type ScheduledSubmitRestorePoint = {
   snapshot: MessageComposerSnapshot;
@@ -52,7 +50,6 @@ export type ScheduledMessageCompositionOptions = {
 
 export class ScheduledMessageComposition extends WithSubscriptions {
   private readonly composer: MessageComposer;
-  private restoreAfterEdit: ScheduledMessageEditRestore | null = null;
 
   constructor({ composer }: ScheduledMessageCompositionOptions) {
     super();
@@ -97,48 +94,13 @@ export class ScheduledMessageComposition extends WithSubscriptions {
     return !!this.editedScheduledMessage && !this.failedScheduledMessage;
   }
 
-  public handleDraftWhileEditing = (draft?: DraftResponse): boolean => {
-    if (!this.editedScheduledMessage) return false;
-    if (draft) {
-      this.restoreAfterEdit = () => this.composer.initState({ composition: draft });
-    }
-    return true;
-  };
-
-  public clearDraftWhileEditing = (): boolean => {
-    if (!this.editedScheduledMessage) return false;
-    this.restoreAfterEdit = this.composer.clear;
-    return true;
-  };
-
   public claimSend = (): { onSent: () => void } | null => {
     const { failedScheduledMessage } = this;
     if (!failedScheduledMessage) return null;
 
-    this.endEdit();
+    this.composer.clear();
 
     return { onSent: () => this.removeFailedScheduledMessage(failedScheduledMessage) };
-  };
-
-  private endEdit = () => {
-    const restore = this.restoreAfterEdit ?? this.composer.clear;
-
-    this.restoreAfterEdit = null;
-    this.composer.state.partialNext({ editedScheduledMessage: null });
-
-    restore();
-  };
-
-  private saveCompositionBeforeEdit = () => {
-    if (this.editedScheduledMessage) return;
-
-    const snapshot = this.composer.getSnapshot();
-    const state = this.composer.state.getLatestValue();
-
-    this.restoreAfterEdit = () => {
-      this.composer.restoreSnapshot(snapshot);
-      this.composer.state.next(state);
-    };
   };
 
   private removeFailedScheduledMessage = (
@@ -167,7 +129,7 @@ export class ScheduledMessageComposition extends WithSubscriptions {
     this.composer.state.partialNext({ editedScheduledMessage: incoming });
   };
 
-  private endWhenScheduledMessageEnds = ({
+  private closeEditWhenMessageEnds = ({
     scheduled_message: incoming,
     type,
   }: {
@@ -184,7 +146,7 @@ export class ScheduledMessageComposition extends WithSubscriptions {
 
     if (isFailedMessageStillThere) return;
 
-    this.endEdit();
+    this.composer.clear();
     this.composer.notifyWarning('The scheduled message can no longer be edited', {
       type: CORE_NOTIFICATION_TYPE.scheduledMessageCompositionEnded,
       metadata: { reason },
@@ -204,7 +166,7 @@ export class ScheduledMessageComposition extends WithSubscriptions {
       );
       endEventTypes.forEach((eventType) =>
         this.addUnsubscribeFunction(
-          client.on(eventType, this.endWhenScheduledMessageEnds).unsubscribe,
+          client.on(eventType, this.closeEditWhenMessageEnds).unsubscribe,
         ),
       );
     }
@@ -234,8 +196,6 @@ export class ScheduledMessageComposition extends WithSubscriptions {
     if (!quotedMessage && quotedMessageId) {
       quotedMessage = { id: quotedMessageId } as LocalMessage;
     }
-
-    this.saveCompositionBeforeEdit();
 
     composer.initState({ composition: scheduledMessage });
     // A scheduled message stores only the ids of its quoted message and mentioned users,
@@ -293,7 +253,7 @@ export class ScheduledMessageComposition extends WithSubscriptions {
         });
 
       if (failedScheduledMessage) {
-        this.endEdit();
+        this.composer.clear();
         this.removeFailedScheduledMessage(failedScheduledMessage);
       }
 
@@ -353,7 +313,7 @@ export class ScheduledMessageComposition extends WithSubscriptions {
           { localMessage: composition.localMessage, request: { message } },
         );
 
-      this.endEdit();
+      this.composer.clear();
 
       return { scheduledMessage, status: 'scheduled' };
     } catch (error) {
@@ -369,6 +329,6 @@ export class ScheduledMessageComposition extends WithSubscriptions {
   public cancelEdit = () => {
     if (!this.editedScheduledMessage) return;
 
-    this.endEdit();
+    this.composer.clear();
   };
 }
