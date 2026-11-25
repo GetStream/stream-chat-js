@@ -374,7 +374,7 @@ export class MessageComposer extends WithSubscriptions {
   }
 
   private get pausesDrafts() {
-    return !!this.editedMessage || this.scheduledMessageComposition.pausesDrafts;
+    return !!this.editedMessage || !!this.editedScheduledMessage;
   }
 
   get editedScheduledMessage(): ScheduledMessageResponse | undefined {
@@ -687,10 +687,9 @@ export class MessageComposer extends WithSubscriptions {
     if (this.channel.cid !== channelApiResponse.channel?.cid) {
       return;
     }
-    const { draft } = channelApiResponse;
-    if (this.scheduledMessageComposition.handleDraftWhileEditing(draft)) return;
-    if (draft) {
-      this.initState({ composition: draft });
+    if (this.editedScheduledMessage) return;
+    if (channelApiResponse.draft) {
+      this.initState({ composition: channelApiResponse.draft });
     } else if (this.state.getLatestValue().draftId) {
       this.clear();
       this.client.offlineDb?.executeQuerySafely(
@@ -886,8 +885,7 @@ export class MessageComposer extends WithSubscriptions {
         draft.channel_cid !== this.channel.cid
       )
         return;
-      if (this.scheduledMessageComposition.handleDraftWhileEditing(draft)) return;
-      if (this.editedMessage) return;
+      if (this.pausesDrafts) return;
       this.initState({ composition: draft });
     }).unsubscribe;
 
@@ -901,8 +899,7 @@ export class MessageComposer extends WithSubscriptions {
       ) {
         return;
       }
-      if (this.scheduledMessageComposition.clearDraftWhileEditing()) return;
-      if (this.editedMessage) return;
+      if (this.pausesDrafts) return;
 
       this.logDraftUpdateTimestamp();
 
@@ -1240,7 +1237,11 @@ export class MessageComposer extends WithSubscriptions {
     }
   };
 
-  /** Clears the composer, or only detaches the poll when `retainsCompositionOnSubmit`. */
+  /**
+   * Clears the composer, or only detaches the poll when `retainsCompositionOnSubmit`.
+   *
+   * @internal
+   */
   releaseSubmittedComposition = () => {
     if (this.retainsCompositionOnSubmit) {
       this.state.partialNext({
@@ -1267,6 +1268,7 @@ export class MessageComposer extends WithSubscriptions {
     });
   };
 
+  /** @internal */
   reportSubmitFailure = (type: CoreNotificationType, message: string, error: unknown) => {
     this.client.notifications.addError({
       message,

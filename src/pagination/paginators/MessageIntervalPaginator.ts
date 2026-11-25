@@ -876,6 +876,7 @@ export class MessageIntervalPaginator extends BasePaginator<
       this.claimActiveInterval();
       this.showLoadedInterval(interval);
     } else {
+      const checkWasStateResetDuringQuery = this.makeStateResetWatcher();
       const result = await this.executeQuery({
         claimsActiveInterval: true,
         // Always send a limit: the replies endpoint ignores `id_around` without one.
@@ -885,6 +886,8 @@ export class MessageIntervalPaginator extends BasePaginator<
       });
       // a later claim decides the active interval, and the page stays stored
       if (result?.isSuperseded) return false;
+      // a reset ignored the query: not a failed jump
+      if (checkWasStateResetDuringQuery()) return false;
       localMessage = this.getItem(messageId);
       if (!localMessage || !result || !result.targetInterval) {
         this.channel.getClient().notifications.addError({
@@ -957,6 +960,7 @@ export class MessageIntervalPaginator extends BasePaginator<
    */
   jumpToTheLatestMessage = async (options?: JumpToMessageOptions): Promise<boolean> => {
     if (!this.latestHeadInterval) {
+      const checkWasStateResetDuringQuery = this.makeStateResetWatcher();
       const result = await this.executeQuery({
         claimsActiveInterval: true,
         queryShape: { limit: this.pageSize },
@@ -964,6 +968,8 @@ export class MessageIntervalPaginator extends BasePaginator<
       });
       // a later claim decides the active interval, and the page stays stored
       if (result?.isSuperseded) return false;
+      // a reset ignored the query: not a failed jump
+      if (checkWasStateResetDuringQuery()) return false;
     }
 
     const latestMessageId = this.latestHeadInterval?.itemIds.slice(-1)[0];
@@ -1858,6 +1864,16 @@ export class MessageIntervalPaginator extends BasePaginator<
 
     this.messageFocusSignal.next({ signal: null });
   };
+
+  /**
+   * Also drops the focus signal of an earlier jump. Whatever claims the active interval decides what
+   * is shown, so the earlier target must not be scrolled to or highlighted there. A jump claims
+   * before it emits its own signal, so it keeps that one.
+   */
+  protected override claimActiveInterval(): number {
+    this.clearMessageFocusSignal();
+    return super.claimActiveInterval();
+  }
 
   clearStateAndCache() {
     this.resetState();

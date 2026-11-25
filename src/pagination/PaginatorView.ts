@@ -47,7 +47,7 @@ const sameItems = <T>(first: T[] | undefined, second: T[] | undefined) =>
 export class PaginatorView<T> extends WithSubscriptions {
   public readonly paginator: BasePaginator<T, any>;
   public readonly state: StateStore<PaginatorViewState<T>>;
-  private predicate?: PaginatorViewPredicate<T>;
+  private readonly predicate?: PaginatorViewPredicate<T>;
 
   constructor({ paginator, predicate }: PaginatorViewOptions<T>) {
     super();
@@ -74,12 +74,6 @@ export class PaginatorView<T> extends WithSubscriptions {
 
   /** Whether the view takes an item, loaded or not. */
   public accepts = (item: T) => this.predicate?.(item) ?? true;
-
-  /** Replaces the predicate and recomputes `items` from the paginator's current ones. */
-  public setPredicate = (predicate?: PaginatorViewPredicate<T>) => {
-    this.predicate = predicate;
-    this.syncItems(this.paginator.state.getLatestValue().items);
-  };
 
   public registerSubscriptions = () => {
     this.incrementRefCount();

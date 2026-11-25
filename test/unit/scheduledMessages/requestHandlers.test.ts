@@ -87,9 +87,9 @@ describe('scheduled message request handlers', () => {
       },
     });
 
-    await channel.scheduleMessage({
+    await channel.messageOperations.scheduleMessage({
       message: { text: 'see you tomorrow' },
-      scheduled_at: scheduledAt,
+      options: { scheduled_at: scheduledAt },
     });
 
     expect(sendSpy).toHaveBeenCalledWith(
@@ -110,8 +110,10 @@ describe('scheduled message request handlers', () => {
       channel: { requestHandlers: { updateScheduledMessageRequest } },
     });
 
-    await channel.updateScheduledMessage(scheduledMessage.id, {
-      message: { text: 'edited' },
+    await channel.messageOperations.updateScheduledMessage(scheduledMessage.id, {
+      request: {
+        message: { text: 'edited' },
+      },
     });
 
     expect(updateScheduledMessageRequest).toHaveBeenCalledWith(
@@ -135,7 +137,7 @@ describe('scheduled message request handlers', () => {
       channel: { requestHandlers: { deleteScheduledMessageRequest } },
     });
 
-    await channel.deleteScheduledMessage(scheduledMessage.id);
+    await channel.messageOperations.deleteScheduledMessage(scheduledMessage.id);
 
     expect(deleteScheduledMessageRequest).toHaveBeenCalledWith(
       { id: scheduledMessage.id },
@@ -158,7 +160,7 @@ describe('scheduled message request handlers', () => {
       channel: { requestHandlers: { sendScheduledMessageNowRequest } },
     });
 
-    await channel.sendScheduledMessageNow(scheduledMessage.id);
+    await channel.messageOperations.sendScheduledMessageNow(scheduledMessage.id);
 
     expect(sendScheduledMessageNowRequest).toHaveBeenCalledWith(
       { id: scheduledMessage.id },
@@ -182,7 +184,7 @@ describe('scheduled message request handlers', () => {
       requestHandlers: { deleteScheduledMessageRequest: channelHandler },
     });
 
-    await channel.deleteScheduledMessage(scheduledMessage.id);
+    await channel.messageOperations.deleteScheduledMessage(scheduledMessage.id);
 
     expect(channelHandler).toHaveBeenCalled();
     expect(sharedHandler).not.toHaveBeenCalled();
@@ -200,7 +202,7 @@ describe('scheduled message request handlers', () => {
 
     await client
       .channel('messaging', 'not-open')
-      .deleteScheduledMessage(scheduledMessage.id);
+      .messageOperations.deleteScheduledMessage(scheduledMessage.id);
 
     expect(deleteScheduledMessageRequest).toHaveBeenCalled();
   });

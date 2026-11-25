@@ -89,8 +89,6 @@ import type {
   MuteChannelRequest as Gen_MuteChannelRequest,
   UnmuteChannelRequest as Gen_UnmuteChannelRequest,
   ScheduledMessageResponse,
-  SendMessageRequest,
-  UpdateScheduledMessageRequest,
   UploadChannelFileRequest,
   UploadChannelRequest,
   WSEvent,
@@ -506,15 +504,10 @@ export class Channel extends ChannelApi {
   override async sendMessage(...args: Parameters<ChannelApi['sendMessage']>) {
     const [request, requestOptions] = args;
 
-    const response = await super.sendMessage(
+    return await super.sendMessage(
       { ...request, message: sanitizeOutgoingAttachments(request.message) },
       requestOptions,
     );
-
-    if (response.scheduled_message)
-      this.messageOperations.ingestScheduledMessage(response.scheduled_message);
-
-    return response;
   }
 
   /**
@@ -558,21 +551,20 @@ export class Channel extends ChannelApi {
     runDetached(paginator.reload(), { context: 'ensureScheduledMessagesLoaded' });
   }
 
-  async scheduleMessage(request: SendMessageRequest) {
-    const { message, ...options } = request;
-    return await this.messageOperations.scheduleMessage({ message, options });
+  async scheduleMessage(...args: Parameters<ChannelApi['sendMessage']>) {
+    return await this.sendMessage(...args);
   }
 
-  async updateScheduledMessage(id: string, request: UpdateScheduledMessageRequest) {
-    return await this.messageOperations.updateScheduledMessage(id, { request });
+  async updateScheduledMessage(...args: Parameters<ChatApi['updateScheduledMessage']>) {
+    return await this.getClient().updateScheduledMessage(...args);
   }
 
-  async deleteScheduledMessage(id: string) {
-    return await this.messageOperations.deleteScheduledMessage(id);
+  async deleteScheduledMessage(...args: Parameters<ChatApi['deleteScheduledMessage']>) {
+    return await this.getClient().deleteScheduledMessage(...args);
   }
 
-  async sendScheduledMessageNow(id: string) {
-    return await this.messageOperations.sendScheduledMessageNow(id);
+  async sendScheduledMessageNow(...args: Parameters<ChatApi['sendScheduledMessageNow']>) {
+    return await this.getClient().sendScheduledMessageNow(...args);
   }
 
   async sendReaction(...args: Parameters<ChatApi['sendReaction']>) {
