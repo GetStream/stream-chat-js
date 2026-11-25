@@ -77,6 +77,26 @@ describe('client.queryChannels and the WebSocket', () => {
     expect(request.mock.calls[0][0].data).toMatchObject({ watch: false });
   });
 
+  it('keeps the default watch and state when the caller passes them as undefined', async () => {
+    await client.queryChannels({ watch: undefined, state: undefined });
+
+    expect(request.mock.calls[0][0].data).toMatchObject({ watch: true, state: true });
+  });
+
+  it('holds an undefined-watch query for a connection id rather than sending it unwatched', async () => {
+    socketDown();
+
+    const querying = client.queryChannels({ watch: undefined });
+    await Promise.resolve();
+    expect(request).not.toHaveBeenCalled();
+
+    client.connectionIdManager.resolveConnectionId('resolved');
+    await querying;
+
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(request.mock.calls[0][0].data).toMatchObject({ watch: true });
+  });
+
   it('does not wait for a socket when the caller asked for no watch and no presence', async () => {
     // A plain read needs no connection id, which is what makes it usable offline.
     socketDown();
