@@ -1168,7 +1168,7 @@ describe('MessageComposer scheduled messages', () => {
       const newScheduledMessage = generateScheduledMessage({ id: 'sm-2' });
       const sendSpy = mockScheduledSend(client, newScheduledMessage);
       const deleteSpy = vi
-        .spyOn(channel, 'deleteScheduledMessage')
+        .spyOn(channel.messageOperations, 'deleteScheduledMessage')
         .mockResolvedValue(failedMessage);
       await composer.editScheduledMessage(failedMessage);
       const composerId = composer.id;
@@ -1192,7 +1192,7 @@ describe('MessageComposer scheduled messages', () => {
     it('restores the earlier composition after scheduling', async () => {
       const { channel, client, composer } = setup();
       mockScheduledSend(client, generateScheduledMessage({ id: 'sm-2' }));
-      vi.spyOn(channel, 'deleteScheduledMessage').mockResolvedValue(
+      vi.spyOn(channel.messageOperations, 'deleteScheduledMessage').mockResolvedValue(
         generateFailedMessage(),
       );
       composer.textComposer.setText('my draft');
@@ -1208,7 +1208,7 @@ describe('MessageComposer scheduled messages', () => {
       const failedMessage = generateFailedMessage();
       const error = generateAPIError(4, 'boom');
       vi.spyOn(client, 'sendMessage').mockRejectedValue(error);
-      const deleteSpy = vi.spyOn(channel, 'deleteScheduledMessage');
+      const deleteSpy = vi.spyOn(channel.messageOperations, 'deleteScheduledMessage');
       await composer.editScheduledMessage(failedMessage);
 
       const result = await composer.scheduleMessage(scheduledAt);
@@ -1227,7 +1227,9 @@ describe('MessageComposer scheduled messages', () => {
       } as never);
       const newScheduledMessage = generateScheduledMessage({ id: 'sm-2' });
       mockScheduledSend(client, newScheduledMessage);
-      vi.spyOn(channel, 'deleteScheduledMessage').mockRejectedValue(new Error('gone'));
+      vi.spyOn(channel.messageOperations, 'deleteScheduledMessage').mockRejectedValue(
+        new Error('gone'),
+      );
       await composer.editScheduledMessage(generateFailedMessage());
 
       await expect(composer.scheduleMessage(scheduledAt)).resolves.toEqual({
@@ -1247,7 +1249,7 @@ describe('MessageComposer scheduled messages', () => {
       const { channel, client, composer } = setup({ pendingUploadsEnabled: true });
       const scheduledMessage = generateScheduledMessage({ id: 'sm-2' });
       const sendSpy = mockScheduledSend(client, scheduledMessage);
-      vi.spyOn(channel, 'deleteScheduledMessage').mockResolvedValue({
+      vi.spyOn(channel.messageOperations, 'deleteScheduledMessage').mockResolvedValue({
         scheduled_message: generateFailedMessage(),
       } as never);
       let finishUpload: (result: { file: string }) => void = () => undefined;
@@ -1320,7 +1322,7 @@ describe('MessageComposer scheduled messages', () => {
         );
         stubSendRequest(channel, sendRequest);
         const deleteSpy = vi
-          .spyOn(channel, 'deleteScheduledMessage')
+          .spyOn(channel.messageOperations, 'deleteScheduledMessage')
           .mockResolvedValue(failedMessage);
         composer.textComposer.setText('my draft');
         await composer.editScheduledMessage(failedMessage);
@@ -1351,7 +1353,7 @@ describe('MessageComposer scheduled messages', () => {
       it('keeps the failed message when the send fails', async () => {
         const { channel, composer } = setup();
         stubSendRequest(channel, () => Promise.reject(new Error('boom')));
-        const deleteSpy = vi.spyOn(channel, 'deleteScheduledMessage');
+        const deleteSpy = vi.spyOn(channel.messageOperations, 'deleteScheduledMessage');
         await composer.editScheduledMessage(generateFailedMessage());
 
         const result = await composer.send();

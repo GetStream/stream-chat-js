@@ -144,7 +144,7 @@ export class ScheduledMessageComposition extends WithSubscriptions {
   private removeFailedScheduledMessage = (
     failedScheduledMessage: ScheduledMessageResponse,
   ) => {
-    this.composer.channel
+    this.composer.channel.messageOperations
       .deleteScheduledMessage(failedScheduledMessage.id)
       .catch((error) =>
         logger

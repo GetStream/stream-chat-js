@@ -89,8 +89,6 @@ import type {
   MuteChannelRequest as Gen_MuteChannelRequest,
   UnmuteChannelRequest as Gen_UnmuteChannelRequest,
   ScheduledMessageResponse,
-  SendMessageRequest,
-  UpdateScheduledMessageRequest,
   UploadChannelFileRequest,
   UploadChannelRequest,
   WSEvent,
@@ -551,23 +549,6 @@ export class Channel extends ChannelApi {
       return;
     }
     runDetached(paginator.reload(), { context: 'ensureScheduledMessagesLoaded' });
-  }
-
-  async scheduleMessage(request: SendMessageRequest) {
-    const { message, ...options } = request;
-    return await this.messageOperations.scheduleMessage({ message, options });
-  }
-
-  async updateScheduledMessage(id: string, request: UpdateScheduledMessageRequest) {
-    return await this.messageOperations.updateScheduledMessage(id, { request });
-  }
-
-  async deleteScheduledMessage(id: string) {
-    return await this.messageOperations.deleteScheduledMessage(id);
-  }
-
-  async sendScheduledMessageNow(id: string) {
-    return await this.messageOperations.sendScheduledMessageNow(id);
   }
 
   async sendReaction(...args: Parameters<ChatApi['sendReaction']>) {
