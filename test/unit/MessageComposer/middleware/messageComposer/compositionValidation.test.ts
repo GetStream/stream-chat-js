@@ -7,12 +7,12 @@ import {
   createCompositionValidationMiddleware,
   createDraftCompositionValidationMiddleware,
 } from '../../../../../src/messageComposer/middleware/messageComposer/compositionValidation';
-import { CommandSearchSource } from '../../../../../src/messageComposer/middleware/textComposer/commands';
 import {
   AttachmentLoadingState,
   LocalImageAttachment,
 } from '../../../../../src/messageComposer/types';
 import { MiddlewareStatus } from '../../../../../src/middleware';
+import { CommandSearchSource } from '../../../../../src/messageComposer/middleware/textComposer/commands';
 import { MessageComposerMiddlewareState } from '../../../../../src/messageComposer/middleware/messageComposer/types';
 import { MessageDraftComposerMiddlewareValueState } from '../../../../../src/messageComposer/middleware/messageComposer/types';
 import { LocalMessage, MessageResponse } from '../../../../../src';
@@ -48,15 +48,10 @@ const setupMiddleware = (
       composition: custom.editedMessage,
     });
 
-  const commandSearchSource = new CommandSearchSource(messageComposer.channel);
-
   return {
-    commandSearchSource,
+    commandSearchSource: messageComposer.commandSearchSource,
     messageComposer,
-    validationMiddleware: createCompositionValidationMiddleware(
-      messageComposer,
-      commandSearchSource,
-    ),
+    validationMiddleware: createCompositionValidationMiddleware(messageComposer),
   };
 };
 
@@ -290,7 +285,7 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
     );
   });
 
-  it('should resolve raw commands through the provided command search source', async () => {
+  it('should resolve raw commands through the command search source', async () => {
     const validator = vi.fn(({ command }) =>
       command.name === 'custom'
         ? {
@@ -326,7 +321,48 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
     );
   });
 
-  it('should initialize a default command search source when none is provided', async () => {
+  it('should resolve the current command through a passed search source, not the composer one', async () => {
+    const validator = vi.fn(({ command }) =>
+      command.name === 'custom'
+        ? {
+            command,
+            ready: false as const,
+            reason: 'missing_args' as const,
+          }
+        : undefined,
+    );
+    const { messageComposer } = setupMiddleware({
+      config: {
+        commands: {
+          sendValidator: validator,
+        },
+      },
+    });
+    const passedCommandSearchSource = new CommandSearchSource(messageComposer.channel);
+    vi.spyOn(passedCommandSearchSource, 'query').mockReturnValue({
+      items: [{ description: 'Custom command', id: 'custom', name: 'custom' }],
+      next: null,
+    });
+    vi.spyOn(messageComposer.commandSearchSource, 'query').mockReturnValue({
+      items: [],
+      next: null,
+    });
+
+    const result = await createCompositionValidationMiddleware(
+      messageComposer,
+      passedCommandSearchSource,
+    ).handlers.compose(setupMiddlewareInputs(setupCompositionState('/custom')));
+
+    expect(result.status).toBe('discard');
+    expect(validator).toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: expect.objectContaining({ name: 'custom' }),
+        rawText: '/custom',
+      }),
+    );
+  });
+
+  it('should resolve raw commands from the channel command list', async () => {
     const validator = vi.fn(({ command }) =>
       command.name === 'custom'
         ? {

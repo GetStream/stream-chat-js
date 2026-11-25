@@ -24,6 +24,7 @@ import { createMessageOperations } from './messageOperations';
 import type { MessageOperations } from './messageOperations';
 import { nowNs } from './utils/time';
 import { WithSubscriptions } from './utils/WithSubscriptions';
+import { ScheduledMessagesView } from './scheduledMessages/ScheduledMessagesView';
 import { MessagePaginator } from './pagination';
 import type { PaginatorCursor, ReconcileNewestMessagesOptions } from './pagination';
 import { applyInstanceConfiguration } from './configuration/utils/applyInstanceConfiguration';
@@ -113,6 +114,13 @@ export class Thread extends WithSubscriptions {
   public readonly messageComposer: MessageComposer;
   public readonly messageOperations: MessageOperations;
   public readonly messagePaginator: MessagePaginator;
+  /**
+   * The current user's scheduled replies in this thread: a view of the channel's
+   * `scheduledMessagesPaginator`, which holds the channel's scheduled messages and replies alike
+   * (the server cannot filter them by thread). Follows it while the thread's subscriptions are
+   * registered.
+   */
+  public readonly scheduledMessages: ScheduledMessagesView;
 
   private client: StreamChat;
   private failedRepliesMap: Map<string, LocalMessage> = new Map();
@@ -228,6 +236,11 @@ export class Thread extends WithSubscriptions {
       client,
       composition: threadData?.draft ?? draft,
       compositionContext: this,
+    });
+
+    this.scheduledMessages = new ScheduledMessagesView({
+      paginator: this.channel.scheduledMessagesPaginator,
+      scope: { parentId: this.id, type: 'thread' },
     });
 
     this.messageOperations = createMessageOperations(this);
@@ -440,7 +453,10 @@ export class Thread extends WithSubscriptions {
     this.addUnsubscribeFunction(this.subscribeParentMessageFromStore());
     this.addUnsubscribeFunction(this.subscribeMarkActiveThreadRead());
     this.addUnsubscribeFunction(this.subscribeReloadActiveStaleThread());
+    this.addUnsubscribeFunction(this.subscribeLoadScheduledMessagesWhenActive());
     this.addUnsubscribeFunction(this.subscribeMarkStaleOnStopWatching());
+    this.scheduledMessages.registerSubscriptions();
+    this.addUnsubscribeFunction(() => this.scheduledMessages.unregisterSubscriptions());
   };
 
   /**
@@ -498,6 +514,14 @@ export class Thread extends WithSubscriptions {
         if (active && isStateStale) {
           this.reload();
         }
+      },
+    );
+
+  private subscribeLoadScheduledMessagesWhenActive = () =>
+    this.state.subscribeWithSelector(
+      ({ active }) => ({ active }),
+      ({ active }) => {
+        if (active) this.channel.ensureScheduledMessagesLoaded();
       },
     );
 

@@ -2116,6 +2116,7 @@ describe('ChannelPaginator', () => {
           limit: 22,
           message_limit: 3,
           offset: 0,
+          include_scheduled_messages: true,
         },
         undefined,
       );

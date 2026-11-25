@@ -91,6 +91,31 @@ const toUploadError = (rejection: unknown) =>
     ? (rejection as Error)
     : new Error('unknown error', { cause: rejection });
 
+const isUploading = (attachment: LocalAttachment) =>
+  attachment.localMetadata.uploadState === 'uploading';
+
+const toFailedUpload = (attachment: LocalAttachment) =>
+  ({
+    ...attachment,
+    localMetadata: {
+      ...attachment.localMetadata,
+      uploadConfirmationPending: false,
+      uploadProgress: undefined,
+      uploadState: 'failed',
+    },
+  }) as LocalAttachment;
+
+const mapSnapshotAttachments = (
+  snapshot: AttachmentManagerSnapshot,
+  mapAttachment: (attachment: LocalAttachment) => LocalAttachment,
+): AttachmentManagerSnapshot => {
+  const attachments = snapshot.attachments.map(mapAttachment);
+  const hasUpdates = attachments.some(
+    (attachment, index) => attachment !== snapshot.attachments[index],
+  );
+  return hasUpdates ? { ...snapshot, attachments } : snapshot;
+};
+
 export class AttachmentManager {
   readonly state: StateStore<AttachmentManagerState>;
   readonly composer: MessageComposer;
@@ -270,19 +295,22 @@ export class AttachmentManager {
   };
 
   private normalizeSnapshotAttachment = (attachment: LocalAttachment) => {
-    if (attachment.localMetadata.uploadState !== 'uploading') return attachment;
+    if (!isUploading(attachment)) return attachment;
 
     this.client.uploadManager.deleteUploadRecord(attachment.localMetadata.id);
 
-    return {
-      ...attachment,
-      localMetadata: {
-        ...attachment.localMetadata,
-        uploadConfirmationPending: false,
-        uploadProgress: undefined,
-        uploadState: 'failed',
-      },
-    } as LocalAttachment;
+    return toFailedUpload(attachment);
+  };
+
+  private failUntrackedUpload = (attachment: LocalAttachment) => {
+    if (
+      !isUploading(attachment) ||
+      this.client.uploadManager.getUpload(attachment.localMetadata.id)
+    ) {
+      return attachment;
+    }
+
+    return toFailedUpload(attachment);
   };
 
   initState = ({ message }: { message?: DraftMessage | LocalMessage } = {}) => {
@@ -305,24 +333,15 @@ export class AttachmentManager {
     }
   };
 
-  getSnapshot = (): AttachmentManagerSnapshot => {
-    const state = this.state.getLatestValue();
-    let hasUpdates = false;
-    const attachments = state.attachments.map(this.normalizeSnapshotAttachment);
+  getSnapshot = (): AttachmentManagerSnapshot =>
+    mapSnapshotAttachments(this.state.getLatestValue(), this.normalizeSnapshotAttachment);
 
-    for (let i = 0; i < attachments.length; i++) {
-      if (attachments[i] !== state.attachments[i]) {
-        hasUpdates = true;
-        break;
-      }
-    }
-
-    return hasUpdates ? { ...state, attachments } : state;
-  };
+  getSnapshotKeepingUploads = (): AttachmentManagerSnapshot =>
+    this.state.getLatestValue();
 
   restoreSnapshot = (snapshot: AttachmentManagerSnapshot) => {
     this.cancelAttachmentUploads(this.attachments);
-    this.state.next(snapshot);
+    this.state.next(mapSnapshotAttachments(snapshot, this.failUntrackedUpload));
   };
 
   setAttachments = (attachments: LocalAttachment[]) => {
