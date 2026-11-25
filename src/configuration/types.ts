@@ -98,7 +98,7 @@ export type ChannelDeclarativeConfig = {
   scheduledMessages?: Partial<ChannelConfig['scheduledMessages']>;
   /** Delivery receipts, ANDed with the channel type's `delivery_events`. */
   deliveryEvents?: Partial<ChannelConfig['deliveryEvents']>;
-  // `commands` is absent: the server owns the list.
+  // `commands` and `mark_types` are absent: the server owns the lists.
 };
 
 export type ThreadDeclarativeConfig = {

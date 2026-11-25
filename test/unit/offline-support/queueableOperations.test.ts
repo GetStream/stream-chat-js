@@ -49,6 +49,7 @@ describe('QUEUEABLE_OPERATIONS', () => {
       'delete-message',
       'delete-reaction',
       'send-message',
+      'send-message-mark',
       'send-reaction',
       'update-message',
     ];
@@ -356,6 +357,27 @@ describe('channel resolution', () => {
     });
 
     expect(sendReaction).toHaveBeenCalledWith({ id: 'm1', reaction: { type: 'love' } });
+    expect(lookup).not.toHaveBeenCalled();
+  });
+
+  it('runs a mark on the client, which needs no channel', async () => {
+    const createMessageMark = vi.fn(async () => ({ created: true }));
+    const lookup = vi.fn();
+    const client = {
+      channelManager: { ensure: lookup },
+      createMessageMark,
+    } as unknown as StreamChat;
+
+    await runQueueableOperation({
+      client,
+      task: {
+        ...sendTask,
+        payload: [{ id: 'm1' }, { type: 'played' }],
+        type: 'send-message-mark',
+      } as unknown as PendingTask,
+    });
+
+    expect(createMessageMark).toHaveBeenCalledWith({ id: 'm1' }, { type: 'played' });
     expect(lookup).not.toHaveBeenCalled();
   });
 });
