@@ -116,7 +116,7 @@ describe("a channel's scheduled messages", () => {
     });
 
     it('is not registered with client.scheduledMessagePaginators', () => {
-      const { channel, client } = setup();
+      const { client } = setup();
 
       expect(client.scheduledMessagePaginators.paginators).toEqual([]);
     });

@@ -41,10 +41,5 @@ export const getScheduledMessageErrorReason = (
   return errorReason;
 };
 
-export const isScheduledMessageError = (
-  error: unknown,
-  reason: ScheduledMessageErrorReason,
-) => getScheduledMessageErrorReason(error) === reason;
-
 export const isScheduledMessageNotFoundError = (error: unknown) =>
   isStreamAPIError(error) && error.status === NOT_FOUND_STATUS;

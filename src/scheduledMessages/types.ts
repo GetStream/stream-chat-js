@@ -14,7 +14,6 @@ import type {
   UpdateScheduledMessageResponse,
 } from '../gen/models';
 import type {
-  EventPayload,
   EventType,
   LocalMessage,
   SendMessageOptions,
@@ -116,8 +115,6 @@ export type ScheduledMessagePaginatorsManagerOptions = {
   client: StreamChat;
   eventHandlers?: ScheduledMessagePaginatorsManagerEventHandlers;
 };
-
-export type ScheduledMessageEvent = EventPayload<`scheduled_message.${string}`>;
 
 export type ScheduledMessageLimits = {
   maxLeadTimeSeconds: number;

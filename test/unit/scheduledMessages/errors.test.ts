@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   getScheduledMessageErrorReason,
-  isScheduledMessageError,
   isScheduledMessageNotFoundError,
   ScheduledMessageErrorReason,
 } from '../../../src';
@@ -43,17 +42,6 @@ describe('scheduled message errors', () => {
   it('returns undefined for errors that do not come from the API', () => {
     expect(getScheduledMessageErrorReason(new Error('offline'))).toBeUndefined();
     expect(getScheduledMessageErrorReason(undefined)).toBeUndefined();
-  });
-
-  it('matches one reason', () => {
-    const error = generateAPIError(119);
-
-    expect(isScheduledMessageError(error, ScheduledMessageErrorReason.IdTaken)).toBe(
-      true,
-    );
-    expect(isScheduledMessageError(error, ScheduledMessageErrorReason.TooSoon)).toBe(
-      false,
-    );
   });
 
   it('recognises a scheduled message that no longer exists', () => {

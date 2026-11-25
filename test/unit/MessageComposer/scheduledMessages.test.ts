@@ -1309,7 +1309,7 @@ describe('MessageComposer scheduled messages', () => {
         } as never);
 
       it('deletes the failed message after the send succeeds and restores the earlier composition', async () => {
-        const { channel, client, composer } = setup();
+        const { channel, composer } = setup();
         const failedMessage = generateFailedMessage();
         let resolveSend: (value: unknown) => void = () => undefined;
         const sendRequest = vi.fn(
@@ -1349,7 +1349,7 @@ describe('MessageComposer scheduled messages', () => {
       });
 
       it('keeps the failed message when the send fails', async () => {
-        const { channel, client, composer } = setup();
+        const { channel, composer } = setup();
         stubSendRequest(channel, () => Promise.reject(new Error('boom')));
         const deleteSpy = vi.spyOn(channel, 'deleteScheduledMessage');
         await composer.editScheduledMessage(generateFailedMessage());
