@@ -114,7 +114,7 @@ export type QueryChannelsResponseWithChannels = Omit<
 
 export type BlockedUsersState = { userIds: string[] };
 
-export type UnreadCountsState = {
+export type GlobalUnreadCountsState = {
   totalUnreadCount: number;
   unreadChannelsCount: number;
 };
@@ -206,7 +206,7 @@ export class StreamChat extends ChatApi {
    */
   readonly channelServerConfigsStore: StateStore<ChannelConfigsState>;
   blockedUsers: StateStore<BlockedUsersState>;
-  readonly unreadCountsStore: StateStore<UnreadCountsState>;
+  readonly globalUnreadCounts: StateStore<GlobalUnreadCountsState>;
   setUserPromise: ConnectAPIResponse | null;
   state: ClientState;
   tokenManager: TokenManager;
@@ -299,7 +299,7 @@ export class StreamChat extends ChatApi {
       configs: {},
     });
     this.blockedUsers = new StateStore<BlockedUsersState>({ userIds: [] });
-    this.unreadCountsStore = new StateStore<UnreadCountsState>({
+    this.globalUnreadCounts = new StateStore<GlobalUnreadCountsState>({
       totalUnreadCount: 0,
       unreadChannelsCount: 0,
     });
@@ -789,7 +789,7 @@ export class StreamChat extends ChatApi {
     }
     this.state = new ClientState({ client: this });
     this.threads.resetState();
-    this.unreadCountsStore.partialNext({ totalUnreadCount: 0, unreadChannelsCount: 0 });
+    this.globalUnreadCounts.partialNext({ totalUnreadCount: 0, unreadChannelsCount: 0 });
     this.messageMarks.clear();
     this.scheduledMessagePaginators.resetPaginatorStates();
     this.scheduledMessageStore.clear();
@@ -1174,7 +1174,7 @@ export class StreamChat extends ChatApi {
   };
 
   private _reflectUnreadChannelCounts(event: WSEvent) {
-    const patch: Partial<UnreadCountsState> = {};
+    const patch: Partial<GlobalUnreadCountsState> = {};
     if ('total_unread_count' in event && typeof event.total_unread_count === 'number') {
       patch.totalUnreadCount = event.total_unread_count;
     }
@@ -1182,7 +1182,7 @@ export class StreamChat extends ChatApi {
       patch.unreadChannelsCount = event.unread_channels;
     }
     if (Object.keys(patch).length > 0) {
-      this.unreadCountsStore.partialNext(patch);
+      this.globalUnreadCounts.partialNext(patch);
     }
   }
 
@@ -1213,7 +1213,7 @@ export class StreamChat extends ChatApi {
       client.channelManager.reflectMutedChannels();
       client.mutedUsers = event.me.mutes;
       client.blockedUsers.partialNext({ userIds: event.me.blocked_user_ids ?? [] });
-      client.unreadCountsStore.partialNext({
+      client.globalUnreadCounts.partialNext({
         totalUnreadCount: event.me.total_unread_count,
         unreadChannelsCount: event.me.unread_channels,
       });

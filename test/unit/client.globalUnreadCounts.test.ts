@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { Event, UnreadCountsState, WSEvent } from '../../src';
+import type { Event, GlobalUnreadCountsState, WSEvent } from '../../src';
 import { StreamChat } from '../../src';
 import { getClientWithUser } from './test-utils/getClient';
 
-describe('client.unreadCountsStore', () => {
+describe('client.globalUnreadCounts', () => {
   let client: StreamChat;
 
-  const counts = () => client.unreadCountsStore.getLatestValue();
+  const counts = () => client.globalUnreadCounts.getLatestValue();
 
   const handle = (event: Record<string, unknown>) =>
     client._handleClientEvent(event as unknown as WSEvent);
@@ -70,8 +70,8 @@ describe('client.unreadCountsStore', () => {
   });
 
   it('notifies a store subscriber as events flow through dispatchEvent', () => {
-    const seen: UnreadCountsState[] = [];
-    const unsubscribe = client.unreadCountsStore.subscribe((state) => seen.push(state));
+    const seen: GlobalUnreadCountsState[] = [];
+    const unsubscribe = client.globalUnreadCounts.subscribe((state) => seen.push(state));
 
     dispatch({
       type: 'connection.ok',
