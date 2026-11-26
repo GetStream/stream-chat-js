@@ -39,5 +39,8 @@ export const reflectReactionEvent = (
       removed,
       userId: client.userId,
     }),
+    // Events don't carry marks; keep the local ones.
+    mark_groups: formatted.mark_groups ?? existing?.mark_groups,
+    own_marks: formatted.own_marks ?? existing?.own_marks,
   });
 };

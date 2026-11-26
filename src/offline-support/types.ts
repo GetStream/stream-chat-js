@@ -7,15 +7,19 @@ import type {
   DraftResponse,
   GetApplicationResponse,
   LocalMessage,
+  MessageMarkResponse,
+  MessageMarkWithUserResponse,
   MessageResponse,
   ParsedPredefinedFilterResponse,
   PollResponseData,
   QueryChannelsRequest,
+  QueryMessageMarksFilter,
   ReactionFilters,
   ReactionResponse,
   ReadStateResponse,
   SortParamRequest,
   TimestampNS,
+  UserResponse,
 } from '../types';
 import type { Channel } from '../channel';
 import type { StreamChat } from '../client';
@@ -27,6 +31,15 @@ export type PrepareBatchDBQueries =
 export type DBInsertReactionType = {
   message: MessageResponse | LocalMessage;
   reaction: ReactionResponse;
+  execute?: boolean;
+};
+
+export type DBInsertMessageMarkType = {
+  /** The message as it holds the mark: its `mark_groups` and `own_marks` are stored. */
+  message: MessageResponse | LocalMessage;
+  mark: MessageMarkResponse;
+  /** Who made the mark, stored so the mark lists with their name. */
+  user?: UserResponse;
   execute?: boolean;
 };
 
@@ -142,6 +155,12 @@ export type DBGetReactionsType = {
   limit?: number;
 };
 
+export type DBGetMessageMarksType = {
+  messageId: string;
+  filter?: QueryMessageMarksFilter;
+  limit?: number;
+};
+
 export type DBDeletePendingTaskType = {
   id: number;
 };
@@ -218,6 +237,9 @@ export type ExecuteBatchDBQueriesType = PrepareBatchDBQueries[];
  */
 export interface OfflineDBApi {
   insertReaction: (options: DBInsertReactionType) => Promise<ExecuteBatchDBQueriesType>;
+  insertMessageMark: (
+    options: DBInsertMessageMarkType,
+  ) => Promise<ExecuteBatchDBQueriesType>;
   upsertCidsForQuery: (
     options: DBUpsertCidsForQueryType,
   ) => Promise<ExecuteBatchDBQueriesType>;
@@ -251,6 +273,10 @@ export interface OfflineDBApi {
     options: DBGetAppSettingsType,
   ) => Promise<GetApplicationResponse | null>;
   getReactions: (options: DBGetReactionsType) => Promise<ReactionResponse[] | null>;
+  /** The stored marks on a message, newest first, with the users who made them. */
+  getMessageMarks: (
+    options: DBGetMessageMarksType,
+  ) => Promise<MessageMarkWithUserResponse[] | null>;
   executeSqlBatch: (queries: ExecuteBatchDBQueriesType) => Promise<unknown>;
   addPendingTask: (task: PendingTask) => Promise<() => Promise<void>>;
   getPendingTasks: (conditions?: DBGetPendingTasksType) => Promise<PendingTask[]>;
@@ -288,6 +314,7 @@ export type PendingTaskTypes = {
   deleteReaction: 'delete-reaction';
   sendReaction: 'send-reaction';
   sendMessage: 'send-message';
+  sendMessageMark: 'send-message-mark';
   createDraft: 'create-draft';
   deleteDraft: 'delete-draft';
 };
@@ -308,6 +335,7 @@ export type QueueableOperationSignatures = {
   'delete-message': StreamChat['deleteMessage'];
   'delete-reaction': StreamChat['deleteReaction'];
   'send-message': Channel['sendMessage'];
+  'send-message-mark': StreamChat['createMessageMark'];
   'send-reaction': StreamChat['sendReaction'];
   'update-message': StreamChat['updateMessage'];
 };

@@ -217,6 +217,15 @@ export type PlaceQueryPageParams<T, Q> = QueryPagePlacement<Q> & {
   results: PaginationQueryReturnValue<T> | null;
 };
 
+type EmptyCompleteFirstPagePlacement = {
+  isFirstPage: boolean;
+  isHead: boolean;
+  isTail: boolean;
+  isSeparateInterval: boolean;
+  keepPreviousItems: boolean;
+  updateState: boolean;
+};
+
 /**
  * What the preparing step of the query pipeline hands to the next ones (see
  * `BasePaginator.executeQuery`): the parameters for fetching and for placing the page, and the
@@ -404,6 +413,15 @@ export type PaginatorOptions<T, Q> = {
    */
   lockItemOrder?: boolean;
   /**
+   * Where a newly ingested item lands in a loaded list that is already empty and complete. When the
+   * sort order follows arrival (recency lists: messages by `created_at`, channels by
+   * `last_message_at`), a new item is the newest and waits in the logical head, leaving the list
+   * re-queryable — so this stays `false`. When the sort order is independent of arrival (scheduled
+   * messages, by `scheduled_at`), completeness makes its slot known, so it anchors a real interval
+   * there instead; such paginators set this `true`. Defaults to `false`.
+   */
+  newItemsAnchorBySortPosition?: boolean;
+  /**
    * Caps the loaded items: when the head interval exceeds it, the oldest are released as new ones
    * arrive and the tailward edge re-opens, so scrolling back re-fetches. Unset: unbounded. Values
    * below `pageSize` are clamped up to it. See {@link BasePaginator.pruneTailToLimit}.
@@ -454,6 +472,7 @@ export const DEFAULT_PAGINATION_OPTIONS: BasePaginatorConfig<any, any> = deepFre
   {
     debounceMs: 300,
     lockItemOrder: false,
+    newItemsAnchorBySortPosition: false,
     pageSize: 10,
     hasPaginationQueryShapeChanged: baseHasPaginationQueryShapeChanged,
     retryCount: 0,
@@ -543,6 +562,11 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
   protected _lastQueryShape?: Q;
   /** Set by `setItems`, which loads a page (even an empty one) without a query. */
   private _pageSetWithoutQuery = false;
+  /**
+   * The IDs of the offline database's page (see {@link preloadFirstPageFromOfflineDb}) that no live
+   * event has touched since, until a page from the server takes their place.
+   */
+  private _offlineOnlyItemIds: Set<string> | undefined;
 
   /**
    * Stable, purely data-driven comparison (age, timestamps, ...). Default for
@@ -680,6 +704,41 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
    */
   get hasLoadedPage() {
     return this._pageSetWithoutQuery || this.isInitialized;
+  }
+
+  private get isLoadedEmptyAndComplete() {
+    const { hasMoreHead, hasMoreTail } = this.state.getLatestValue();
+    return (
+      this.hasLoadedPage &&
+      !hasMoreHead &&
+      !hasMoreTail &&
+      this.itemIntervals.every((itv) => isLogicalInterval(itv) || !itv.itemIds.length)
+    );
+  }
+
+  private placeEmptyCompleteFirstPage({
+    isFirstPage,
+    isHead,
+    isTail,
+    isSeparateInterval,
+    keepPreviousItems,
+    updateState,
+  }: EmptyCompleteFirstPagePlacement): Interval | null {
+    const placesEmptyCompleteFirstPage =
+      this.config.newItemsAnchorBySortPosition &&
+      updateState &&
+      isFirstPage &&
+      !isSeparateInterval &&
+      !keepPreviousItems &&
+      isHead &&
+      isTail;
+
+    if (!placesEmptyCompleteFirstPage) return null;
+
+    const page = [...this.logicalHeadItems, ...this.logicalTailItems].sort(
+      this.sortComparator,
+    );
+    return this.ingestPage({ page, isHead: true, isTail: true });
   }
 
   get isOfflineSupportEnabled() {
@@ -958,6 +1017,7 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
    * publishes.
    */
   protected clearItemStorage() {
+    this._offlineOnlyItemIds = undefined;
     this.setIntervals([]);
     this.setActiveInterval(undefined);
     this._itemIndex.clear();
@@ -2382,6 +2442,8 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
    * interval whose sort bounds contain it, and re-emits `state.items` when that interval is active.
    */
   ingestItem(ingestedItem: T): boolean {
+    // A live event confirms the item: it outlives the offline page it may belong to.
+    this._offlineOnlyItemIds?.delete(this.getItemId(ingestedItem));
     let ingested = false;
     this.withSingleActiveIntervalPublish(() => {
       ingested = this.applyItemIngestion(ingestedItem);
@@ -2454,12 +2516,15 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
       // unloaded).
       if (this._itemIntervals.size === 0) {
         // No pages yet: keep it in the logical head.
-        targetInterval = {
-          id: LOGICAL_HEAD_INTERVAL_ID,
-          itemIds: [this.getItemId(ingestedItem)],
-        };
+        targetInterval =
+          this.config.newItemsAnchorBySortPosition && this.isLoadedEmptyAndComplete
+            ? this.makeInterval({ page: [ingestedItem], isHead: true, isTail: true })
+            : {
+                id: LOGICAL_HEAD_INTERVAL_ID,
+                itemIds: [this.getItemId(ingestedItem)],
+              };
         if (!this._activeIntervalId) {
-          this.setActiveInterval(targetInterval);
+          this.setActiveInterval(targetInterval, { updateState: false });
         }
       } else {
         const intervals = this.itemIntervals;
@@ -2719,6 +2784,9 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
         this.setActiveInterval(interval, { updateState: false });
         newState.hasMoreHead = interval.hasMoreHead;
         newState.hasMoreTail = interval.hasMoreTail;
+      } else if (isFirstPage && isLastPage) {
+        newState.hasMoreHead = false;
+        newState.hasMoreTail = false;
       }
 
       // Before the publish below: subscribers read `hasLoadedPage` from inside it.
@@ -2901,9 +2969,66 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
     };
   }
 
+  /**
+   * The offline database's copy of the first page, shown while the first query of a paginator not
+   * initialized yet runs. It is stored like a page, so live items join it. The first page from the
+   * server takes the place of its items no live event touched, as the copy can be arbitrarily old,
+   * and merges with the rest, as a loaded page would. A failed query leaves it shown. `undefined`
+   * (the default) shows nothing until the server answers.
+   */
   preloadFirstPageFromOfflineDb = (
     _params: PaginationQueryParams<Q>,
   ): Promise<T[] | undefined> | T[] | undefined => undefined;
+
+  /** Whether the shown items are the offline database's page, not yet replaced by the server's. */
+  protected get showsOfflinePage() {
+    return typeof this._offlineOnlyItemIds !== 'undefined';
+  }
+
+  /**
+   * Stores the offline database's page as the head interval and returns its items, ordered. Without
+   * an interval behind them, the next live item would rebuild `state.items` without them.
+   */
+  private storeOfflinePage(page: T[]): T[] {
+    const interval = this.ingestPage({ page, isHead: true });
+    if (!interval) return page;
+    this._offlineOnlyItemIds = new Set(page.map((item) => this.getItemId(item)));
+    this.setActiveInterval(interval, { updateState: false });
+    return this.intervalToItems(interval);
+  }
+
+  /**
+   * Shows the offline database's page without a query, for a subclass that defers its first query
+   * (see `ChannelPaginator.executeQuery`). Like the page of {@link preloadFirstPageFromOfflineDb},
+   * the first page from the server takes its place.
+   */
+  protected setItemsFromOfflineDb(items: T[]) {
+    this.setItems({ valueOrFactory: items, isFirstPage: true });
+    this._offlineOnlyItemIds = new Set(items.map((item) => this.getItemId(item)));
+  }
+
+  /**
+   * Takes the offline database's items no live event touched out of storage, without publishing:
+   * the server's page placed next publishes the list once.
+   */
+  private removeOfflineOnlyItems() {
+    const ids = this._offlineOnlyItemIds;
+    this._offlineOnlyItemIds = undefined;
+    if (!ids?.size) return;
+    for (const interval of this.itemIntervals) {
+      const itemIds = interval.itemIds.filter((id) => !ids.has(id));
+      if (itemIds.length === interval.itemIds.length) continue;
+      if (itemIds.length) {
+        this.commitInterval({ ...interval, itemIds });
+        continue;
+      }
+      this.dropInterval(interval.id);
+      if (this.isActiveInterval(interval)) {
+        this.setActiveInterval(undefined, { updateState: false });
+      }
+    }
+    ids.forEach((id) => this._itemIndex.remove(id));
+  }
 
   populateOfflineDbAfterQuery = (_params: {
     items: T[] | undefined;
@@ -3192,8 +3317,11 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
             if (checkWasStateResetDuringQuery()) return;
             throw error;
           }
+          // the page of a query started before a reset must not reach the reset storage
           if (checkWasStateResetDuringQuery()) return;
-          publishStateBeforeFirstQuery(items ?? stateBeforeFirstQuery.items);
+          publishStateBeforeFirstQuery(
+            items ? this.storeOfflinePage(items) : stateBeforeFirstQuery.items,
+          );
         })();
       }
     } else if (!silent) {
@@ -3238,6 +3366,18 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
   placeQueryPage(params: PlaceQueryPageParams<T, Q>): ExecuteQueryReturnValue<T> {
     this._lastQueryShape = params.queryShape;
     const { results } = params;
+    if (results && this.showsOfflinePage) {
+      // The server's page takes the place of the offline database's, which can be arbitrarily old,
+      // as a first page. That holds for the next query after a failed one too, which continues the
+      // offline page's position. Live items ingested meanwhile stay and the page merges with them.
+      this.removeOfflineOnlyItems();
+      params = {
+        ...params,
+        continuesIntervalId: undefined,
+        isFirstPage: true,
+        keepPreviousItems: false,
+      };
+    }
     if (!results) {
       const stateUpdate: Partial<PaginatorState<T>> = {
         isLoading: false,
@@ -3387,27 +3527,38 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
         : undefined;
     // Read before the ingest, which may merge them into the page's interval.
     const headIntervalIds = this.getHeadIntervalIds();
-    const interval = this.ingestPage({
-      page: stateUpdate.items,
-      policy: isSeparateInterval ? 'strict-overlap-only' : 'auto',
-      // a first page is the head unless its query started it elsewhere (at a cursor)
-      isHead: reachesHead
-        ? true
-        : isJumpQuery
-          ? undefined //head/tail doesn't apply / is unknown for this ingestion
-          : (isFirstPage && this.isHeadPageQueryShape(queryShape)) ||
-            (direction === 'headward' ? requestedPageSize > items.length : undefined),
-      // even though the page is first, we have to compare the requested vs returned page size;
-      // a first page queried towards the head says nothing about the tail
-      isTail: reachesTail
-        ? true
-        : isJumpQuery
-          ? undefined //head/tail doesn't apply / is unknown for this ingestion
-          : (isFirstPage && direction !== 'headward') || direction === 'tailward'
-            ? requestedPageSize > items.length
-            : undefined,
-      targetIntervalId: isSeparateInterval ? undefined : this._activeIntervalId,
-    });
+    // a first page is the head unless its query started it elsewhere (at a cursor)
+    const isHead = reachesHead
+      ? true
+      : isJumpQuery
+        ? undefined //head/tail doesn't apply / is unknown for this ingestion
+        : (isFirstPage && this.isHeadPageQueryShape(queryShape)) ||
+          (direction === 'headward' ? requestedPageSize > items.length : undefined);
+    // even though the page is first, we have to compare the requested vs returned page size;
+    // a first page queried towards the head says nothing about the tail
+    const isTail = reachesTail
+      ? true
+      : isJumpQuery
+        ? undefined //head/tail doesn't apply / is unknown for this ingestion
+        : (isFirstPage && direction !== 'headward') || direction === 'tailward'
+          ? requestedPageSize > items.length
+          : undefined;
+    const interval =
+      this.ingestPage({
+        page: stateUpdate.items,
+        policy: isSeparateInterval ? 'strict-overlap-only' : 'auto',
+        isHead,
+        isTail,
+        targetIntervalId: isSeparateInterval ? undefined : this._activeIntervalId,
+      }) ??
+      this.placeEmptyCompleteFirstPage({
+        isFirstPage,
+        isHead: !!isHead,
+        isTail: !!isTail,
+        isSeparateInterval,
+        keepPreviousItems: !!keepPreviousItems,
+        updateState,
+      });
     const intervalReachesHead =
       reachesHead ||
       (!!interval && this.inheritsHeadMark(interval, direction, headIntervalIds));
@@ -3612,6 +3763,7 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
     // the publish below, whose subscribers read `isInitialized` / `hasLoadedPage`.
     this._lastQueryShape = undefined;
     this._pageSetWithoutQuery = false;
+    this._offlineOnlyItemIds = undefined;
     this.state.next(this.initialState);
     this.setIntervals([]);
     this.setActiveInterval(undefined);

@@ -155,6 +155,13 @@ describe('every configurable object has a path in the configuration tree', () =>
     },
     {
       apply: () =>
+        client.config.set({ channel: { scheduledMessagesPaginator: { pageSize: 25 } } }),
+      expected: 25,
+      name: 'channel.scheduledMessagesPaginator',
+      read: () => openChannel().scheduledMessagesPaginator.pageSize,
+    },
+    {
+      apply: () =>
         client.config.set({ client: { threads: { connectionRecoveryThrottleMs: 250 } } }),
       expected: 250,
       name: 'client.threads (was a module constant)',

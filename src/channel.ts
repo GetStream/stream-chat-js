@@ -5,11 +5,24 @@ import { queueOrRun } from './offline-support/queueableOperations';
 import { MessageComposer } from './messageComposer';
 import { MessageReceiptsTracker } from './messageDelivery';
 import type { ReadStoreReconcileMeta } from './messageDelivery';
-import { MessagePaginator, PinnedMessagePaginator } from './pagination/paginators';
-import { createMessageOperations, reflectReactionEvent } from './messageOperations';
+import {
+  MessagePaginator,
+  PinnedMessagePaginator,
+  ScheduledMessagePaginator,
+} from './pagination/paginators';
+import {
+  createMessageOperations,
+  reflectMessageMarkEvent,
+  reflectReactionEvent,
+} from './messageOperations';
 import type { MessageOperations } from './messageOperations';
 import type { OperationRequestFn } from './messageOperations/types';
+import type { ScheduledMessageRequestHandlers } from './scheduledMessages/types';
+import { getScheduledMessageLimitsFromServerConfig } from './scheduledMessages/limits';
+import { getScheduledMessageFromEvent } from './scheduledMessages/eventHandlers';
+import { ScheduledMessagesView } from './scheduledMessages/ScheduledMessagesView';
 import {
+  channelCanScheduleMessages,
   channelHasReadEvents,
   formatMessage,
   generateChannelTempCid,
@@ -17,6 +30,7 @@ import {
   invokeEventListener,
   isThreadOnlyReply,
   logChatPromiseExecution,
+  runDetached,
   sanitizeOutgoingAttachments,
 } from './utils';
 import { getCarriedActiveMemberCount } from './utils/activeMemberCount';
@@ -78,6 +92,7 @@ import type {
   ChannelPushPreferencesResponse as Gen_ChannelPushPreferencesResponse,
   MuteChannelRequest as Gen_MuteChannelRequest,
   UnmuteChannelRequest as Gen_UnmuteChannelRequest,
+  ScheduledMessageResponse,
   UploadChannelFileRequest,
   UploadChannelRequest,
   WSEvent,
@@ -123,7 +138,7 @@ export type ChannelConfig = {
     sendMessageRequest?: OperationRequestFn<'send'>;
     retrySendMessageRequest?: OperationRequestFn<'retry'>;
     updateMessageRequest?: OperationRequestFn<'update'>;
-  };
+  } & ScheduledMessageRequestHandlers;
   /**
    * Typing indicators. Defaults to enabled. ANDed with the channel type's `typing_events`. Read by
    * {@link Channel.keystroke} and {@link Channel.stopTyping}.
@@ -147,6 +162,7 @@ export type ChannelConfig = {
    * Message reminders. Defaults to enabled. ANDed with the channel type's `user_message_reminders`.
    */
   userMessageReminders: { enabled: boolean };
+  scheduledMessages: { enabled: boolean };
   /** Delivery receipts. Defaults to enabled. ANDed with the channel type's `delivery_events`. */
   deliveryEvents: { enabled: boolean };
   /**
@@ -154,6 +170,11 @@ export type ChannelConfig = {
    * command can be used right now is `messageComposer.isCommandDisabled(command)`.
    */
   availableCommands: Command[];
+  /**
+   * The message mark types the channel type accepts, for instance `played`. Server-owned: the
+   * integrator cannot set it. Empty when message marks are off for the channel type.
+   */
+  markTypes: string[];
 };
 
 /**
@@ -171,6 +192,7 @@ const ownDeclarativeConfig = (
     readEvents,
     replies,
     requestHandlers,
+    scheduledMessages,
     typingEvents,
     userMessageReminders,
   } = slice;
@@ -180,6 +202,7 @@ const ownDeclarativeConfig = (
     readEvents,
     replies,
     requestHandlers,
+    scheduledMessages,
     typingEvents,
     userMessageReminders,
   } as Partial<ChannelConfig>;
@@ -188,8 +211,10 @@ const ownDeclarativeConfig = (
 export const DEFAULT_CHANNEL_CONFIG: ChannelConfig = deepFreezeConfig({
   availableCommands: [],
   deliveryEvents: { enabled: true },
+  markTypes: [],
   readEvents: { enabled: true, localUnreadCountEnabled: false },
   replies: { enabled: true },
+  scheduledMessages: { enabled: true },
   typingEvents: { enabled: true },
   userMessageReminders: { enabled: true },
 });
@@ -223,6 +248,17 @@ export class Channel extends ChannelApi {
   public readonly messageOperations: MessageOperations;
   public readonly messagePaginator: MessagePaginator;
   public readonly pinnedMessagesPaginator: PinnedMessagePaginator;
+  /**
+   * The current user's scheduled messages in this channel, thread replies included. Filled by the
+   * channel query (`include_scheduled_messages`), so it queries only when the response leaves them
+   * out. Events can define `items` before a page loads: check `hasLoadedPage`.
+   */
+  public readonly scheduledMessagesPaginator: ScheduledMessagePaginator;
+  /**
+   * The channel's own scheduled messages: a view of `scheduledMessagesPaginator` without the
+   * thread replies it holds too. A thread's are `thread.scheduledMessages`.
+   */
+  public readonly scheduledMessages: ScheduledMessagesView;
   public readonly cooldownTimer: CooldownTimer;
   private unsubscribeConfiguration?: Unsubscribe;
   private unsubscribeServerConfig?: Unsubscribe;
@@ -298,6 +334,21 @@ export class Channel extends ChannelApi {
       channel: this,
       paginatorOptions: { declarativeConfig: declarativeConfig?.pinnedMessagesPaginator },
     });
+    this.scheduledMessagesPaginator = new ScheduledMessagePaginator({
+      client,
+      // a channel created from its members gets its cid from its first query (`storeUnderServerCid`)
+      filter: { cid: this.cid },
+      id: `scheduled-message-paginator-${this.cid}`,
+      paginatorOptions: {
+        declarativeConfig: declarativeConfig?.scheduledMessagesPaginator,
+      },
+    });
+
+    this.scheduledMessages = new ScheduledMessagesView({
+      paginator: this.scheduledMessagesPaginator,
+      scope: { type: 'channel' },
+    });
+    this.scheduledMessages.registerSubscriptions();
 
     this.messageReceiptsTracker = new MessageReceiptsTracker({ channel: this });
     this.messageReceiptsTracker.registerSubscriptions();
@@ -326,6 +377,7 @@ export class Channel extends ChannelApi {
             ) as ChannelConfig),
             // Assigned, not merged: the deep merge would concatenate the lists.
             availableCommands: this.serverConfig?.commands ?? [],
+            markTypes: this.serverConfig?.mark_types ?? [],
           }),
         ) as ChannelConfig,
     });
@@ -366,6 +418,11 @@ export class Channel extends ChannelApi {
       deliveryEvents: { enabled: channelConfig?.delivery_events },
       readEvents: { enabled: channelConfig?.read_events },
       replies: { enabled: channelConfig?.replies },
+      scheduledMessages: {
+        enabled: channelConfig
+          ? !!getScheduledMessageLimitsFromServerConfig(channelConfig)
+          : undefined,
+      },
       typingEvents: { enabled: channelConfig?.typing_events },
       userMessageReminders: { enabled: channelConfig?.user_message_reminders },
     };
@@ -398,6 +455,9 @@ export class Channel extends ChannelApi {
     // No shared key: the pinned paginator has a single parent.
     this.pinnedMessagesPaginator.initializeConfig(
       declarativeConfig?.pinnedMessagesPaginator,
+    );
+    this.scheduledMessagesPaginator.initializeConfig(
+      declarativeConfig?.scheduledMessagesPaginator,
     );
 
     // Shared key with a per-parent override, as for `messagePaginator`.
@@ -461,8 +521,120 @@ export class Channel extends ChannelApi {
     );
   }
 
+  /**
+   * Fills the list from a channel query's `scheduled_messages`.
+   *
+   * @internal
+   */
+  hydrateScheduledMessages(
+    scheduledMessages: ScheduledMessageResponse[],
+    itemIdsAtRequest?: ReadonlySet<string>,
+  ) {
+    // a response landing after logout would bring the previous user's messages back
+    if (this.pendingDisposal || !this.config.scheduledMessages.enabled) return;
+    this.scheduledMessagesPaginator.hydrate(scheduledMessages, itemIdsAtRequest);
+  }
+
+  /** Without the field (over 100, or unreadable), a list that had loaded reloads itself. */
+  private applyScheduledMessagesFromResponse(
+    scheduledMessages: ScheduledMessageResponse[] | undefined,
+    itemIdsAtRequest: ReadonlySet<string> | undefined,
+  ) {
+    if (scheduledMessages) {
+      this.hydrateScheduledMessages(scheduledMessages, itemIdsAtRequest);
+      return;
+    }
+    const paginator = this.scheduledMessagesPaginator;
+    if (this.pendingDisposal || !paginator.hasLoadedPage || paginator.isLoading) return;
+    runDetached(paginator.reload(), { context: 'reloadScheduledMessages' });
+  }
+
+  ensureScheduledMessagesLoaded() {
+    const paginator = this.scheduledMessagesPaginator;
+    if (
+      this.pendingDisposal ||
+      !this.scheduledMessagesEnabled ||
+      paginator.hasLoadedPage ||
+      paginator.isLoading
+    ) {
+      return;
+    }
+    runDetached(paginator.reload(), { context: 'ensureScheduledMessagesLoaded' });
+  }
+
+  async scheduleMessage(...args: Parameters<ChannelApi['sendMessage']>) {
+    return await this.sendMessage(...args);
+  }
+
+  async updateScheduledMessage(...args: Parameters<ChatApi['updateScheduledMessage']>) {
+    return await this.getClient().updateScheduledMessage(...args);
+  }
+
+  async deleteScheduledMessage(...args: Parameters<ChatApi['deleteScheduledMessage']>) {
+    return await this.getClient().deleteScheduledMessage(...args);
+  }
+
+  async sendScheduledMessageNow(...args: Parameters<ChatApi['sendScheduledMessageNow']>) {
+    return await this.getClient().sendScheduledMessageNow(...args);
+  }
+
   async sendReaction(...args: Parameters<ChatApi['sendReaction']>) {
     return await this.getClient().sendReaction(...args);
+  }
+
+  /**
+   * Marks a message for the current user, for instance `played` when the user played a voice note.
+   * A mark is written once: a repeat returns `created: false`, and the author's own mark is a no-op.
+   * Each written mark is announced with one `message.mark_added` event to the author and the marker.
+   * With offline support, a mark that fails for lack of a connection is queued and sent on reconnect.
+   *
+   * @param args - `({ id }, { type })`: the message ID and the mark type, for instance `'played'`.
+   */
+  async sendMessageMark(...args: Parameters<ChatApi['createMessageMark']>) {
+    return await queueOrRun({
+      channel: this,
+      client: this.getClient(),
+      task: {
+        channelId: this.id,
+        channelType: this.type,
+        messageId: args[0].id,
+        payload: args,
+        type: 'send-message-mark',
+      },
+    });
+  }
+
+  /**
+   * Marks a message `played` for the current user, for instance when the user starts its voice note.
+   * Sends nothing when the channel type has no `played` mark ({@link ChannelConfig.markTypes}) or
+   * without the `send-message-mark` capability. When the client holds the message, it also sends
+   * nothing for the user's own message or a message the user already marked. Otherwise the server
+   * ignores those. The message changes only when `message.mark_added` arrives, as with read state.
+   *
+   * @param messageId - The ID of the played message.
+   * @returns The server response, or `null` when no request went out.
+   */
+  async markMessagePlayed(messageId: string) {
+    const userId = this.getClient().userId;
+    const ownCapabilities = this.data?.own_capabilities;
+    if (
+      !userId ||
+      !this.config.markTypes.includes('played') ||
+      (Array.isArray(ownCapabilities) && !ownCapabilities.includes('send-message-mark'))
+    ) {
+      return null;
+    }
+
+    const message = this.getClient().messageStore.get(messageId);
+    if (
+      message &&
+      (message.user?.id === userId ||
+        message.own_marks?.some(({ type }) => type === 'played'))
+    ) {
+      return null;
+    }
+
+    return await this.sendMessageMark({ id: messageId }, { type: 'played' });
   }
 
   async deleteReaction(...args: Parameters<ChatApi['deleteReaction']>) {
@@ -1114,6 +1286,10 @@ export class Channel extends ChannelApi {
     return this.config.readEvents.enabled && channelHasReadEvents(this);
   }
 
+  get scheduledMessagesEnabled(): boolean {
+    return this.config.scheduledMessages.enabled && channelCanScheduleMessages(this);
+  }
+
   /**
    * Marks read through `MessageDeliveryReporter`: uses the `markReadRequest` handler if set, marks
    * read locally when read events are off and `localUnreadCountEnabled` is set, and drops the
@@ -1739,6 +1915,8 @@ export class Channel extends ChannelApi {
     const { channelManager } = this.getClient();
     const storedUnder = this.cid;
     this.cid = serverCid;
+    if (storedUnder !== serverCid)
+      this.scheduledMessagesPaginator.filter = { cid: serverCid };
     const isStoredUnderOldCid =
       storedUnder !== serverCid && channelManager.get(storedUnder) === this;
     // A disconnected channel is replaced by this instance, not superseded by it.
@@ -1808,10 +1986,19 @@ export class Channel extends ChannelApi {
       const externalQuery = placeMessages
         ? this.messagePaginator.prepareExternalQuery(options.messages)
         : undefined;
+      // free when the app has no scheduled messages: the server omits the field
+      const includeScheduledMessages =
+        this.config.scheduledMessages.enabled &&
+        options.include_scheduled_messages !== false;
+      // tells messages arriving during the request apart, so the response does not drop them
+      const scheduledMessageIdsAtRequest = this.scheduledMessagesPaginator.getItemIds();
       const state = await this.requestChannelState(
-        externalQuery
-          ? { ...options, messages: externalQuery.messagePaginationParams }
-          : options,
+        {
+          ...(includeScheduledMessages && { include_scheduled_messages: true }),
+          ...(externalQuery
+            ? { ...options, messages: externalQuery.messagePaginationParams }
+            : options),
+        },
         requestOptions,
         { placesNewestPage: externalQuery?.isNewestPage ?? false },
       );
@@ -1830,6 +2017,13 @@ export class Channel extends ChannelApi {
         });
       }
       if (placedFirstPage) this.messagePaginator.seedUnreadSnapshot();
+      if (includeScheduledMessages) {
+        // a channel created from members may have been superseded by the stored instance
+        (this.supersededBy ?? this).applyScheduledMessagesFromResponse(
+          state.scheduled_messages,
+          scheduledMessageIdsAtRequest,
+        );
+      }
       return state;
     });
   }
@@ -2676,7 +2870,12 @@ export class Channel extends ChannelApi {
             event.channel?.frozen !== undefined &&
             event.channel.frozen !== channel.data?.frozen;
           if (isFrozenChanged) {
-            this.query({ state: false, messages: { limit: 0 }, watchers: { limit: 0 } });
+            this.query({
+              include_scheduled_messages: false,
+              messages: { limit: 0 },
+              state: false,
+              watchers: { limit: 0 },
+            });
           }
           const newChannelData = {
             ...event.channel,
@@ -2686,6 +2885,11 @@ export class Channel extends ChannelApi {
               event.channel?.own_capabilities ?? channel.data?.own_capabilities,
           };
           channel.data = newChannelData;
+        }
+        break;
+      case 'message.mark_added':
+        if (event.mark) {
+          reflectMessageMarkEvent(this.getClient(), event.mark);
         }
         break;
       case 'reaction.new':
@@ -2738,6 +2942,17 @@ export class Channel extends ChannelApi {
             user: { ...(member?.user || {}), ...event.user },
           },
         };
+        break;
+      }
+      case 'scheduled_message.created':
+      case 'scheduled_message.deleted':
+      case 'scheduled_message.failed':
+      case 'scheduled_message.sent':
+      case 'scheduled_message.updated': {
+        // the registered lists hear it from `client.scheduledMessagePaginators`
+        const scheduledMessage = getScheduledMessageFromEvent(event);
+        if (scheduledMessage)
+          this.scheduledMessagesPaginator.ingestItem(scheduledMessage);
         break;
       }
       default:
@@ -2886,6 +3101,13 @@ export class Channel extends ChannelApi {
     const message = this.messagePaginator.getItem(event.message.id);
     if (message) {
       event.message.own_reactions = message.own_reactions;
+      // Events don't carry marks; keep the local ones.
+      if (event.message.mark_groups === undefined && message.mark_groups !== undefined) {
+        event.message.mark_groups = message.mark_groups;
+      }
+      if (event.message.own_marks === undefined && message.own_marks !== undefined) {
+        event.message.own_marks = message.own_marks;
+      }
     }
   }
 
@@ -2946,9 +3168,11 @@ export class Channel extends ChannelApi {
     this.unsubscribeServerConfig = undefined;
     this.messageReceiptsTracker.unregisterSubscriptions();
     this.cooldownTimer.unregisterSubscriptions();
+    this.scheduledMessages.unregisterSubscriptions();
     // Otherwise the message store keeps this channel and its messages alive through its subscribers.
     this.messagePaginator.dispose();
     this.pinnedMessagesPaginator.dispose();
+    this.scheduledMessagesPaginator.dispose();
 
     // One update, last, so subscribers see both together. A deleted channel must not be re-watched.
     this._lastWatchOptions = undefined;

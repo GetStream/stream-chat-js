@@ -64,6 +64,8 @@ export * from './pagination';
 export * from './poll';
 export * from './poll_manager';
 export * from './reminders';
+export * from './messageMarks';
+export * from './scheduledMessages';
 export * from './search';
 export * from './signing';
 export * from './languageNames';

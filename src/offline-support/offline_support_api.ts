@@ -75,6 +75,8 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   /** Writes the reaction, the message carrying it and the associated users. */
   abstract insertReaction: OfflineDBApi['insertReaction'];
 
+  abstract insertMessageMark: OfflineDBApi['insertMessageMark'];
+
   /** Upserts the CIDs for a filter + sort query hash (cids table only). */
   abstract upsertCidsForQuery: OfflineDBApi['upsertCidsForQuery'];
 
@@ -148,6 +150,8 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   abstract getAppSettings: OfflineDBApi['getAppSettings'];
 
   abstract getReactions: OfflineDBApi['getReactions'];
+
+  abstract getMessageMarks: OfflineDBApi['getMessageMarks'];
 
   /** Runs the queries in one transaction. */
   abstract executeSqlBatch: OfflineDBApi['executeSqlBatch'];
@@ -745,6 +749,41 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   };
 
   /**
+   * Stores the mark, and the message's mark summaries as the message store holds them: the event
+   * carries only the mark, which `Channel` has applied to that copy by the time a live event reaches
+   * the DB. A message the store does not hold, or a thread reply, is skipped and gets its marks
+   * stored with its next query.
+   *
+   * @param payload.event - The WS event we are trying to process.
+   * @param payload.execute - Whether to immediately execute the queries. Defaults to `true`.
+   * @returns The prepared queries.
+   */
+  public handleMessageMarkAddedEvent = async ({
+    event,
+    execute = true,
+  }: {
+    event: EventPayload<'message.mark_added'>;
+    execute?: boolean;
+  }) => {
+    const message = this.client.messageStore.get(event.mark.message_id);
+
+    if (message && !message.parent_id) {
+      return await this.queriesWithChannelGuard(
+        { event, execute },
+        async (executeOverride) =>
+          await this.insertMessageMark({
+            execute: executeOverride,
+            mark: event.mark,
+            message,
+            user: event.user,
+          }),
+      );
+    }
+
+    return [];
+  };
+
+  /**
    * Sets `hidden` from the event type, as the event's channel does not carry it.
    *
    * @param payload.event - The WS event we are trying to process.
@@ -952,6 +991,10 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
       return this.handleMessageUpdatedEvent({ event, execute });
     }
 
+    if (type === 'message.mark_added') {
+      return await this.handleMessageMarkAddedEvent({ event, execute });
+    }
+
     if (type === 'message.read' || type === 'notification.mark_read') {
       // The DB stores channel reads only, so thread read events are skipped.
       if (event.thread) return [];
@@ -1094,16 +1137,33 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     });
   };
 
+  /** Whether a mark of the same type is already queued for the message. */
+  private isMessageMarkQueued = async (
+    task: Extract<PendingTask, { type: 'send-message-mark' }>,
+  ) => {
+    const [{ id }, { type }] = task.payload;
+    const pendingTasks = await this.getPendingTasks({ messageId: id });
+
+    return pendingTasks.some(
+      (pending) =>
+        pending.type === 'send-message-mark' && pending.payload[1]?.type === type,
+    );
+  };
+
   /**
    * Stores the task. An edit of a never-sent message is folded into its queued send instead. With no
    * queued send, an edit `isMessageUpdateReplayable` refuses (attachments still on local URLs) is
-   * dropped.
+   * dropped. A mark already queued for the message is not queued again.
    *
    * @param payload.task - The pending task to store.
    */
   public handleAddPendingTask = async ({ task }: { task: PendingTask }) => {
     if (task.type === 'update-message') {
       await this.handleUpdateMessagePendingTask(task);
+      return;
+    }
+
+    if (task.type === 'send-message-mark' && (await this.isMessageMarkQueued(task))) {
       return;
     }
 

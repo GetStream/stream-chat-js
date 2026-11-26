@@ -69,6 +69,17 @@ export function isFunction(value: unknown): value is (...args: unknown[]) => unk
   );
 }
 
+export const pickFields = <T extends object, K extends keyof T>(
+  source: T,
+  fields: readonly K[],
+): Pick<T, K> =>
+  Object.fromEntries(
+    fields.filter((field) => field in source).map((field) => [field, source[field]]),
+  ) as Pick<T, K>;
+
+export const omitFields = <T extends object>(source: T, fields: ReadonlySet<string>) =>
+  Object.fromEntries(Object.entries(source).filter(([field]) => !fields.has(field)));
+
 export const chatCodes = {
   TOKEN_EXPIRED: 40,
   WS_CLOSED_SUCCESS: 1000,
@@ -105,6 +116,13 @@ export function isOwnUserBaseProperty(property: string) {
 export const channelHasReadEvents = (channel?: Channel) => {
   const ownCapabilities = channel?.data?.own_capabilities;
   return !(Array.isArray(ownCapabilities) && !ownCapabilities.includes('read-events'));
+};
+
+export const channelCanScheduleMessages = (channel?: Channel) => {
+  const ownCapabilities = channel?.data?.own_capabilities;
+  return !(
+    Array.isArray(ownCapabilities) && !ownCapabilities.includes('schedule-message')
+  );
 };
 
 /** Whether read events are off and the channel keeps a client-local unread count. */

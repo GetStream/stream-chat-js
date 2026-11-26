@@ -1,5 +1,5 @@
 import { CORE_NOTIFICATION_TYPE } from '../notifications';
-import type { CoreNotificationType } from '../notifications';
+import type { CoreNotificationType, NotificationOptions } from '../notifications';
 import { AttachmentManager } from './attachmentManager';
 import { isResolvableUpload, isSendableAttachment } from './attachmentIdentity';
 import { CustomDataManager } from './CustomDataManager';
@@ -36,6 +36,7 @@ import type {
   EventType,
   LocalMessage,
   MessageResponse,
+  SendMessageOptions,
   TimestampNS,
   UserResponse,
 } from '../types';
@@ -60,6 +61,10 @@ import {
   getMentionedUsersInText,
   stripCommandFromText,
 } from './middleware/textComposer/commandUtils';
+import { CommandSearchSource } from './middleware/textComposer/commands';
+import { ScheduledMessageComposition } from './scheduledMessageComposition';
+import type { ScheduledMessageResponse } from '../gen/models';
+import { toComposerContent } from '../scheduledMessages/composition';
 
 type UnregisterSubscriptions = Unsubscribe;
 
@@ -118,6 +123,11 @@ export type MessageComposerState = {
   showReplyInChannel: boolean;
   /** Baseline of the message being edited, unchanged during the session (for restore or cancel). */
   editedMessage: LocalMessage | null;
+  editedScheduledMessage: ScheduledMessageResponse | null;
+};
+
+export type MessageComposerComposeOptions = {
+  sendOptions?: SendMessageOptions;
 };
 
 export type MessageComposerOptions = {
@@ -132,12 +142,21 @@ export type MessageComposerOptions = {
 const compositionIsDraftResponse = (composition: unknown): composition is DraftResponse =>
   !!(composition as { message?: DraftMessage })?.message;
 
+const compositionIsScheduledMessage = (
+  composition: unknown,
+): composition is ScheduledMessageResponse =>
+  (composition as Partial<ScheduledMessageResponse> | undefined)?.scheduled_at !==
+  undefined;
+
 const initEditingAuditState = (
-  composition?: DraftResponse | MessageResponse | LocalMessage,
+  composition?: DraftResponse | MessageResponse | LocalMessage | ScheduledMessageResponse,
 ): EditingAuditState => {
   let draftUpdate = null;
   let stateUpdate = nowNs();
-  if (compositionIsDraftResponse(composition)) {
+
+  if (compositionIsScheduledMessage(composition)) {
+    stateUpdate = composition.updated_at;
+  } else if (compositionIsDraftResponse(composition)) {
     stateUpdate = draftUpdate = composition.created_at;
   } else if (composition && isLocalMessage(composition)) {
     stateUpdate = composition.updated_at;
@@ -151,7 +170,7 @@ const initEditingAuditState = (
 };
 
 const initState = (
-  composition?: DraftResponse | MessageResponse | LocalMessage,
+  composition?: DraftResponse | MessageResponse | LocalMessage | ScheduledMessageResponse,
 ): MessageComposerState => {
   if (!composition) {
     return {
@@ -161,6 +180,22 @@ const initState = (
       quotedMessage: null,
       showReplyInChannel: false,
       editedMessage: null,
+      editedScheduledMessage: null,
+    };
+  }
+
+  if (compositionIsScheduledMessage(composition)) {
+    const { poll_id: pollId = null, show_in_channel: showReplyInChannel = false } =
+      composition.message;
+
+    return {
+      draftId: null,
+      id: MessageComposer.generateId(),
+      pollId,
+      quotedMessage: null,
+      showReplyInChannel,
+      editedMessage: null,
+      editedScheduledMessage: composition,
     };
   }
 
@@ -186,6 +221,7 @@ const initState = (
     quotedMessage: quotedMessage ? formatMessage(quotedMessage) : null,
     showReplyInChannel: false,
     editedMessage,
+    editedScheduledMessage: null,
   };
 };
 
@@ -210,7 +246,9 @@ export class MessageComposer extends WithSubscriptions {
   pollComposer: PollComposer;
   locationComposer: LocationComposer;
   customDataManager: CustomDataManager;
+  private readonly scheduledMessageComposition: ScheduledMessageComposition;
   private snapshots: MessageComposerSnapshot[] = [];
+  private _commandSearchSource?: CommandSearchSource;
   private effectHandlers: MessageComposerEffectHandlers;
   private readonly configController: ConfigController<
     MessageComposerConfig,
@@ -274,6 +312,9 @@ export class MessageComposer extends WithSubscriptions {
     this.textComposer = new TextComposer({ composer: this, message });
     this.pollComposer = new PollComposer({ composer: this });
     this.customDataManager = new CustomDataManager({ composer: this, message });
+    this.scheduledMessageComposition = new ScheduledMessageComposition({
+      composer: this,
+    });
 
     this.editingAuditState = new StateStore<EditingAuditState>(
       this.initEditingAuditState(composition),
@@ -327,6 +368,22 @@ export class MessageComposer extends WithSubscriptions {
       this.textComposer.clearCommand();
     }
   };
+
+  get hasEditInProgress() {
+    return !!this.editedMessage || this.scheduledMessageComposition.blocksNewComposition;
+  }
+
+  private get pausesDrafts() {
+    return !!this.editedMessage || !!this.editedScheduledMessage;
+  }
+
+  get editedScheduledMessage(): ScheduledMessageResponse | undefined {
+    return this.state.getLatestValue().editedScheduledMessage ?? undefined;
+  }
+
+  get scheduleBlockReason() {
+    return this.scheduledMessageComposition.scheduleBlockReason;
+  }
 
   get contextType() {
     return MessageComposer.evaluateContextType(this.compositionContext);
@@ -389,7 +446,7 @@ export class MessageComposer extends WithSubscriptions {
   getCommandDisabledReason = (
     command: Command,
   ): CommandSuggestionDisabledReason | undefined => {
-    if (this.editedMessage) return 'editing';
+    if (this.hasEditInProgress) return 'editing';
 
     if (
       this.quotedMessage &&
@@ -431,6 +488,10 @@ export class MessageComposer extends WithSubscriptions {
   get isCommandSendable() {
     const currentCommand = this.textComposer.command;
     return !currentCommand || this.validateCommandSendability(currentCommand).ready;
+  }
+
+  get commandSearchSource(): CommandSearchSource {
+    return (this._commandSearchSource ??= new CommandSearchSource(this.channel));
   }
 
   /** See {@link AttachmentManagerConfig.pendingUploadsEnabled}. */
@@ -595,16 +656,24 @@ export class MessageComposer extends WithSubscriptions {
 
   initState = ({
     composition,
-  }: { composition?: DraftResponse | MessageResponse | LocalMessage } = {}) => {
+  }: {
+    composition?:
+      | DraftResponse
+      | MessageResponse
+      | LocalMessage
+      | ScheduledMessageResponse;
+  } = {}) => {
     this.clearSnapshots();
     this.editingAuditState.partialNext(this.initEditingAuditState(composition));
 
-    const message: LocalMessage | DraftMessage | undefined =
-      typeof composition === 'undefined'
-        ? composition
-        : compositionIsDraftResponse(composition)
-          ? composition.message
-          : formatMessage(composition);
+    let message: LocalMessage | DraftMessage | undefined;
+    if (compositionIsScheduledMessage(composition)) {
+      message = toComposerContent(composition);
+    } else if (compositionIsDraftResponse(composition)) {
+      message = composition.message;
+    } else if (composition) {
+      message = formatMessage(composition);
+    }
     this.attachmentManager.initState({ message });
     this.linkPreviewsManager.initState({ message });
     this.locationComposer.initState({ message });
@@ -618,6 +687,7 @@ export class MessageComposer extends WithSubscriptions {
     if (this.channel.cid !== channelApiResponse.channel?.cid) {
       return;
     }
+    if (this.editedScheduledMessage) return;
     if (channelApiResponse.draft) {
       this.initState({ composition: channelApiResponse.draft });
     } else if (this.state.getLatestValue().draftId) {
@@ -634,7 +704,11 @@ export class MessageComposer extends WithSubscriptions {
   };
 
   initEditingAuditState = (
-    composition?: DraftResponse | MessageResponse | LocalMessage,
+    composition?:
+      | DraftResponse
+      | MessageResponse
+      | LocalMessage
+      | ScheduledMessageResponse,
   ) => initEditingAuditState(composition);
 
   clearSnapshots = () => {
@@ -642,7 +716,12 @@ export class MessageComposer extends WithSubscriptions {
   };
 
   getSnapshot = (): MessageComposerSnapshot => ({
+    ...this.getSnapshotKeepingUploads(),
     attachmentManager: this.attachmentManager.getSnapshot(),
+  });
+
+  getSnapshotKeepingUploads = (): MessageComposerSnapshot => ({
+    attachmentManager: this.attachmentManager.getSnapshotKeepingUploads(),
     customDataManager: this.customDataManager.getSnapshot(),
     linkPreviewsManager: this.linkPreviewsManager.getSnapshot(),
     locationComposer: this.locationComposer.getSnapshot(),
@@ -725,6 +804,9 @@ export class MessageComposer extends WithSubscriptions {
       this.addUnsubscribeFunction(this.subscribeChannelConfigChanged());
       this.addUnsubscribeFunction(this.subscribeMessageUpdated());
       this.addUnsubscribeFunction(this.subscribeMessageDeleted());
+      this.addUnsubscribeFunction(
+        this.scheduledMessageComposition.registerSubscriptions(),
+      );
 
       this.addUnsubscribeFunction(this.subscribeTextComposerStateChanged());
       this.addUnsubscribeFunction(this.subscribeAttachmentManagerStateChanged());
@@ -803,7 +885,7 @@ export class MessageComposer extends WithSubscriptions {
         draft.channel_cid !== this.channel.cid
       )
         return;
-      if (this.editedMessage) return;
+      if (this.pausesDrafts) return;
       this.initState({ composition: draft });
     }).unsubscribe;
 
@@ -817,7 +899,7 @@ export class MessageComposer extends WithSubscriptions {
       ) {
         return;
       }
-      if (this.editedMessage) return;
+      if (this.pausesDrafts) return;
 
       this.logDraftUpdateTimestamp();
 
@@ -981,7 +1063,9 @@ export class MessageComposer extends WithSubscriptions {
     this.clear();
   };
 
-  compose = async (): Promise<MessageComposerMiddlewareValue['state'] | undefined> => {
+  compose = async ({ sendOptions = {} }: MessageComposerComposeOptions = {}): Promise<
+    MessageComposerMiddlewareValue['state'] | undefined
+  > => {
     const created_at = this.editedMessage?.created_at ?? nowNs();
 
     const text = '';
@@ -1009,7 +1093,7 @@ export class MessageComposer extends WithSubscriptions {
           type: 'regular',
           updated_at: created_at,
         } as LocalMessage,
-        sendOptions: {},
+        sendOptions,
       },
     });
 
@@ -1038,7 +1122,7 @@ export class MessageComposer extends WithSubscriptions {
   createDraft = async () => {
     // Server drafts live on the thread or channel, not on a message, so none for an edit. Nor for a
     // provisional channel (no ID yet).
-    if (this.editedMessage || !this.config.drafts.enabled || this.channel.isProvisional)
+    if (this.pausesDrafts || !this.config.drafts.enabled || this.channel.isProvisional)
       return;
     const composition = await this.composeDraft();
     if (!composition) return;
@@ -1066,7 +1150,7 @@ export class MessageComposer extends WithSubscriptions {
 
   deleteDraft = async () => {
     if (
-      this.editedMessage ||
+      this.pausesDrafts ||
       !this.config.drafts.enabled ||
       !this.draftId ||
       this.channel.isProvisional
@@ -1091,7 +1175,7 @@ export class MessageComposer extends WithSubscriptions {
   };
 
   getDraft = async () => {
-    if (this.editedMessage || !this.config.drafts.enabled || !this.client.userId) return;
+    if (this.pausesDrafts || !this.config.drafts.enabled || !this.client.userId) return;
 
     const draftFromOfflineDB = await this.client.offlineDb?.getDraft({
       cid: this.channel.cid,
@@ -1153,8 +1237,12 @@ export class MessageComposer extends WithSubscriptions {
     }
   };
 
-  /** Clears the composer, or only detaches the poll when `retainsCompositionOnSubmit`. */
-  private releaseSubmittedComposition = () => {
+  /**
+   * Clears the composer, or only detaches the poll when `retainsCompositionOnSubmit`.
+   *
+   * @internal
+   */
+  releaseSubmittedComposition = () => {
     if (this.retainsCompositionOnSubmit) {
       this.state.partialNext({
         id: MessageComposer.generateId(),
@@ -1168,17 +1256,23 @@ export class MessageComposer extends WithSubscriptions {
     this.clear();
   };
 
-  private reportSubmitFailure = (
-    type: CoreNotificationType,
-    message: string,
-    error: unknown,
-  ) => {
+  private get notificationOrigin() {
+    return { emitter: 'MessageComposer' as const, context: { composer: this } };
+  }
+
+  notifyWarning = (message: string, options?: NotificationOptions) => {
+    this.client.notifications.addWarning({
+      message,
+      origin: this.notificationOrigin,
+      options,
+    });
+  };
+
+  /** @internal */
+  reportSubmitFailure = (type: CoreNotificationType, message: string, error: unknown) => {
     this.client.notifications.addError({
       message,
-      origin: {
-        emitter: 'MessageComposer',
-        context: { composer: this },
-      },
+      origin: this.notificationOrigin,
       options: {
         type,
         metadata: { reason: (error as Error).message },
@@ -1192,13 +1286,19 @@ export class MessageComposer extends WithSubscriptions {
    * reported through `client.notifications`.
    */
   send = async (): Promise<MessageComposerSubmitResult> => {
+    // A message the server rejected (`type: 'error'`, for instance a bounced one) exists only
+    // locally, so opened for editing it is sent again as a new message, not saved as an edit.
+    const resendsRejectedMessage = this.editedMessage?.type === 'error';
+    if (this.hasEditInProgress && !resendsRejectedMessage) return 'nothing-to-send';
+
     const composition = await this.compose();
     if (!composition?.message) return 'nothing-to-send';
 
     const { localMessage, message, sendOptions } = composition;
 
+    const sendClaim = this.scheduledMessageComposition.claimSend();
     // Released before the request, so the user's next keystrokes cannot race the clear.
-    this.releaseSubmittedComposition();
+    if (!sendClaim) this.releaseSubmittedComposition();
 
     try {
       await this.defaultSubmitTarget.messageOperations.send({
@@ -1206,6 +1306,7 @@ export class MessageComposer extends WithSubscriptions {
         message,
         options: sendOptions,
       });
+      sendClaim?.onSent();
       return 'sent';
     } catch (error) {
       // Nothing is restored: the failed message in the list owns the content and its upload IDs.
@@ -1243,6 +1344,16 @@ export class MessageComposer extends WithSubscriptions {
       return 'failed';
     }
   };
+
+  scheduleMessage = (scheduledAt: Date) =>
+    this.scheduledMessageComposition.schedule(scheduledAt);
+
+  editScheduledMessage = (scheduledMessage: ScheduledMessageResponse) =>
+    this.scheduledMessageComposition.editScheduledMessage(scheduledMessage);
+
+  updateScheduledMessage = () => this.scheduledMessageComposition.update();
+
+  cancelScheduledMessageEdit = () => this.scheduledMessageComposition.cancelEdit();
 
   sendLocation = async () => {
     const location = this.locationComposer.validLocation;

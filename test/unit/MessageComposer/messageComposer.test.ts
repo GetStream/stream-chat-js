@@ -1051,6 +1051,7 @@ describe('MessageComposer', () => {
         draftId: null,
         showReplyInChannel: false,
         editedMessage: null,
+        editedScheduledMessage: null,
       });
     });
 
@@ -1074,6 +1075,7 @@ describe('MessageComposer', () => {
           id: 'test-message-id',
           text: 'Hello world',
         }),
+        editedScheduledMessage: null,
       });
     });
 
@@ -1395,6 +1397,7 @@ describe('MessageComposer', () => {
           id: 'edited-message-id',
           poll_id: 'test-poll-id',
         }),
+        editedScheduledMessage: null,
       });
     });
 
@@ -3452,6 +3455,45 @@ describe('MessageComposer submit lifecycle', () => {
     // Told apart from a failed request: nothing left the composer, so a caller must not treat this
     // as content that now lives in the message list.
     expect(sent).toBe('nothing-to-send');
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it('sends a bounced message opened for editing again as a new message', async () => {
+    const bounced = {
+      id: 'bounced-message-id',
+      type: 'error',
+      text: 'bounced',
+      attachments: [],
+      mentioned_users: [],
+    };
+    const { messageComposer, mockChannel } = setup({ composition: bounced });
+    const send = vi
+      .spyOn(mockChannel.messageOperations, 'send')
+      .mockResolvedValue(undefined);
+    withText(messageComposer, 'fixed');
+
+    await expect(messageComposer.send()).resolves.toBe('sent');
+
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(send.mock.calls[0][0].localMessage.text).toBe('fixed');
+  });
+
+  it('sends nothing while a message is being edited', async () => {
+    const edited = {
+      id: 'edited-message-id',
+      type: 'regular',
+      text: 'before',
+      attachments: [],
+      mentioned_users: [],
+    };
+    const { messageComposer, mockChannel } = setup({ composition: edited });
+    const send = vi
+      .spyOn(mockChannel.messageOperations, 'send')
+      .mockResolvedValue(undefined);
+    withText(messageComposer, 'after');
+
+    await expect(messageComposer.send()).resolves.toBe('nothing-to-send');
+
     expect(send).not.toHaveBeenCalled();
   });
 

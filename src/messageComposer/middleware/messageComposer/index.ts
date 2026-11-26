@@ -6,6 +6,7 @@ export * from './linkPreviews';
 export * from './MessageComposerMiddlewareExecutor';
 export * from './messageComposerState';
 export * from './pollOnly';
+export * from './scheduledMessage';
 export * from './sharedLocation';
 export * from './textComposer';
 export * from './types';

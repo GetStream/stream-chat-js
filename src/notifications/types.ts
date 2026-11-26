@@ -38,6 +38,10 @@ export const CORE_NOTIFICATION_TYPE = {
   messageUpdateFailed: 'api:message:update:failed',
   pollCastVoteLimit: 'validation:poll:castVote:limit',
   pollCreateFailed: 'api:poll:create:failed',
+  scheduledMessageBlocked: 'validation:scheduled-message:blocked',
+  scheduledMessageCompositionEnded: 'validation:scheduled-message:composition:ended',
+  scheduledMessageCreateFailed: 'api:scheduled-message:create:failed',
+  scheduledMessageUpdateFailed: 'api:scheduled-message:update:failed',
 } as const;
 
 /** A notification type emitted by `stream-chat` itself. See {@link CORE_NOTIFICATION_TYPE}. */

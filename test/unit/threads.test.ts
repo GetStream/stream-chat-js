@@ -123,6 +123,16 @@ describe('Threads 2.0', () => {
   });
 
   describe('Thread', () => {
+    it("applies the thread channel's server config to a channel never queried", () => {
+      const thread = createTestThread({
+        channelOverrides: {
+          config: { mark_types: ['played'] } as ChannelResponse['config'],
+        },
+      });
+
+      expect(thread.channel.config.markTypes).to.deep.equal(['played']);
+    });
+
     it('initializes properly', () => {
       const threadResponse = generateThreadResponse(
         channelResponse,
@@ -2335,6 +2345,46 @@ describe('Threads 2.0', () => {
             .true;
           // The other user's reaction is not added to the current user's own_reactions.
           expect(own.some((r) => r.user_id === 'other-user')).to.be.false;
+
+          thread.unregisterSubscriptions();
+        });
+
+        it('preserves mark_groups and own_marks of a reply on "message.updated"', () => {
+          const thread = createTestThread();
+          subscribeThread(thread);
+          const messageId = uuidv4();
+          const mark_groups = {
+            played: {
+              count: 1,
+              latest_by: [{ user_id: 'other-user', created_at: nowNs() }],
+            },
+          };
+          const own_marks = [{ type: 'played', created_at: nowNs() }];
+          thread.messagePaginator.ingestItem(
+            formatMessage(
+              generateMsg({
+                cid: thread.channel.cid,
+                id: messageId,
+                parent_id: thread.id,
+                mark_groups,
+                own_marks,
+              }) as MessageResponse,
+            ),
+          );
+
+          // Events don't carry marks.
+          client.dispatchEvent({
+            type: 'message.updated',
+            message: generateMsg({
+              id: messageId,
+              parent_id: thread.id,
+              own_reactions: [],
+            }) as MessageResponse,
+          });
+
+          const reply = thread.messagePaginator.getItem(messageId);
+          expect(reply?.mark_groups).to.deep.equal(mark_groups);
+          expect(reply?.own_marks).to.deep.equal(own_marks);
 
           thread.unregisterSubscriptions();
         });

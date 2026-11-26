@@ -24,6 +24,7 @@ import { createMessageOperations } from './messageOperations';
 import type { MessageOperations } from './messageOperations';
 import { nowNs } from './utils/time';
 import { WithSubscriptions } from './utils/WithSubscriptions';
+import { ScheduledMessagesView } from './scheduledMessages/ScheduledMessagesView';
 import { MessagePaginator } from './pagination';
 import type { PaginatorCursor, ReconcileNewestMessagesOptions } from './pagination';
 import { applyInstanceConfiguration } from './configuration/utils/applyInstanceConfiguration';
@@ -113,6 +114,13 @@ export class Thread extends WithSubscriptions {
   public readonly messageComposer: MessageComposer;
   public readonly messageOperations: MessageOperations;
   public readonly messagePaginator: MessagePaginator;
+  /**
+   * The current user's scheduled replies in this thread: a view of the channel's
+   * `scheduledMessagesPaginator`, which holds the channel's scheduled messages and replies alike
+   * (the server cannot filter them by thread). Follows it while the thread's subscriptions are
+   * registered.
+   */
+  public readonly scheduledMessages: ScheduledMessagesView;
 
   private client: StreamChat;
   private failedRepliesMap: Map<string, LocalMessage> = new Map();
@@ -228,6 +236,11 @@ export class Thread extends WithSubscriptions {
       client,
       composition: threadData?.draft ?? draft,
       compositionContext: this,
+    });
+
+    this.scheduledMessages = new ScheduledMessagesView({
+      paginator: this.channel.scheduledMessagesPaginator,
+      scope: { parentId: this.id, type: 'thread' },
     });
 
     this.messageOperations = createMessageOperations(this);
@@ -440,7 +453,10 @@ export class Thread extends WithSubscriptions {
     this.addUnsubscribeFunction(this.subscribeParentMessageFromStore());
     this.addUnsubscribeFunction(this.subscribeMarkActiveThreadRead());
     this.addUnsubscribeFunction(this.subscribeReloadActiveStaleThread());
+    this.addUnsubscribeFunction(this.subscribeLoadScheduledMessagesWhenActive());
     this.addUnsubscribeFunction(this.subscribeMarkStaleOnStopWatching());
+    this.scheduledMessages.registerSubscriptions();
+    this.addUnsubscribeFunction(() => this.scheduledMessages.unregisterSubscriptions());
   };
 
   /**
@@ -498,6 +514,14 @@ export class Thread extends WithSubscriptions {
         if (active && isStateStale) {
           this.reload();
         }
+      },
+    );
+
+  private subscribeLoadScheduledMessagesWhenActive = () =>
+    this.state.subscribeWithSelector(
+      ({ active }) => ({ active }),
+      ({ active }) => {
+        if (active) this.channel.ensureScheduledMessagesLoaded();
       },
     );
 
@@ -633,24 +657,21 @@ export class Thread extends WithSubscriptions {
 
   public handleMessageUpdated = (event: PipelineEvent) => {
     if (!event.message) return;
-    // A `message.updated` event carries `own_reactions: []`, which would wipe the current user's
-    // reactions: keep them from the held copy (the reply paginator, or `state.parentMessage`).
-    const message =
+    // Events carry `own_reactions: []` and no marks; keep both from the held copy.
+    const held =
       event.message.parent_id === this.id
-        ? {
-            ...event.message,
-            own_reactions:
-              this.messagePaginator.getItem(event.message.id)?.own_reactions ??
-              event.message.own_reactions,
-          }
+        ? this.messagePaginator.getItem(event.message.id)
         : !event.message.parent_id && event.message.id === this.id
-          ? {
-              ...event.message,
-              own_reactions:
-                this.state.getLatestValue().parentMessage?.own_reactions ??
-                event.message.own_reactions,
-            }
-          : event.message;
+          ? this.state.getLatestValue().parentMessage
+          : undefined;
+    const message = held
+      ? {
+          ...event.message,
+          own_reactions: held.own_reactions ?? event.message.own_reactions,
+          mark_groups: event.message.mark_groups ?? held.mark_groups,
+          own_marks: event.message.own_marks ?? held.own_marks,
+        }
+      : event.message;
     this.updateParentMessageOrReplyLocally(message);
     this.messagePaginator.reflectQuotedMessageUpdate(formatMessage(event.message));
   };
@@ -842,7 +863,9 @@ const mergeThreadParticipants = (
 /** `participant_limit` of the single-thread requests (`getThreadAndHydrate`, `reload()`). */
 export const DEFAULT_THREAD_PARTICIPANT_LIMIT = 100;
 
-/** The thread's channel, with the members and custom data of `threadData` applied. */
+/**
+ * The thread's channel, with the members, custom data and server config of `threadData` applied.
+ */
 export const ensureThreadChannel = (
   client: StreamChat,
   threadData: ThreadStateResponse,
@@ -850,6 +873,7 @@ export const ensureThreadChannel = (
   if (!threadData.channel) {
     throw new Error('Thread channel is required when threadData is provided');
   }
+  client._addChannelConfig(threadData.channel);
   const channel = client.channelManager.ensure({
     type: threadData.channel.type,
     id: threadData.channel.id,

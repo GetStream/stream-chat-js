@@ -49,6 +49,7 @@ const PENDING_WHEN_QUEUED: Record<OperationKind, readonly QueueableType[]> = {
   // An edit of a message the server has never seen is folded into its queued send
   // (`AbstractOfflineDB.handleUpdateMessagePendingTask`), leaving no `update-message` row.
   update: ['update-message', 'send-message'],
+  schedule: [],
 };
 
 /**
@@ -138,6 +139,8 @@ export class MessageOperationStatePolicy {
       return { applied, previous };
     }
 
+    if (kind === 'schedule') return {};
+
     return unhandledKind(kind);
   }
 
@@ -202,6 +205,8 @@ export class MessageOperationStatePolicy {
       this.ctx.persist(formatted);
       return;
     }
+
+    if (kind === 'schedule') return;
 
     return unhandledKind(kind);
   }
@@ -275,6 +280,8 @@ export class MessageOperationStatePolicy {
       this.ctx.persist(failed);
       return false;
     }
+
+    if (kind === 'schedule') return false;
 
     return unhandledKind(kind);
   }

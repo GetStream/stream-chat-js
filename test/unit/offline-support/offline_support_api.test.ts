@@ -1630,6 +1630,83 @@ describe('OfflineSupportApi', () => {
         });
       });
 
+      describe('handleMessageMarkAddedEvent', () => {
+        const mark = {
+          type: 'played',
+          message_id: 'msg-1',
+          user_id: 'user-b',
+          created_at: convertDateToTimestamp(new Date().toISOString()),
+        };
+        const markAddedEvent = {
+          type: 'message.mark_added',
+          cid: 'messaging:channel123',
+          message_id: 'msg-1',
+          created_at: mark.created_at,
+          custom: {},
+          mark,
+          user: { id: 'user-b', name: 'B' },
+        } as Event;
+        const heldMessage = {
+          id: 'msg-1',
+          cid: 'messaging:channel123',
+          user: { id: 'user-a' },
+          mark_groups: {
+            played: {
+              count: 1,
+              latest_by: [{ user_id: 'user-b', created_at: mark.created_at }],
+            },
+          },
+        } as unknown as LocalMessage;
+
+        afterEach(() => {
+          client.messageStore.remove('msg-1');
+          vi.resetAllMocks();
+        });
+
+        it('returns empty query array if the store does not hold the message', async () => {
+          const result = await offlineDb.handleMessageMarkAddedEvent({
+            event: markAddedEvent as Extract<Event, { type: 'message.mark_added' }>,
+          });
+          expect(queriesWithChannelGuardSpy).not.toHaveBeenCalled();
+          expect(result).toEqual([]);
+        });
+
+        it('returns empty query array if the message is a thread reply', async () => {
+          client.messageStore.upsert({ ...heldMessage, parent_id: 'parent1' });
+          const result = await offlineDb.handleMessageMarkAddedEvent({
+            event: markAddedEvent as Extract<Event, { type: 'message.mark_added' }>,
+          });
+          expect(queriesWithChannelGuardSpy).not.toHaveBeenCalled();
+          expect(result).toEqual([]);
+        });
+
+        it('stores the mark, its user and the held message through handleEvent', async () => {
+          client.messageStore.upsert(heldMessage);
+          offlineDb.insertMessageMark.mockResolvedValue(['INSERT * INTO messageMarks']);
+
+          const result = await offlineDb.handleEvent({
+            event: markAddedEvent,
+            execute: false,
+          });
+
+          expect(queriesWithChannelGuardSpy).toHaveBeenCalledWith(
+            { event: markAddedEvent, execute: false },
+            expect.any(Function),
+          );
+          expect(offlineDb.insertMessageMark).toHaveBeenCalledWith({
+            execute: false,
+            mark,
+            message: expect.objectContaining({
+              id: 'msg-1',
+              mark_groups: heldMessage.mark_groups,
+            }),
+            user: { id: 'user-b', name: 'B' },
+          });
+          expect(offlineDb.updateMessage).not.toHaveBeenCalled();
+          expect(result).toEqual(['INSERT * INTO messageMarks']);
+        });
+      });
+
       describe('handleChannelVisibilityEvent', () => {
         const channelHiddenEvent: Event = {
           ...baseEvent,
@@ -2461,6 +2538,53 @@ describe('OfflineSupportApi', () => {
           await offlineDb.handleAddPendingTask({ task });
 
           expect(addPendingTaskSpy).toHaveBeenCalledWith(task);
+        });
+
+        describe('send-message-mark', () => {
+          const markTask = (type: string) =>
+            ({
+              channelId: 'channel-id',
+              channelType: 'messaging',
+              messageId: 'msg-123',
+              payload: [{ id: 'msg-123' }, { type }],
+              type: 'send-message-mark',
+            }) as PendingTask;
+
+          it('adds a mark when none is queued for the message', async () => {
+            const task = markTask('played');
+            const getPendingTasksSpy = vi
+              .spyOn(offlineDb, 'getPendingTasks')
+              .mockResolvedValue([]);
+            const addPendingTaskSpy = vi.spyOn(offlineDb, 'addPendingTask');
+
+            await offlineDb.handleAddPendingTask({ task });
+
+            expect(getPendingTasksSpy).toHaveBeenCalledWith({ messageId: 'msg-123' });
+            expect(addPendingTaskSpy).toHaveBeenCalledWith(task);
+          });
+
+          it('does not queue a mark of a type already queued for the message', async () => {
+            vi.spyOn(offlineDb, 'getPendingTasks').mockResolvedValue([
+              { ...markTask('played'), id: 1 },
+            ]);
+            const addPendingTaskSpy = vi.spyOn(offlineDb, 'addPendingTask');
+
+            await offlineDb.handleAddPendingTask({ task: markTask('played') });
+
+            expect(addPendingTaskSpy).not.toHaveBeenCalled();
+          });
+
+          it('adds a mark of a different type', async () => {
+            const task = markTask('seen');
+            vi.spyOn(offlineDb, 'getPendingTasks').mockResolvedValue([
+              { ...markTask('played'), id: 1 },
+            ]);
+            const addPendingTaskSpy = vi.spyOn(offlineDb, 'addPendingTask');
+
+            await offlineDb.handleAddPendingTask({ task });
+
+            expect(addPendingTaskSpy).toHaveBeenCalledWith(task);
+          });
         });
 
         it('adds replayable update-message tasks as-is when nothing is queued for the message', async () => {

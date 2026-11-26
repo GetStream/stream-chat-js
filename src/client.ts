@@ -76,7 +76,9 @@ import {
 } from './connection';
 import { MessageDeliveryReporter } from './messageDelivery';
 import { NotificationManager } from './notifications';
+import { MessageMarkManager } from './messageMarks';
 import { ReminderManager } from './reminders';
+import { ScheduledMessagePaginatorsManager } from './scheduledMessages';
 import type { AbstractOfflineDB } from './offline-support';
 import { FixedSizeQueueCache } from './utils/FixedSizeQueueCache';
 import { isEqual } from './utils/mergeWith/mergeWithCore';
@@ -93,6 +95,7 @@ import type {
   GetApplicationResponse as Gen_GetApplicationResponse,
   MarkDeliveredRequest as Gen_MarkDeliveredRequest,
   ImageUploadRequest,
+  ScheduledMessageResponse,
   WSAuthMessage,
   WSEvent,
 } from './gen/models';
@@ -167,6 +170,10 @@ export class StreamChat extends ChatApi {
    * request with `watch` or `presence` waits here for the handshake (see `requiresConnectionId`).
    */
   connectionIdManager: ConnectionIdManager;
+  /** Scheduled message lists the integrator registers; a channel's own list is on the channel. */
+  scheduledMessagePaginators: ScheduledMessagePaginatorsManager;
+  /** One canonical copy of each listed scheduled message, shared by every scheduled message list. */
+  scheduledMessageStore: EntityStore<ScheduledMessageResponse>;
   /**
    * Client-global store with one canonical copy of each message. The channel and thread paginators
    * read and write messages through it, so a message held in several of them stays consistent.
@@ -175,6 +182,8 @@ export class StreamChat extends ChatApi {
   offlineDb?: AbstractOfflineDB;
   notifications: NotificationManager;
   reminders: ReminderManager;
+  /** The lists of who marked a message, kept current for the session. */
+  messageMarks: MessageMarkManager;
   axiosInstance: AxiosInstance;
   baseURL?: string;
   cleaningIntervalRef?: ReturnType<typeof setTimeout>;
@@ -335,13 +344,19 @@ export class StreamChat extends ChatApi {
     this.messageStore = new EntityStore<LocalMessage>({
       getEntityId: (message) => message.id,
     });
-    // Before the managers that claim channels in its store.
+    this.scheduledMessageStore = new EntityStore<ScheduledMessageResponse>({
+      getEntityId: ({ id }) => id,
+    });
     this.channelManager = new ChannelManager({ client: this });
     this.threads = new ThreadManager({ client: this });
     this.polls = new PollManager({ client: this });
     this.connectionRecovery = new ConnectionRecoveryManager({ client: this });
     this.connectionRecovery.registerSubscriptions();
     this.reminders = new ReminderManager({ client: this });
+    this.messageMarks = new MessageMarkManager({ client: this });
+    this.scheduledMessagePaginators = new ScheduledMessagePaginatorsManager({
+      client: this,
+    });
     this.messageDeliveryReporter = new MessageDeliveryReporter({ client: this });
     this.messageComposerCache = new FixedSizeQueueCache<string, MessageComposer>(64);
     // a cached composer, such as a message edit's, keeps the channel it was built with
@@ -775,6 +790,9 @@ export class StreamChat extends ChatApi {
     this.state = new ClientState({ client: this });
     this.threads.resetState();
     this.unreadCountsStore.partialNext({ totalUnreadCount: 0, unreadChannelsCount: 0 });
+    this.messageMarks.clear();
+    this.scheduledMessagePaginators.resetPaginatorStates();
+    this.scheduledMessageStore.clear();
     // Channel mutes are per-user: stale ones would resolve `muted` filters against the previous
     // user.
     this.mutedChannels = [];
@@ -1404,17 +1422,15 @@ export class StreamChat extends ChatApi {
    */
   override async queryChannels(...args: Parameters<ChatApi['queryChannels']>) {
     const [request, requestOptions] = args;
-    const defaultOptions: ChannelOptions = {
-      state: true,
-      watch: true,
-      presence: false,
-    };
 
     const {
       predefined_filter,
       filter_values,
       sort_values,
       filter_conditions,
+      state = true,
+      watch = true,
+      presence = false,
       ...restOptions
     } = request ?? {};
 
@@ -1424,12 +1440,16 @@ export class StreamChat extends ChatApi {
           predefined_filter,
           filter_values,
           sort_values,
-          ...defaultOptions,
+          state,
+          watch,
+          presence,
           ...restOptions,
         }
       : {
           filter_conditions,
-          ...defaultOptions,
+          state,
+          watch,
+          presence,
           ...restOptions,
         };
 
@@ -1473,7 +1493,22 @@ export class StreamChat extends ChatApi {
       const idsAtRequest = channel.messagePaginator?.getHeadIntervalItemIdsAtRequest();
       if (idsAtRequest) headIntervalItemIdsAtRequestByCid.set(channel.cid, idsAtRequest);
     }
-    const queryChannelsResponse = await this.queryChannels(options, requestOptions);
+    const scheduledMessageIdsAtRequestByCid = new Map<string, ReadonlySet<string>>();
+    for (const channel of this.channelManager.values()) {
+      scheduledMessageIdsAtRequestByCid.set(
+        channel.cid,
+        channel.scheduledMessagesPaginator.getItemIds(),
+      );
+    }
+    // free when the app has no scheduled messages: the server omits the field
+    const includeScheduledMessages =
+      this.config.getConfig('channel')?.scheduledMessages?.enabled !== false;
+    const queryChannelsResponse = await this.queryChannels(
+      includeScheduledMessages
+        ? { include_scheduled_messages: true, ...options }
+        : options,
+      requestOptions,
+    );
     const channels = queryChannelsResponse.channels;
 
     this.dispatchEvent({
@@ -1496,6 +1531,17 @@ export class StreamChat extends ChatApi {
       options,
       headIntervalItemIdsAtRequestByCid,
     );
+    // Absent from every channel past 100 in total: the lists keep what they hold rather than each
+    // sending a query.
+    for (const { channel, scheduled_messages } of channels ?? []) {
+      if (!channel || !scheduled_messages) continue;
+      this.channelManager
+        .get(channel.cid)
+        ?.hydrateScheduledMessages(
+          scheduled_messages,
+          scheduledMessageIdsAtRequestByCid.get(channel.cid),
+        );
+    }
 
     if (stateOptions.withResponse) {
       return {

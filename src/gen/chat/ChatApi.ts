@@ -15,6 +15,8 @@ import type {
   CreateDraftResponse,
   CreateGuestRequest,
   CreateGuestResponse,
+  CreateMessageMarkRequest,
+  CreateMessageMarkResponse,
   CreatePollOptionRequest,
   CreatePollRequest,
   CreateReminderRequest,
@@ -83,6 +85,8 @@ import type {
   QueryMembersPayload,
   QueryMessageFlagsPayload,
   QueryMessageFlagsResponse,
+  QueryMessageMarksRequest,
+  QueryMessageMarksResponse,
   QueryPollsRequest,
   QueryPollsResponse,
   QueryPollVotesRequest,
@@ -101,6 +105,8 @@ import type {
   Response,
   RewindChannelRequest,
   RewindChannelResponse,
+  SearchAllRequest,
+  SearchAllResponse,
   SearchPayload,
   SearchResponse,
   SearchRolesResponse,
@@ -916,6 +922,38 @@ export class ChatApi {
     );
   }
 
+  createMessageMark(
+    pathParams: { id: string },
+    request: CreateMessageMarkRequest,
+    requestOptions?: StreamRequestOptions,
+  ): Promise<StreamResponse<CreateMessageMarkResponse>> {
+    return this.apiClient.sendRequest<CreateMessageMarkResponse>(
+      'POST',
+      '/api/v2/chat/messages/{id}/marks',
+      pathParams,
+      undefined,
+      request,
+      'application/json',
+      requestOptions,
+    );
+  }
+
+  queryMessageMarks(
+    pathParams: { id: string },
+    request?: QueryMessageMarksRequest,
+    requestOptions?: StreamRequestOptions,
+  ): Promise<StreamResponse<QueryMessageMarksResponse>> {
+    return this.apiClient.sendRequest<QueryMessageMarksResponse>(
+      'POST',
+      '/api/v2/chat/messages/{id}/marks/query',
+      pathParams,
+      undefined,
+      request ?? {},
+      'application/json',
+      requestOptions,
+    );
+  }
+
   sendReaction(
     pathParams: { id: string },
     request: SendReactionRequest,
@@ -1269,16 +1307,35 @@ export class ChatApi {
     );
   }
 
+  searchAll(
+    request?: SearchAllRequest & { connection_id?: string },
+    requestOptions?: StreamRequestOptions,
+  ): Promise<StreamResponse<SearchAllResponse>> {
+    const { connection_id, ...body } = request ?? {};
+    const queryParams = { connection_id };
+
+    return this.apiClient.sendRequest<SearchAllResponse>(
+      'POST',
+      '/api/v2/chat/search/all',
+      undefined,
+      queryParams,
+      body,
+      'application/json',
+      requestOptions,
+    );
+  }
+
   sync(
     request: SyncRequest & {
       with_inaccessible_cids?: boolean;
       watch?: boolean;
+      max_events?: number;
       connection_id?: string;
     },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<SyncResponse>> {
-    const { with_inaccessible_cids, watch, connection_id, ...body } = request;
-    const queryParams = { with_inaccessible_cids, watch, connection_id };
+    const { with_inaccessible_cids, watch, max_events, connection_id, ...body } = request;
+    const queryParams = { with_inaccessible_cids, watch, max_events, connection_id };
 
     return this.apiClient.sendRequest<SyncResponse>(
       'POST',
@@ -1858,7 +1915,7 @@ export class ChatApi {
   }
 
   queryUsers(
-    request?: { payload?: QueryUsersPayload },
+    request?: { connection_id?: string; payload?: QueryUsersPayload },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<QueryUsersResponse>> {
     return this.apiClient.sendRequest<QueryUsersResponse>(

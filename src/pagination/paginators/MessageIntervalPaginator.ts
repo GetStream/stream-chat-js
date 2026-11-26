@@ -1586,7 +1586,10 @@ export class MessageIntervalPaginator extends BasePaginator<
       ? await this.channel
           .getClient()
           .getReplies({ parent_id: this.parentMessageId }, pagination)
-      : await this.channel.query({ messages: pagination });
+      : await this.channel.query({
+          include_scheduled_messages: false,
+          messages: pagination,
+        });
     return Array.isArray(messages) && messages.length > 0;
   }
 
