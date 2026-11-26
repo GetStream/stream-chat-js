@@ -124,6 +124,7 @@ import type {
   SortParamRequest,
   SyncRequest,
   SyncResponse,
+  TranscribeMessageResponse,
   TranslateMessageRequest,
   TranslateMessageResponse,
   TruncateChannelRequest,
@@ -1014,6 +1015,22 @@ export class ChatApi {
       undefined,
       request ?? {},
       'application/json',
+      requestOptions,
+    );
+  }
+
+  transcribeMessage(
+    pathParams: { id: string },
+    _request?: Record<string, never>,
+    requestOptions?: StreamRequestOptions,
+  ): Promise<StreamResponse<TranscribeMessageResponse>> {
+    return this.apiClient.sendRequest<TranscribeMessageResponse>(
+      'POST',
+      '/api/v2/chat/messages/{id}/transcribe',
+      pathParams,
+      undefined,
+      undefined,
+      undefined,
       requestOptions,
     );
   }
