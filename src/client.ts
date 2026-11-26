@@ -114,6 +114,11 @@ export type QueryChannelsResponseWithChannels = Omit<
 
 export type BlockedUsersState = { userIds: string[] };
 
+export type GlobalUnreadCountsState = {
+  totalUnreadCount: number;
+  unreadChannelsCount: number;
+};
+
 export type ChannelConfigsState = {
   configs: Configs;
 };
@@ -201,6 +206,7 @@ export class StreamChat extends ChatApi {
    */
   readonly channelServerConfigsStore: StateStore<ChannelConfigsState>;
   blockedUsers: StateStore<BlockedUsersState>;
+  readonly globalUnreadCounts: StateStore<GlobalUnreadCountsState>;
   setUserPromise: ConnectAPIResponse | null;
   state: ClientState;
   tokenManager: TokenManager;
@@ -293,6 +299,10 @@ export class StreamChat extends ChatApi {
       configs: {},
     });
     this.blockedUsers = new StateStore<BlockedUsersState>({ userIds: [] });
+    this.globalUnreadCounts = new StateStore<GlobalUnreadCountsState>({
+      totalUnreadCount: 0,
+      unreadChannelsCount: 0,
+    });
 
     this.moderation = new Moderation(this);
 
@@ -779,6 +789,7 @@ export class StreamChat extends ChatApi {
     }
     this.state = new ClientState({ client: this });
     this.threads.resetState();
+    this.globalUnreadCounts.partialNext({ totalUnreadCount: 0, unreadChannelsCount: 0 });
     this.messageMarks.clear();
     this.scheduledMessagePaginators.resetPaginatorStates();
     this.scheduledMessageStore.clear();
@@ -1162,6 +1173,41 @@ export class StreamChat extends ChatApi {
     }
   };
 
+  private _reflectUnreadChannelCounts(event: WSEvent) {
+    const patch: Partial<GlobalUnreadCountsState> = {};
+    if ('total_unread_count' in event && typeof event.total_unread_count === 'number') {
+      patch.totalUnreadCount = event.total_unread_count;
+    }
+    if ('unread_channels' in event && typeof event.unread_channels === 'number') {
+      patch.unreadChannelsCount = event.unread_channels;
+    }
+    if (Object.keys(patch).length > 0) {
+      this.globalUnreadCounts.partialNext(patch);
+    }
+  }
+
+  private _refreshUnreadChannelCountsAfterTruncation(cid: string) {
+    const channel = this.channelManager.get(cid);
+    if (!channel || channel.state.unreadCount === 0) return;
+
+    const countsAtRequest = this.globalUnreadCounts.getLatestValue();
+
+    this.unreadCounts()
+      .then(({ total_unread_count, channels }) => {
+        if (this.globalUnreadCounts.getLatestValue() !== countsAtRequest) return;
+
+        this.globalUnreadCounts.partialNext({
+          totalUnreadCount: total_unread_count,
+          unreadChannelsCount: channels.length,
+        });
+      })
+      .catch((error) =>
+        logger
+          .withExtraTags('_refreshUnreadChannelCountsAfterTruncation')
+          .warn('Refreshing the unread counts after a truncation failed.', { error }),
+      );
+  }
+
   _handleClientEvent(event: WSEvent) {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const client = this;
@@ -1189,6 +1235,16 @@ export class StreamChat extends ChatApi {
       client.channelManager.reflectMutedChannels();
       client.mutedUsers = event.me.mutes;
       client.blockedUsers.partialNext({ userIds: event.me.blocked_user_ids ?? [] });
+      client.globalUnreadCounts.partialNext({
+        totalUnreadCount: event.me.total_unread_count,
+        unreadChannelsCount: event.me.unread_channels,
+      });
+    }
+
+    this._reflectUnreadChannelCounts(event);
+
+    if (event.type === 'channel.truncated' && event.cid) {
+      this._refreshUnreadChannelCountsAfterTruncation(event.cid);
     }
 
     if (event.type === 'notification.message_new' && event.channel) {
