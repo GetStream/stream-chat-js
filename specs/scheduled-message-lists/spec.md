@@ -25,8 +25,8 @@ That made it the owner of data that belongs to other objects:
   its store entries, even after the channel itself was disposed.
 - **The manager decided which lists exist.** An integrator could not add a "failed only" list, and
   the global list existed whether the UI showed it or not.
-- **The consistency rules lived outside the store.** Every writer had to go through the manager to
-  stay consistent, and the version bookkeeping only worked because all writes went through it.
+- **The consistency layer only worked through the manager.** The version bookkeeping held only
+  because every write went through it.
 
 ## Design
 
@@ -34,29 +34,18 @@ Three owners, one shared store.
 
 ```
 StreamChat
-├── scheduledMessageStore          EntityStore<ScheduledMessageResponse>, with the rules below
+├── scheduledMessageStore          EntityStore<ScheduledMessageResponse>, shared by every list
 ├── scheduledMessagePaginators     ScheduledMessagePaginatorsManager: lists the integrator registers
 └── channelManager
     └── Channel
         └── scheduledMessagesPaginator   this channel's list, created with the channel
 ```
 
-### 1. The store keeps the latest copy itself (`EntityStore`)
+### 1. One shared store (`client.scheduledMessageStore`)
 
-`EntityStore` gains two opt-in options. Stores that do not pass them behave exactly as before.
-
-- **`shouldReplace(incoming, stored)`** says whether an incoming copy replaces the one already
-  stored under its id. `upsert` asks it, and so does every list that writes through a
-  `StoreBackedItemIndex`; it is not asked when nothing is stored. When it says no, the write is
-  skipped and nobody is notified.
-- **`isTombstone(entity)`** marks a copy that removes its entity. The store keeps that copy as a
-  **tombstone** after the entry itself is gone, until `clear()`. A tombstone records that the entity
-  was removed and how recent the removal is: a copy arriving later is compared against it with
-  `shouldReplace`, as against a stored copy, so one older than the removal (read before it) cannot
-  bring the entity back, and a newer one replaces the tombstone and is stored again.
-- **`resolveCanonicalEntity(incoming)`** is the public form of both: it returns the copy a writer should use, which
-  is `incoming`, or the stored copy or tombstone when `incoming` does not replace it. A paginator
-  calls it before it decides membership and position; a tombstone matches no list.
+`client.scheduledMessageStore` is a plain `EntityStore<ScheduledMessageResponse>`. Every list writes
+through a `StoreBackedItemIndex` over it, so a message shown in several lists is one object, and an
+edit that reaches one list reaches the others. Entries are released when no list holds them.
 
 The scheduled message state machine, as the backend (`lib/chat/state/scheduledmessages/store.go`,
 `lib/chat/scheduledmessage/scheduledmessage.go`) implements it:
@@ -75,42 +64,29 @@ The scheduled message state machine, as the backend (`lib/chat/state/scheduledme
 
 So only `sent` never comes back. `canceled` can, and so can the id of a deleted failed message.
 
-`client.scheduledMessageStore` is created with:
+The store itself stays last-write-wins, as for messages and channels in the rest of v10. Stale copies
+are rejected by the list before it writes, with three rules that keep no state beyond a request:
 
-- `isTombstone: isRemovedScheduledMessage`: status `sent` or `canceled`, which leave every list. A
-  `deleted` event arrives as canceled, also for a deleted failed message.
-- `shouldReplace: shouldReplaceScheduledMessage`: nothing replaces a sent copy, and a sent copy
-  replaces anything; otherwise the later `updated_at` replaces; on a tie the incoming copy
-  replaces, unless the stored copy is a removal. The last rule is for a deleted failed message,
-  whose removal carries the `updated_at` of its failure, so a stale copy read before the delete ties
-  with it. A canceled or deleted message scheduled again gets a new `updated_at` and replaces its
-  tombstone.
+- **The later `updated_at` wins.** On every ingest the list keeps the copy with the later
+  `updated_at` compared to the stored one, which some list holds. A tie takes the incoming copy, so
+  `sending` ↔ `scheduled` from queries goes through. The backend writes `updated_at = now()` with
+  the database clock on every user action and on every failure it records, so all clients compare
+  timestamps from one clock.
+- **Updates never add.** A `scheduled_message.updated` event and the response of an update or a
+  send-now replace a copy the list holds and are ignored by a list that does not hold it, so one that
+  lands after the message was sent or canceled cannot bring it back.
+- **A query skips what was removed while it was out.** An id the list held when the request went out
+  (`itemIdsAtRequest`) and no longer holds is dropped from the response, so a page read before a
+  send or cancel cannot list the message again.
 
-Why `updated_at` is a sound ordering key: the backend writes `updated_at = now()` with the database
-clock on every user action (update, send now, cancel, re-schedule) and on every failure the worker
-records, so all clients compare timestamps from one clock, in microseconds. The two transitions that
-do not bump it, claiming a message for sending (`sending`) and releasing it for a retry
-(`scheduled`), emit no event, so only query results show them; the tie rule lets them through.
+What this does not cover: a message removed while a request was out that the list did not hold when
+the request went out (e.g. a channel's first query, or `queryChannels` for a channel not loaded yet)
+can show again until the next event or reload corrects it.
 
 This replaces the manager's `resolveLatest`, receive versions, `version`, `hydratedCids` and the
-version checks in `Channel.requestChannelState` and `StreamChat.queryChannelsAndHydrate`. The rule
-holds whichever writer gets there last (an event, a channel query, a list query or an action
-response). Entries are released when no list holds them, which costs nothing here:
-
-- **Tombstones outlive their entries.** A message that is sent or canceled leaves every list, so its
-  entry goes at once, but its tombstone stays, and a query in flight cannot bring it back.
-- **`updated_at` is compared against a held copy.** Every loaded channel has its list (section 2),
-  so an event for it is held by that list from the moment it arrives, whether or not a page has
-  loaded. An event for a channel the client has not loaded is held by the registered lists it
-  matches; one that matches none has no list to update, and the next query of that channel is newer
-  than the event anyway.
-
-**Compared with the rest of v10:** messages and channels are last-write-wins. A channel query that
-started before a `message.updated` writes the older text back, and one that started before a hard
-delete brings the message back; the next event or reload corrects it. Scheduled messages are the
-first store that resolves conflicts itself. The hook is generic, but messages stay out of scope:
-their `updated_at` is not known to move on reactions or reply counts, some events carry partial
-messages, and optimistic local messages have no server timestamp yet.
+version checks in `Channel.requestChannelState` and `StreamChat.queryChannelsAndHydrate`. What stays
+is the snapshot a list takes before a channel query (section 2), which keeps messages that arrived
+by event while the request was in flight.
 
 ### 2. The channel owns its list (`channel.scheduledMessagesPaginator`)
 
@@ -147,14 +123,14 @@ messages, and optimistic local messages have no server timestamp yet.
 - **Events:** `scheduled_message.*` carry the `cid`, so `dispatchEvent` routes them to the channel,
   which ingests them into its list.
   `deleted` is ingested as `canceled`, `sent` as `sent`; both then leave the list (they no longer
-  match its status filter) and leave a tombstone in the store.
+  match its status filter).
 - **Actions** move to the channel: `scheduleMessage(request)`, `updateScheduledMessage(id, request)`,
   `deleteScheduledMessage(id)`, `sendScheduledMessageNow(id)`. They keep the existing request
   handlers (`channel.requestHandlers`, falling back to the client's `channel` configuration), the
   attachment sanitizing, and the "not found → remove it" handling. The result goes into the channel's
   list and to the manager's lists. The event that follows reaches every connection of the user,
-  including this one. It carries the same `updated_at`, so the store takes it as a tie and the lists
-  re-render once more with an equal copy; it cannot reorder anything or bring anything back.
+  including this one. It carries the same `updated_at`, so the list takes it as a tie and re-renders
+  once more with an equal copy.
 - **Threads:** the channel's list holds thread replies too (`message.parent_id`); a thread's
   `ScheduledMessagesView` filters it by `parentId`.
 
@@ -193,7 +169,8 @@ messages, and optimistic local messages have no server timestamp yet.
   or server-resolved filter, so unlike `ChannelPaginator` it needs neither a `FilterBuilder` nor two
   filters. The `filter` setter replaces it and resets the list, as `ReminderPaginator.filters` does;
   a UI toggling statuses sets it and calls `reload()`.
-- `ingestItem` and the query results go through `store.resolveCanonicalEntity` first.
+- `ingestItem` keeps the copy with the later `updated_at` (section 1); `updateItem` does the same
+  for a message the list holds and ignores the rest.
 - `hydrate(scheduledMessages, itemIdsAtRequest?)` applies a complete set through the paginator's
   own operations (`removeItem`, `ingestItem`, `setItems` for the first page) rather than resetting its
   intervals; `getItemIds()`, taken before the request, is the snapshot it compares against. It runs
@@ -248,14 +225,14 @@ released.
 | `client.scheduledMessages.sendScheduledMessageNow(id)`                                                      | `channel.sendScheduledMessageNow(id)`                                                                                            |
 | `client.scheduledMessages.getFromState(id)`                                                                 | `client.scheduledMessageStore.get(id)`; it holds only listed messages that are not sent or canceled                              |
 | `client.scheduledMessages.upsertToState` / `removeFromState` / `hydrateChannelState` / `version` / `reload` | removed                                                                                                                          |
-| `new ScheduledMessagePaginator({ cid, resolveLatest })`                                                     | `new ScheduledMessagePaginator({ filter: { cid } })`; conflicts are the store's                                                  |
+| `new ScheduledMessagePaginator({ cid, resolveLatest })`                                                     | `new ScheduledMessagePaginator({ filter: { cid } })`                                                                             |
 | `paginator.setCompleteList(items)`                                                                          | `paginator.hydrate(items)`                                                                                                       |
 | client config `client.scheduledMessages.paginator`                                                          | `channel.scheduledMessagesPaginator` for the channels' lists; pass `paginatorOptions` to the lists you register                  |
 | default handler for `connection.recovered`                                                                  | removed; `ConnectionRecoveryManager` calls `client.scheduledMessagePaginators.recover()`                                         |
 
 ## Not in scope
 
-- Applying the conflict hook to messages, channels or threads (see the end of section 1).
+- A conflict hook on `EntityStore`: the rules above stay local to the scheduled message list.
 - The React SDK. PR 3383 already calls removed methods (`getForChannel`, `getCountForChannel`, …)
   from an earlier iteration of this branch, and has to move to the API above.
 - Docs snippets: `test/docs-snippets/pages/chat/04-messages/12-scheduled_messages.test.ts` only calls
@@ -263,20 +240,14 @@ released.
 
 ## Testing
 
-- `EntityStore`: `shouldReplace` keeps or replaces, skips notification and is not asked when nothing
-  is stored; a tombstone outlives its entry, a stale copy resolves to it, a newer copy replaces it
-  and is stored again, `clear()` drops tombstones, a list does not link a stale copy of a removed
-  entity; stores without the options are unchanged.
-- The scheduled-message rule: every row of the state machine that reaches the client, including a
-  canceled message and a deleted failed message scheduled again under the same id, and stale copies
-  after either.
 - `BasePaginator`: an empty complete page, and items ingested into it and into a list emptied by
   removals, with and without the opt-in.
 - Channel: filled from `query()`/`watch()` and `queryChannels`, kept when the field is absent,
   reloaded when absent and loaded, an event that lands mid-query is kept (also during the list's
   first query), an event before any page loaded is held without marking the list loaded, a message
-  canceled during the first query or a later one is not brought back, a canceled or deleted failed
-  message scheduled again under the same id is listed again, a channel created from
+  sent or canceled during a query is not brought back, an older copy does not replace a newer one,
+  an update event or response does not list a message the list does not hold, a canceled
+  or deleted failed message scheduled again under the same id is listed again, a channel created from
   its members follows its new cid, probe queries do not ask, a response after disposal is ignored,
   events and actions update the list, disposal releases it.
 - `ThreadPaginator`: an empty reload reports nothing more to load.
