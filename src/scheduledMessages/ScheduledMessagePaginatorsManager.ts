@@ -237,6 +237,10 @@ export class ScheduledMessagePaginatorsManager extends WithSubscriptions {
     this.paginators.forEach((paginator) => paginator.ingestItem(scheduledMessage));
   };
 
+  public update = (scheduledMessage: ScheduledMessageResponse) => {
+    this.paginators.forEach((paginator) => paginator.updateItem(scheduledMessage));
+  };
+
   public recover = async () => {
     const loadedPaginators = this.paginators.filter(({ hasLoadedPage }) => hasLoadedPage);
 

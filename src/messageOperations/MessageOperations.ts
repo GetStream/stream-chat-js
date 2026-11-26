@@ -107,6 +107,7 @@ export class MessageOperations {
     });
     this.scheduledPolicy = new ScheduledMessageStatePolicy({
       ingest: (scheduledMessage) => this.ingestScheduledMessage(scheduledMessage),
+      update: (scheduledMessage) => this.updateListedScheduledMessage(scheduledMessage),
       get: (id) => ctx.channel.getClient().scheduledMessageStore.get(id),
     });
     this.normalizeOutgoingMessage = ctx.normalizeOutgoingMessage ?? ((m) => m);
@@ -358,6 +359,12 @@ export class MessageOperations {
     const { channel } = this.ctx;
     channel.scheduledMessagesPaginator.ingestItem(scheduledMessage);
     channel.getClient().scheduledMessagePaginators.ingest(scheduledMessage);
+  }
+
+  updateListedScheduledMessage(scheduledMessage: ScheduledMessageResponse) {
+    const { channel } = this.ctx;
+    channel.scheduledMessagesPaginator.updateItem(scheduledMessage);
+    channel.getClient().scheduledMessagePaginators.update(scheduledMessage);
   }
 
   private get scheduledRequestHandlers(): ScheduledMessageRequestHandlers {

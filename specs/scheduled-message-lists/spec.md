@@ -64,12 +64,24 @@ The scheduled message state machine, as the backend (`lib/chat/state/scheduledme
 
 So only `sent` never comes back. `canceled` can, and so can the id of a deleted failed message.
 
-Writes are last-write-wins, as for messages and channels in the rest of v10: whichever writer lands
-last (an event, a channel query, a list query or an action response) sets the stored copy. A channel
-query that started before a message was sent or canceled can show it again until the next event or
-reload corrects it. Rejecting such stale copies (`updated_at` ordering, and keeping a record of sent
-and canceled messages after they leave every list) is a separate change, PR #2035, so that this
-feature does not add an extension point to `EntityStore`.
+The store itself stays last-write-wins, as for messages and channels in the rest of v10. Stale copies
+are rejected by the list before it writes, with three rules that keep no state beyond a request:
+
+- **The later `updated_at` wins.** On every ingest the list keeps the copy with the later
+  `updated_at` compared to the stored one, which some list holds. A tie takes the incoming copy, so
+  `sending` ↔ `scheduled` from queries goes through. The backend writes `updated_at = now()` with
+  the database clock on every user action and on every failure it records, so all clients compare
+  timestamps from one clock.
+- **Updates never add.** A `scheduled_message.updated` event and the response of an update or a
+  send-now replace a copy the list holds and are ignored by a list that does not hold it, so one that
+  lands after the message was sent or canceled cannot bring it back.
+- **A query skips what was removed while it was out.** An id the list held when the request went out
+  (`itemIdsAtRequest`) and no longer holds is dropped from the response, so a page read before a
+  send or cancel cannot list the message again.
+
+What this does not cover: a message removed while a request was out that the list did not hold when
+the request went out (e.g. a channel's first query, or `queryChannels` for a channel not loaded yet)
+can show again until the next event or reload corrects it.
 
 This replaces the manager's `resolveLatest`, receive versions, `version`, `hydratedCids` and the
 version checks in `Channel.requestChannelState` and `StreamChat.queryChannelsAndHydrate`. What stays
@@ -117,7 +129,8 @@ by event while the request was in flight.
   handlers (`channel.requestHandlers`, falling back to the client's `channel` configuration), the
   attachment sanitizing, and the "not found → remove it" handling. The result goes into the channel's
   list and to the manager's lists. The event that follows reaches every connection of the user,
-  including this one, and writes an equal copy again.
+  including this one. It carries the same `updated_at`, so the list takes it as a tie and re-renders
+  once more with an equal copy.
 - **Threads:** the channel's list holds thread replies too (`message.parent_id`); a thread's
   `ScheduledMessagesView` filters it by `parentId`.
 
@@ -156,6 +169,8 @@ by event while the request was in flight.
   or server-resolved filter, so unlike `ChannelPaginator` it needs neither a `FilterBuilder` nor two
   filters. The `filter` setter replaces it and resets the list, as `ReminderPaginator.filters` does;
   a UI toggling statuses sets it and calls `reload()`.
+- `ingestItem` keeps the copy with the later `updated_at` (section 1); `updateItem` does the same
+  for a message the list holds and ignores the rest.
 - `hydrate(scheduledMessages, itemIdsAtRequest?)` applies a complete set through the paginator's
   own operations (`removeItem`, `ingestItem`, `setItems` for the first page) rather than resetting its
   intervals; `getItemIds()`, taken before the request, is the snapshot it compares against. It runs
@@ -217,8 +232,7 @@ released.
 
 ## Not in scope
 
-- Rejecting stale copies of scheduled messages (`updated_at` ordering and records of sent and
-  canceled messages): PR #2035.
+- A conflict hook on `EntityStore`: the rules above stay local to the scheduled message list.
 - The React SDK. PR 3383 already calls removed methods (`getForChannel`, `getCountForChannel`, …)
   from an earlier iteration of this branch, and has to move to the API above.
 - Docs snippets: `test/docs-snippets/pages/chat/04-messages/12-scheduled_messages.test.ts` only calls
@@ -230,7 +244,9 @@ released.
   removals, with and without the opt-in.
 - Channel: filled from `query()`/`watch()` and `queryChannels`, kept when the field is absent,
   reloaded when absent and loaded, an event that lands mid-query is kept (also during the list's
-  first query), an event before any page loaded is held without marking the list loaded, a canceled
+  first query), an event before any page loaded is held without marking the list loaded, a message
+  sent or canceled during a query is not brought back, an older copy does not replace a newer one,
+  an update event or response does not list a message the list does not hold, a canceled
   or deleted failed message scheduled again under the same id is listed again, a channel created from
   its members follows its new cid, probe queries do not ask, a response after disposal is ignored,
   events and actions update the list, disposal releases it.

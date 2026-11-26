@@ -313,6 +313,42 @@ describe("a channel's scheduled messages", () => {
       expect(listed(channel)).toEqual([fresh]);
     });
 
+    it('does not list a sent message again from a late response', async () => {
+      const { channel, client, getOrCreate } = setup();
+      const sm = generateScheduledMessage();
+      getOrCreate.mockResolvedValueOnce(channelState([sm]) as never);
+      await channel.query();
+      const response = deferred<unknown>();
+      getOrCreate.mockReturnValueOnce(response.promise as never);
+
+      const querying = channel.query();
+      await vi.waitFor(() => expect(getOrCreate).toHaveBeenCalledTimes(2));
+      client.dispatchEvent(generateEvent('scheduled_message.sent', sm));
+      response.resolve(channelState([sm]));
+      await querying;
+
+      expect(listed(channel)).toEqual([]);
+    });
+
+    it('does not bring back a message canceled while the query was in flight', async () => {
+      const { channel, client, getOrCreate } = setup();
+      const sm = generateScheduledMessage({ updated_at: at(0) });
+      getOrCreate.mockResolvedValueOnce(channelState([sm]) as never);
+      await channel.query();
+      const response = deferred<unknown>();
+      getOrCreate.mockReturnValueOnce(response.promise as never);
+
+      const querying = channel.query();
+      await vi.waitFor(() => expect(getOrCreate).toHaveBeenCalledTimes(2));
+      client.dispatchEvent(
+        generateEvent('scheduled_message.deleted', { ...sm, updated_at: at(10) }),
+      );
+      response.resolve(channelState([sm]));
+      await querying;
+
+      expect(listed(channel)).toEqual([]);
+    });
+
     it('does not store sent or canceled scheduled messages of the response', async () => {
       const { channel, client, getOrCreate } = setup();
       const sent = generateScheduledMessage({ status: 'sent' });
@@ -510,17 +546,34 @@ describe("a channel's scheduled messages", () => {
       return context;
     };
 
-    it.each(['scheduled_message.created', 'scheduled_message.updated'] as EventType[])(
-      'lists the message of %s',
-      (type) => {
-        const { channel, client } = setupLoaded();
-        const sm = generateScheduledMessage();
+    it('lists the message of scheduled_message.created', () => {
+      const { channel, client } = setupLoaded();
+      const sm = generateScheduledMessage();
 
-        client.dispatchEvent(generateEvent(type, sm));
+      client.dispatchEvent(generateEvent('scheduled_message.created', sm));
 
-        expect(listed(channel)).toEqual([sm]);
-      },
-    );
+      expect(listed(channel)).toEqual([sm]);
+    });
+
+    it('updates a listed message from scheduled_message.updated', () => {
+      const { channel, client } = setupLoaded();
+      const sm = generateScheduledMessage({ updated_at: at(0) });
+      client.dispatchEvent(generateEvent('scheduled_message.created', sm));
+      const updated = { ...sm, message: { text: 'edited' }, updated_at: at(10) };
+
+      client.dispatchEvent(generateEvent('scheduled_message.updated', updated));
+
+      expect(listed(channel)).toEqual([updated]);
+    });
+
+    it('does not list the message of scheduled_message.updated the list does not hold', () => {
+      const { channel, client } = setupLoaded();
+      const sm = generateScheduledMessage();
+
+      client.dispatchEvent(generateEvent('scheduled_message.updated', sm));
+
+      expect(listed(channel)).toEqual([]);
+    });
 
     it('keeps a failed message, in its place by time', () => {
       const { channel, client } = setupLoaded();
@@ -590,6 +643,53 @@ describe("a channel's scheduled messages", () => {
       client.dispatchEvent(generateEvent('scheduled_message.created', scheduledAgain));
 
       expect(listed(channel)).toEqual([scheduledAgain]);
+    });
+
+    it('does not bring back a deleted failed message from a response requested before the delete', () => {
+      const { channel, client } = setupLoaded();
+      const failed = generateScheduledMessage({ status: 'failed', updated_at: at(10) });
+      client.dispatchEvent(generateEvent('scheduled_message.failed', failed));
+      const itemIdsAtRequest = channel.scheduledMessagesPaginator.getItemIds();
+      client.dispatchEvent(generateEvent('scheduled_message.deleted', failed));
+
+      channel.scheduledMessagesPaginator.hydrate([failed], itemIdsAtRequest);
+
+      expect(listed(channel)).toEqual([]);
+    });
+
+    it('ignores a newer copy arriving before an older one', () => {
+      const { channel, client } = setupLoaded();
+      const sm = generateScheduledMessage({ updated_at: at(0) });
+      client.dispatchEvent(generateEvent('scheduled_message.created', sm));
+      const newer = { ...sm, message: { text: 'newer' }, updated_at: at(20) };
+
+      client.dispatchEvent(generateEvent('scheduled_message.updated', newer));
+      client.dispatchEvent(
+        generateEvent('scheduled_message.updated', { ...sm, updated_at: at(10) }),
+      );
+
+      expect(listed(channel)).toEqual([newer]);
+    });
+
+    it('does not republish the list for a stale copy of a message it holds', () => {
+      const { channel } = setupLoaded();
+      const paginator = channel.scheduledMessagesPaginator;
+      const sm = generateScheduledMessage({ updated_at: at(20) });
+      paginator.ingestItem(sm);
+      const items = paginator.items;
+      const publish = vi.fn();
+      const unsubscribe = paginator.state.subscribeWithSelector(
+        ({ items }) => ({ items }),
+        publish,
+      );
+      publish.mockClear();
+
+      const changed = paginator.ingestItem({ ...sm, updated_at: at(10) });
+      unsubscribe();
+
+      expect(changed).toBe(false);
+      expect(publish).not.toHaveBeenCalled();
+      expect(paginator.items).toBe(items);
     });
 
     it('takes a message before the list loaded and leaves the next channel query to decide', async () => {
@@ -755,7 +855,7 @@ describe("a channel's scheduled messages", () => {
     it('updates the registered lists too', async () => {
       const { channel, client, sm } = setupWithMessage();
       const all = new ScheduledMessagePaginator({ client });
-      all.hydrate([]);
+      all.hydrate([sm]);
       client.scheduledMessagePaginators.insertPaginator({ paginator: all });
       const updated = { ...sm, updated_at: at(10) };
       vi.spyOn(client, 'updateScheduledMessage').mockResolvedValue({
@@ -768,6 +868,70 @@ describe("a channel's scheduled messages", () => {
       });
 
       expect(all.items).toEqual([updated]);
+    });
+
+    it('does not list a sent message again when a late edit response still says scheduled', async () => {
+      const { channel, client, sm } = setupWithMessage();
+      const response = deferred<unknown>();
+      vi.spyOn(client, 'updateScheduledMessage').mockReturnValue(
+        response.promise as never,
+      );
+
+      const updating = channel.messageOperations.updateScheduledMessage(sm.id, {
+        request: { message: { text: 'edited' } },
+      });
+      client.dispatchEvent(
+        generateEvent('scheduled_message.sent', { ...sm, updated_at: at(20) }),
+      );
+      response.resolve({
+        scheduled_message: { ...sm, message: { text: 'edited' }, updated_at: at(30) },
+      });
+      await updating;
+
+      expect(listed(channel)).toEqual([]);
+    });
+
+    it('does not list a sent message again when a late send-now response arrives', async () => {
+      const { channel, client, sm } = setupWithMessage();
+      const response = deferred<unknown>();
+      vi.spyOn(client, 'sendScheduledMessageNow').mockReturnValue(
+        response.promise as never,
+      );
+
+      const sending = channel.messageOperations.sendScheduledMessageNow(sm.id);
+      client.dispatchEvent(
+        generateEvent('scheduled_message.sent', { ...sm, updated_at: at(20) }),
+      );
+      response.resolve({
+        scheduled_message: { ...sm, status: 'sending', updated_at: at(10) },
+      });
+      await sending;
+
+      expect(listed(channel)).toEqual([]);
+    });
+
+    it('keeps a failed message failed when the send-now response arrives after the failed event', async () => {
+      const { channel, client, sm } = setupWithMessage();
+      const response = deferred<unknown>();
+      vi.spyOn(client, 'sendScheduledMessageNow').mockReturnValue(
+        response.promise as never,
+      );
+
+      const sending = channel.messageOperations.sendScheduledMessageNow(sm.id);
+      client.dispatchEvent(
+        generateEvent('scheduled_message.failed', {
+          ...sm,
+          failure_reason: 'channel_frozen',
+          status: 'failed',
+          updated_at: at(20),
+        }),
+      );
+      response.resolve({
+        scheduled_message: { ...sm, scheduled_at: at(10), updated_at: at(10) },
+      });
+      await sending;
+
+      expect(listed(channel)).toEqual([expect.objectContaining({ status: 'failed' })]);
     });
 
     describe('a scheduled message the server no longer has', () => {
@@ -791,6 +955,18 @@ describe("a channel's scheduled messages", () => {
         vi.spyOn(client, method).mockRejectedValue(notFoundError);
 
         await expect(act(channel, sm.id)).rejects.toBe(notFoundError);
+
+        expect(listed(channel)).toEqual([]);
+      });
+
+      it('is not brought back by a late event', async () => {
+        const { channel, client, sm } = setupWithMessage();
+        vi.spyOn(client, 'deleteScheduledMessage').mockRejectedValue(notFoundError);
+
+        await expect(
+          channel.messageOperations.deleteScheduledMessage(sm.id),
+        ).rejects.toBe(notFoundError);
+        client.dispatchEvent(generateEvent('scheduled_message.updated', sm));
 
         expect(listed(channel)).toEqual([]);
       });
