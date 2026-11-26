@@ -3458,6 +3458,45 @@ describe('MessageComposer submit lifecycle', () => {
     expect(send).not.toHaveBeenCalled();
   });
 
+  it('sends a bounced message opened for editing again as a new message', async () => {
+    const bounced = {
+      id: 'bounced-message-id',
+      type: 'error',
+      text: 'bounced',
+      attachments: [],
+      mentioned_users: [],
+    };
+    const { messageComposer, mockChannel } = setup({ composition: bounced });
+    const send = vi
+      .spyOn(mockChannel.messageOperations, 'send')
+      .mockResolvedValue(undefined);
+    withText(messageComposer, 'fixed');
+
+    await expect(messageComposer.send()).resolves.toBe('sent');
+
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(send.mock.calls[0][0].localMessage.text).toBe('fixed');
+  });
+
+  it('sends nothing while a message is being edited', async () => {
+    const edited = {
+      id: 'edited-message-id',
+      type: 'regular',
+      text: 'before',
+      attachments: [],
+      mentioned_users: [],
+    };
+    const { messageComposer, mockChannel } = setup({ composition: edited });
+    const send = vi
+      .spyOn(mockChannel.messageOperations, 'send')
+      .mockResolvedValue(undefined);
+    withText(messageComposer, 'after');
+
+    await expect(messageComposer.send()).resolves.toBe('nothing-to-send');
+
+    expect(send).not.toHaveBeenCalled();
+  });
+
   it('keeps drafted content and releases only the poll when submitting a poll message', async () => {
     const { messageComposer, mockChannel } = setup({ channelConfig: { polls: true } });
     withText(messageComposer, 'vote please');

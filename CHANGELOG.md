@@ -1,3 +1,17 @@
+## [10.3.1](https://github.com/GetStream/stream-chat-js/compare/v10.3.0...v10.3.1) (2026-11-25)
+
+### Bug Fixes
+
+* **MessageComposer:** send a bounced message again after it is edited ([#2041](https://github.com/GetStream/stream-chat-js/issues/2041)) ([cd1284c](https://github.com/GetStream/stream-chat-js/commit/cd1284c0da85047922f6f3ce393d5fc0f897cdd5)), closes [#1990](https://github.com/GetStream/stream-chat-js/issues/1990)
+
+## [10.3.0](https://github.com/GetStream/stream-chat-js/compare/v10.2.0...v10.3.0) (2026-11-25)
+
+### Features
+
+* add voice transcription fields ([#2030](https://github.com/GetStream/stream-chat-js/issues/2030)) ([26e31b6](https://github.com/GetStream/stream-chat-js/commit/26e31b620f1b83e42e4a7f7e549c933cf5b2c257)), closes [GetStream/chat#19234](https://github.com/GetStream/chat/issues/19234)
+* message marks ([#2039](https://github.com/GetStream/stream-chat-js/issues/2039)) ([a33d87a](https://github.com/GetStream/stream-chat-js/commit/a33d87a26c7e2a1676808760e1dfa06fbca1d25e))
+* scheduled messages for v10 (CHA-5934) ([#1990](https://github.com/GetStream/stream-chat-js/issues/1990)) ([06624fb](https://github.com/GetStream/stream-chat-js/commit/06624fb0ac0fe84ae5a2699d0e1618135865ee25)), closes [#1951](https://github.com/GetStream/stream-chat-js/issues/1951) [#1915](https://github.com/GetStream/stream-chat-js/issues/1915) [#1956](https://github.com/GetStream/stream-chat-js/issues/1956) [#2035](https://github.com/GetStream/stream-chat-js/issues/2035)
+
 ## [10.2.0](https://github.com/GetStream/stream-chat-js/compare/v10.1.1...v10.2.0) (2026-11-19)
 
 ### Bug Fixes

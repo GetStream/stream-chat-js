@@ -329,15 +329,6 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
   protected _predefinedFilter: ParsedPredefinedFilterResponse | undefined;
   /** Metadata of the in-flight response, committed by `placeQueryPage` on a first page only. */
   private _pendingPredefinedFilter: ParsedPredefinedFilterResponse | undefined;
-  /**
-   * True while the loaded items came only from the offline cache (seeded by `setItems`, never
-   * confirmed by a query). The seed's offset and query shape would make the next query a
-   * continuation, but a cache has no pagination position, so `executeQuery` forces a first page that
-   * keeps the items.
-   */
-  private _itemsLoadedFromOfflineDB = false;
-  /** The query in flight refreshes a cache-only interval, so its response replaces the interval. */
-  private _replaceOfflineSeedOnResponse = false;
   /** The query handed to the sync manager, from the cache read until it runs. See `executeQuery`. */
   private _queryAwaitingSync: ChannelQueryShape | undefined;
   /** The cids of the page the latest query returned, `undefined` when it failed. */
@@ -618,14 +609,6 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
     if (params.isFirstPage && params.results) {
       this.applyPredefinedFilterResponse(pendingPredefinedFilter);
     }
-    const replaceOfflineSeed = this._replaceOfflineSeedOnResponse;
-    this._replaceOfflineSeedOnResponse = false;
-    if (replaceOfflineSeed && params.results) {
-      // The cache can be arbitrarily old and hold channels the server dropped (hidden, deleted,
-      // left): the page replaces the seed instead of merging into it.
-      this.clearItemStorage();
-      return super.placeQueryPage({ ...params, keepPreviousItems: false });
-    }
     return super.placeQueryPage(params);
   }
 
@@ -770,8 +753,10 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
     }
     const { offlineDb } = this.client;
 
+    // Only the offline database's channels are shown (see `showsOfflinePage`): a cache has no
+    // pagination position, so the next query is a first page that keeps them until it lands.
     const effectiveParams: PaginationQueryParams<ChannelQueryShape> =
-      this._itemsLoadedFromOfflineDB && params.reset !== 'yes'
+      this.showsOfflinePage && params.reset !== 'yes'
         ? { ...params, keepPreviousItems: true, reset: 'yes' as const }
         : params;
 
@@ -781,7 +766,7 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
       !!this.client.user?.id &&
       !offlineDb.syncManager.isSynced &&
       // A cache-seeded list is not a loaded one, so paginating it defers too.
-      (this._itemsLoadedFromOfflineDB ||
+      (this.showsOfflinePage ||
         this.isFirstPageQuery({ queryShape, reset: effectiveParams.reset }));
 
     if (!shouldDeferUntilSynced) return await super.executeQuery(effectiveParams);
@@ -809,12 +794,10 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
       // the list's flags and loading state belong to the queries started since the reset
       if (checkWasStateResetDuringQuery()) return;
       if (cachedChannels?.length) {
-        // Seed via `setItems`, which ingests the page into the interval/index storage.
         // TODO: Maybe find a better way to do this rather than 2 partialNext invocations
         //       running. This all happens so fast it should never be noticeable but it's
         //       a microoptimization.
-        this.setItems({ valueOrFactory: cachedChannels, isFirstPage: true });
-        this._itemsLoadedFromOfflineDB = true;
+        this.setItemsFromOfflineDb(cachedChannels);
       }
       // Nothing is in flight while waiting for the sync: `isLoading` would make `canExecuteQuery`
       // reject the query scheduled below.
@@ -824,7 +807,7 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
     const refreshParams: PaginationQueryParams<ChannelQueryShape> = {
       ...effectiveParams,
       keepPreviousItems: true,
-      ...(this._itemsLoadedFromOfflineDB ? { reset: 'yes' as const } : {}),
+      ...(this.showsOfflinePage ? { reset: 'yes' as const } : {}),
     };
 
     // Already synced: the sync-status callback would never fire, so run the query now.
@@ -844,9 +827,6 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
   }: PaginationQueryParams<ChannelQueryShape> = {}): Promise<
     PaginationQueryReturnValue<Channel>
   > => {
-    if (this._itemsLoadedFromOfflineDB) this._replaceOfflineSeedOnResponse = true;
-    // A query is going out: the items stop being cache-only, whatever the response.
-    this._itemsLoadedFromOfflineDB = false;
     const queryShape = preparedQueryShape ?? this.getNextQueryShape();
     const { stateOptions, ...request } = queryShape;
     const checkWasStateResetDuringQuery = this.makeStateResetWatcher();
@@ -1047,8 +1027,8 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
     // `toTail()` there, and clearing afterwards would wipe what that query set.
     this._queryAwaitingSync = undefined;
     this._tailQueryAwaitingRecovery = false;
-    this._itemsLoadedFromOfflineDB = false;
-    this._replaceOfflineSeedOnResponse = false;
+    // the offline page's flag (`showsOfflinePage`) is cleared by `super.resetState()` before it
+    // publishes
     this._pendingPredefinedFilter = undefined;
     if (this._predefinedFilter) this.applyPredefinedFilterResponse(undefined);
     super.resetState();

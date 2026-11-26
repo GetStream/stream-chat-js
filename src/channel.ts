@@ -10,7 +10,11 @@ import {
   PinnedMessagePaginator,
   ScheduledMessagePaginator,
 } from './pagination/paginators';
-import { createMessageOperations, reflectReactionEvent } from './messageOperations';
+import {
+  createMessageOperations,
+  reflectMessageMarkEvent,
+  reflectReactionEvent,
+} from './messageOperations';
 import type { MessageOperations } from './messageOperations';
 import type { OperationRequestFn } from './messageOperations/types';
 import type { ScheduledMessageRequestHandlers } from './scheduledMessages/types';
@@ -166,6 +170,11 @@ export type ChannelConfig = {
    * command can be used right now is `messageComposer.isCommandDisabled(command)`.
    */
   availableCommands: Command[];
+  /**
+   * The message mark types the channel type accepts, for instance `played`. Server-owned: the
+   * integrator cannot set it. Empty when message marks are off for the channel type.
+   */
+  markTypes: string[];
 };
 
 /**
@@ -202,6 +211,7 @@ const ownDeclarativeConfig = (
 export const DEFAULT_CHANNEL_CONFIG: ChannelConfig = deepFreezeConfig({
   availableCommands: [],
   deliveryEvents: { enabled: true },
+  markTypes: [],
   readEvents: { enabled: true, localUnreadCountEnabled: false },
   replies: { enabled: true },
   scheduledMessages: { enabled: true },
@@ -367,6 +377,7 @@ export class Channel extends ChannelApi {
             ) as ChannelConfig),
             // Assigned, not merged: the deep merge would concatenate the lists.
             availableCommands: this.serverConfig?.commands ?? [],
+            markTypes: this.serverConfig?.mark_types ?? [],
           }),
         ) as ChannelConfig,
     });
@@ -569,6 +580,61 @@ export class Channel extends ChannelApi {
 
   async sendReaction(...args: Parameters<ChatApi['sendReaction']>) {
     return await this.getClient().sendReaction(...args);
+  }
+
+  /**
+   * Marks a message for the current user, for instance `played` when the user played a voice note.
+   * A mark is written once: a repeat returns `created: false`, and the author's own mark is a no-op.
+   * Each written mark is announced with one `message.mark_added` event to the author and the marker.
+   * With offline support, a mark that fails for lack of a connection is queued and sent on reconnect.
+   *
+   * @param args - `({ id }, { type })`: the message ID and the mark type, for instance `'played'`.
+   */
+  async sendMessageMark(...args: Parameters<ChatApi['createMessageMark']>) {
+    return await queueOrRun({
+      channel: this,
+      client: this.getClient(),
+      task: {
+        channelId: this.id,
+        channelType: this.type,
+        messageId: args[0].id,
+        payload: args,
+        type: 'send-message-mark',
+      },
+    });
+  }
+
+  /**
+   * Marks a message `played` for the current user, for instance when the user starts its voice note.
+   * Sends nothing when the channel type has no `played` mark ({@link ChannelConfig.markTypes}) or
+   * without the `send-message-mark` capability. When the client holds the message, it also sends
+   * nothing for the user's own message or a message the user already marked. Otherwise the server
+   * ignores those. The message changes only when `message.mark_added` arrives, as with read state.
+   *
+   * @param messageId - The ID of the played message.
+   * @returns The server response, or `null` when no request went out.
+   */
+  async markMessagePlayed(messageId: string) {
+    const userId = this.getClient().userId;
+    const ownCapabilities = this.data?.own_capabilities;
+    if (
+      !userId ||
+      !this.config.markTypes.includes('played') ||
+      (Array.isArray(ownCapabilities) && !ownCapabilities.includes('send-message-mark'))
+    ) {
+      return null;
+    }
+
+    const message = this.getClient().messageStore.get(messageId);
+    if (
+      message &&
+      (message.user?.id === userId ||
+        message.own_marks?.some(({ type }) => type === 'played'))
+    ) {
+      return null;
+    }
+
+    return await this.sendMessageMark({ id: messageId }, { type: 'played' });
   }
 
   async deleteReaction(...args: Parameters<ChatApi['deleteReaction']>) {
@@ -2821,6 +2887,11 @@ export class Channel extends ChannelApi {
           channel.data = newChannelData;
         }
         break;
+      case 'message.mark_added':
+        if (event.mark) {
+          reflectMessageMarkEvent(this.getClient(), event.mark);
+        }
+        break;
       case 'reaction.new':
       case 'reaction.updated':
       case 'reaction.deleted':
@@ -3030,6 +3101,13 @@ export class Channel extends ChannelApi {
     const message = this.messagePaginator.getItem(event.message.id);
     if (message) {
       event.message.own_reactions = message.own_reactions;
+      // Events don't carry marks; keep the local ones.
+      if (event.message.mark_groups === undefined && message.mark_groups !== undefined) {
+        event.message.mark_groups = message.mark_groups;
+      }
+      if (event.message.own_marks === undefined && message.own_marks !== undefined) {
+        event.message.own_marks = message.own_marks;
+      }
     }
   }
 

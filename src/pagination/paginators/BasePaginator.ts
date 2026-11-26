@@ -562,6 +562,11 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
   protected _lastQueryShape?: Q;
   /** Set by `setItems`, which loads a page (even an empty one) without a query. */
   private _pageSetWithoutQuery = false;
+  /**
+   * The IDs of the offline database's page (see {@link preloadFirstPageFromOfflineDb}) that no live
+   * event has touched since, until a page from the server takes their place.
+   */
+  private _offlineOnlyItemIds: Set<string> | undefined;
 
   /**
    * Stable, purely data-driven comparison (age, timestamps, ...). Default for
@@ -1012,6 +1017,7 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
    * publishes.
    */
   protected clearItemStorage() {
+    this._offlineOnlyItemIds = undefined;
     this.setIntervals([]);
     this.setActiveInterval(undefined);
     this._itemIndex.clear();
@@ -2436,6 +2442,8 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
    * interval whose sort bounds contain it, and re-emits `state.items` when that interval is active.
    */
   ingestItem(ingestedItem: T): boolean {
+    // A live event confirms the item: it outlives the offline page it may belong to.
+    this._offlineOnlyItemIds?.delete(this.getItemId(ingestedItem));
     let ingested = false;
     this.withSingleActiveIntervalPublish(() => {
       ingested = this.applyItemIngestion(ingestedItem);
@@ -2961,9 +2969,66 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
     };
   }
 
+  /**
+   * The offline database's copy of the first page, shown while the first query of a paginator not
+   * initialized yet runs. It is stored like a page, so live items join it. The first page from the
+   * server takes the place of its items no live event touched, as the copy can be arbitrarily old,
+   * and merges with the rest, as a loaded page would. A failed query leaves it shown. `undefined`
+   * (the default) shows nothing until the server answers.
+   */
   preloadFirstPageFromOfflineDb = (
     _params: PaginationQueryParams<Q>,
   ): Promise<T[] | undefined> | T[] | undefined => undefined;
+
+  /** Whether the shown items are the offline database's page, not yet replaced by the server's. */
+  protected get showsOfflinePage() {
+    return typeof this._offlineOnlyItemIds !== 'undefined';
+  }
+
+  /**
+   * Stores the offline database's page as the head interval and returns its items, ordered. Without
+   * an interval behind them, the next live item would rebuild `state.items` without them.
+   */
+  private storeOfflinePage(page: T[]): T[] {
+    const interval = this.ingestPage({ page, isHead: true });
+    if (!interval) return page;
+    this._offlineOnlyItemIds = new Set(page.map((item) => this.getItemId(item)));
+    this.setActiveInterval(interval, { updateState: false });
+    return this.intervalToItems(interval);
+  }
+
+  /**
+   * Shows the offline database's page without a query, for a subclass that defers its first query
+   * (see `ChannelPaginator.executeQuery`). Like the page of {@link preloadFirstPageFromOfflineDb},
+   * the first page from the server takes its place.
+   */
+  protected setItemsFromOfflineDb(items: T[]) {
+    this.setItems({ valueOrFactory: items, isFirstPage: true });
+    this._offlineOnlyItemIds = new Set(items.map((item) => this.getItemId(item)));
+  }
+
+  /**
+   * Takes the offline database's items no live event touched out of storage, without publishing:
+   * the server's page placed next publishes the list once.
+   */
+  private removeOfflineOnlyItems() {
+    const ids = this._offlineOnlyItemIds;
+    this._offlineOnlyItemIds = undefined;
+    if (!ids?.size) return;
+    for (const interval of this.itemIntervals) {
+      const itemIds = interval.itemIds.filter((id) => !ids.has(id));
+      if (itemIds.length === interval.itemIds.length) continue;
+      if (itemIds.length) {
+        this.commitInterval({ ...interval, itemIds });
+        continue;
+      }
+      this.dropInterval(interval.id);
+      if (this.isActiveInterval(interval)) {
+        this.setActiveInterval(undefined, { updateState: false });
+      }
+    }
+    ids.forEach((id) => this._itemIndex.remove(id));
+  }
 
   populateOfflineDbAfterQuery = (_params: {
     items: T[] | undefined;
@@ -3252,8 +3317,11 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
             if (checkWasStateResetDuringQuery()) return;
             throw error;
           }
+          // the page of a query started before a reset must not reach the reset storage
           if (checkWasStateResetDuringQuery()) return;
-          publishStateBeforeFirstQuery(items ?? stateBeforeFirstQuery.items);
+          publishStateBeforeFirstQuery(
+            items ? this.storeOfflinePage(items) : stateBeforeFirstQuery.items,
+          );
         })();
       }
     } else if (!silent) {
@@ -3298,6 +3366,18 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
   placeQueryPage(params: PlaceQueryPageParams<T, Q>): ExecuteQueryReturnValue<T> {
     this._lastQueryShape = params.queryShape;
     const { results } = params;
+    if (results && this.showsOfflinePage) {
+      // The server's page takes the place of the offline database's, which can be arbitrarily old,
+      // as a first page. That holds for the next query after a failed one too, which continues the
+      // offline page's position. Live items ingested meanwhile stay and the page merges with them.
+      this.removeOfflineOnlyItems();
+      params = {
+        ...params,
+        continuesIntervalId: undefined,
+        isFirstPage: true,
+        keepPreviousItems: false,
+      };
+    }
     if (!results) {
       const stateUpdate: Partial<PaginatorState<T>> = {
         isLoading: false,
@@ -3683,6 +3763,7 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
     // the publish below, whose subscribers read `isInitialized` / `hasLoadedPage`.
     this._lastQueryShape = undefined;
     this._pageSetWithoutQuery = false;
+    this._offlineOnlyItemIds = undefined;
     this.state.next(this.initialState);
     this.setIntervals([]);
     this.setActiveInterval(undefined);

@@ -51,7 +51,6 @@ export type ScheduledMessageErrorReason =
 
 export const ScheduledMessageBlockReason = {
   Command: 'command',
-  SharedLocation: 'shared_location',
   Unavailable: 'unavailable',
 } as const;
 

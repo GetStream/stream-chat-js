@@ -628,6 +628,94 @@ describe('BasePaginator', () => {
       await refreshPromise;
     });
 
+    describe('the offline database page', () => {
+      const fresh: TestItem = { id: 'fresh', age: 40, name: 'Fresh' };
+
+      const setup = () => {
+        const paginator = new Paginator({ pageSize: 2 });
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
+        });
+        paginator.preloadFirstPageFromOfflineDb = vi.fn().mockResolvedValue([b, a]);
+        return paginator;
+      };
+
+      it('is shown, ordered, while the first query runs', async () => {
+        const paginator = setup();
+
+        const query = paginator.toTail();
+        await sleep(0);
+
+        expect(paginator.items).toEqual([a, b]);
+        expect(paginator.isLoading).toBe(true);
+        paginator.queryResolve({ items: [a, b] });
+        await query;
+      });
+
+      it('keeps its items when a live item is ingested while the first query runs', async () => {
+        // Regression: the page used to go to `state.items` only, so the ingest rebuilt the list
+        // from empty storage and collapsed it to the live item.
+        const paginator = setup();
+        const query = paginator.toTail();
+        await sleep(0);
+
+        paginator.ingestItem(fresh);
+
+        expect(paginator.items).toEqual([fresh, a, b]);
+        paginator.queryResolve({ items: [fresh, a] });
+        await query;
+      });
+
+      it("is replaced by the server's first page, not merged with it", async () => {
+        const paginator = setup();
+        const query = paginator.toTail();
+        await sleep(0);
+
+        paginator.queryResolve({ items: [fresh, a] });
+        await query;
+
+        expect(paginator.items).toEqual([fresh, a]);
+        expect(paginator.isLoading).toBe(false);
+      });
+
+      it('stays shown when the first query fails, until the next page replaces it', async () => {
+        const paginator = setup();
+        const failed = paginator.toTail();
+        await sleep(0);
+        paginator.queryReject(new Error('offline'));
+        await failed;
+
+        expect(paginator.items).toEqual([a, b]);
+        expect(paginator.isLoading).toBe(false);
+
+        // The list counts as initialized, so this continues the offline page's position.
+        const retry = paginator.toTail();
+        await sleep(0);
+        paginator.queryResolve({ items: [fresh, a] });
+        await retry;
+
+        expect(paginator.items).toEqual([fresh, a]);
+      });
+
+      it('is not read for a list that loaded from the server', async () => {
+        const paginator = setup();
+        const first = paginator.toTail();
+        await sleep(0);
+        paginator.queryResolve({ items: [a, b] });
+        await first;
+        vi.mocked(paginator.preloadFirstPageFromOfflineDb).mockClear();
+
+        const reload = paginator.reload();
+        await sleep(0);
+
+        expect(paginator.preloadFirstPageFromOfflineDb).not.toHaveBeenCalled();
+        expect(paginator.items).toBeUndefined();
+        paginator.queryResolve({ items: [fresh] });
+        await reload;
+        expect(paginator.items).toEqual([fresh]);
+      });
+    });
+
     it('ends the list only on a page shorter than pageSize, not on a larger capped response (offset)', async () => {
       const paginator = new Paginator({ pageSize: 2 });
       const load = async (items: TestItem[]) => {
@@ -1500,6 +1588,30 @@ describe('BasePaginator', () => {
         await expect(query).resolves.toBeUndefined();
         expect(paginator.mockClientQuery).not.toHaveBeenCalled();
         expect(paginator.isLoading).toBe(false);
+      });
+
+      it('stores nothing from the offline page the preload returns', async () => {
+        const paginator = new Paginator();
+        let resolvePreload: (items: TestItem[]) => void = () => undefined;
+        paginator.preloadFirstPageFromOfflineDb = () =>
+          new Promise((resolve) => {
+            resolvePreload = resolve;
+          });
+        const query = paginator.toTail();
+        await sleep(0);
+
+        paginator.resetState();
+        resolvePreload([a, b]);
+        await expect(query).resolves.toBeUndefined();
+        expect(paginator.items).toBeUndefined();
+
+        // A stored page would merge into the next first page or be replaced by it.
+        paginator.preloadFirstPageFromOfflineDb = async () => undefined;
+        const next = paginator.toTail();
+        await sleep(0);
+        paginator.queryResolve({ items: [c] });
+        await next;
+        expect(paginator.items).toEqual([c]);
       });
 
       it('leaves the state to a query started after the reset', async () => {

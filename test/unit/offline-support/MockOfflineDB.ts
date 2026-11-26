@@ -31,6 +31,8 @@ export class MockOfflineDB extends AbstractOfflineDB {
   getLastSyncedAt = vi.fn();
   getAppSettings = vi.fn();
   getReactions = vi.fn();
+  getMessageMarks = vi.fn();
+  insertMessageMark = vi.fn();
   addPendingTask = vi.fn();
   updatePendingTask = vi.fn();
   deletePendingTask = vi.fn();
