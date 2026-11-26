@@ -810,7 +810,7 @@ describe('MessageComposer scheduled messages', () => {
     });
 
     it('sends the whole message on update without server-only fields', async () => {
-      const { client, composer } = setup();
+      const { channel, client, composer } = setup();
       const pinExpires = msToNs(Date.UTC(2030, 1, 1));
       const scheduledMessage = generateScheduledMessage({
         message: {
@@ -831,6 +831,7 @@ describe('MessageComposer scheduled messages', () => {
         updated_at: msToNs(Date.UTC(2026, 9, 16)),
       });
       const updateSpy = mockScheduledUpdate(client, updated);
+      channel.scheduledMessagesPaginator.ingestItem(scheduledMessage);
       await composer.editScheduledMessage(scheduledMessage);
       composer.textComposer.setText('see you the day after');
 

@@ -2947,12 +2947,17 @@ export class Channel extends ChannelApi {
       case 'scheduled_message.created':
       case 'scheduled_message.deleted':
       case 'scheduled_message.failed':
-      case 'scheduled_message.sent':
-      case 'scheduled_message.updated': {
+      case 'scheduled_message.sent': {
         // the registered lists hear it from `client.scheduledMessagePaginators`
         const scheduledMessage = getScheduledMessageFromEvent(event);
         if (scheduledMessage)
           this.scheduledMessagesPaginator.ingestItem(scheduledMessage);
+        break;
+      }
+      case 'scheduled_message.updated': {
+        const scheduledMessage = getScheduledMessageFromEvent(event);
+        if (scheduledMessage)
+          this.scheduledMessagesPaginator.updateItem(scheduledMessage);
         break;
       }
       default:

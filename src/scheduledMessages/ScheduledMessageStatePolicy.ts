@@ -6,8 +6,11 @@ export type ScheduledMessageOperationKind = 'schedule' | 'update' | 'cancel' | '
 
 export type ScheduledMessageStatePolicyContext = {
   ingest: (scheduledMessage: ScheduledMessageResponse) => void;
+  update: (scheduledMessage: ScheduledMessageResponse) => void;
   get: (id: string) => ScheduledMessageResponse | undefined;
 };
+
+const UPDATE_KINDS = new Set<ScheduledMessageOperationKind>(['update', 'sendNow']);
 
 export class ScheduledMessageStatePolicy {
   private ctx: ScheduledMessageStatePolicyContext;
@@ -24,6 +27,11 @@ export class ScheduledMessageStatePolicy {
 
     if (kind === 'cancel') {
       this.ctx.ingest({ ...scheduledMessage, status: SCHEDULED_MESSAGE_STATUS.Canceled });
+      return;
+    }
+
+    if (UPDATE_KINDS.has(kind)) {
+      this.ctx.update(scheduledMessage);
       return;
     }
 

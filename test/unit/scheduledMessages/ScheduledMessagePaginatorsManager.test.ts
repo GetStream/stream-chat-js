@@ -176,21 +176,43 @@ describe('ScheduledMessagePaginatorsManager', () => {
   });
 
   describe('events', () => {
-    it.each(['scheduled_message.created', 'scheduled_message.updated'] as EventType[])(
-      'lists the message of %s in the lists it matches',
-      async (type) => {
-        const { all, client, failed, manager } = setup();
-        manager.registerSubscriptions();
-        await loadAll(manager);
-        const sm = generateScheduledMessage();
+    it('lists the message of scheduled_message.created in the lists it matches', async () => {
+      const { all, client, failed, manager } = setup();
+      manager.registerSubscriptions();
+      await loadAll(manager);
+      const sm = generateScheduledMessage();
 
-        await dispatchEvent(client, generateEvent(type, sm));
+      await dispatchEvent(client, generateEvent('scheduled_message.created', sm));
 
-        expect(itemsOf(all)).toEqual([sm]);
-        expect(itemsOf(failed)).toEqual([]);
-        expect(client.scheduledMessageStore.get(sm.id)).toEqual(sm);
-      },
-    );
+      expect(itemsOf(all)).toEqual([sm]);
+      expect(itemsOf(failed)).toEqual([]);
+      expect(client.scheduledMessageStore.get(sm.id)).toEqual(sm);
+    });
+
+    it('updates the message of scheduled_message.updated in the lists that hold it', async () => {
+      const { all, client, manager } = setup();
+      manager.registerSubscriptions();
+      await loadAll(manager);
+      const sm = generateScheduledMessage({ updated_at: at(0) });
+      manager.ingest(sm);
+      const updated = { ...sm, message: { text: 'edited' }, updated_at: at(10) };
+
+      await dispatchEvent(client, generateEvent('scheduled_message.updated', updated));
+
+      expect(itemsOf(all)).toEqual([updated]);
+    });
+
+    it('does not list the message of scheduled_message.updated when no list holds it', async () => {
+      const { all, client, manager } = setup();
+      manager.registerSubscriptions();
+      await loadAll(manager);
+      const sm = generateScheduledMessage();
+
+      await dispatchEvent(client, generateEvent('scheduled_message.updated', sm));
+
+      expect(itemsOf(all)).toEqual([]);
+      expect(client.scheduledMessageStore.get(sm.id)).toBeUndefined();
+    });
 
     it('hears about messages of channels the client has not loaded', async () => {
       const { all, client, manager } = setup();
@@ -653,30 +675,50 @@ describe('ScheduledMessagePaginatorsManager', () => {
       expect(itemsOf(all)).toEqual([scheduledAgain]);
     });
 
-    it('does not list a canceled message again from a stale query page', async () => {
+    it('does not bring back a message canceled while a query is in flight', async () => {
       const { all, client, sm } = await setupLoaded();
+      const response = deferred<unknown>();
+      vi.spyOn(client, 'queryScheduledMessages').mockReturnValue(
+        response.promise as never,
+      );
+
+      const loading = all.reload();
       await dispatchEvent(
         client,
         generateEvent('scheduled_message.deleted', { ...sm, updated_at: at(10) }),
       );
-      vi.mocked(client.queryScheduledMessages).mockResolvedValue(queryResponse([sm]));
-
-      await all.reload();
+      response.resolve(queryResponse([sm]));
+      await loading;
 
       expect(itemsOf(all)).toEqual([]);
     });
 
-    it('does not list a sent message again from a query page', async () => {
+    it('does not bring back a message removed while a longer first page is in flight', async () => {
       const { all, client, sm } = await setupLoaded();
-      await dispatchEvent(
-        client,
-        generateEvent('scheduled_message.sent', { ...sm, updated_at: at(20) }),
+      const response = deferred<unknown>();
+      vi.spyOn(client, 'queryScheduledMessages').mockReturnValue(
+        response.promise as never,
       );
-      vi.mocked(client.queryScheduledMessages).mockResolvedValue(queryResponse([sm]));
 
-      await all.reload();
+      const loading = all.reload();
+      await dispatchEvent(client, generateEvent('scheduled_message.sent', sm));
+      response.resolve(queryResponse([sm], 'next-page'));
+      await loading;
 
       expect(itemsOf(all)).toEqual([]);
+    });
+
+    it('keeps the newer copy another list holds when a stale copy is ingested', async () => {
+      const { all, client, sm } = await setupLoaded();
+      const newer = { ...sm, message: { text: 'newer' }, updated_at: at(20) };
+      all.ingestItem(newer);
+      const channelList = new ScheduledMessagePaginator({ client, filter: { cid } });
+      channelList.hydrate([]);
+
+      channelList.ingestItem({ ...sm, updated_at: at(10) });
+
+      expect(itemsOf(all)).toEqual([newer]);
+      expect(itemsOf(channelList)).toEqual([newer]);
     });
 
     it('does not bring back a message sent while a query is in flight', async () => {

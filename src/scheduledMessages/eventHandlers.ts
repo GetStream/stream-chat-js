@@ -43,10 +43,25 @@ const ingestScheduledMessage: ScheduledMessageEventHandler = ({
   if (scheduledMessage) scheduledMessagePaginators.ingest(scheduledMessage);
 };
 
+const updateScheduledMessage: ScheduledMessageEventHandler = ({
+  ctx: { scheduledMessagePaginators },
+  event,
+}) => {
+  const scheduledMessage = getScheduledMessageFromEvent(event);
+
+  if (scheduledMessage) scheduledMessagePaginators.update(scheduledMessage);
+};
+
 const toDefaultHandler = (
   eventType: string,
 ): LabeledEventHandler<ScheduledMessagePaginatorsManagerEventHandlerContext>[] => [
-  { handle: ingestScheduledMessage, id: `${DEFAULT_HANDLER_ID_PREFIX}:${eventType}` },
+  {
+    handle:
+      eventType === ScheduledMessageEventType.Updated
+        ? updateScheduledMessage
+        : ingestScheduledMessage,
+    id: `${DEFAULT_HANDLER_ID_PREFIX}:${eventType}`,
+  },
 ];
 
 export const DEFAULT_SCHEDULED_MESSAGE_EVENT_HANDLERS: ScheduledMessagePaginatorsManagerEventHandlers =

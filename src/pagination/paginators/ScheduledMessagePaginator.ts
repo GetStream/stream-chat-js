@@ -49,10 +49,12 @@ const defaultScheduledMessagesComparator = (
   compareValues<number>(first.created_at, second.created_at) ||
   compareValues(first.id, second.id);
 
-/**
- * The current user's scheduled messages, earliest `scheduled_at` first. Every copy it
- * takes is resolved against the shared store first (see `shouldReplaceScheduledMessage`).
- */
+const isOlderCopy = (
+  incoming: ScheduledMessageResponse,
+  held: ScheduledMessageResponse,
+) => incoming.updated_at < held.updated_at;
+
+/** The current user's scheduled messages, earliest `scheduled_at` first. */
 export class ScheduledMessagePaginator extends BasePaginator<
   ScheduledMessageResponse,
   QueryScheduledMessagesRequest
@@ -157,25 +159,43 @@ export class ScheduledMessagePaginator extends BasePaginator<
   }
 
   public filterQueryResults(items: ScheduledMessageResponse[]) {
-    const { conflictPolicy } = this.store;
-    const latestItems = items.map((item) =>
-      conflictPolicy.resolveCanonicalEntity(item, this.store.get(item.id)),
-    );
+    const latestItems = items.map((item) => this.getLatestCopy(item));
 
     return latestItems.filter((item) => this.matchesFilter(item));
   }
 
   public ingestItem(item: ScheduledMessageResponse): boolean {
-    const latest = this.store.conflictPolicy.resolveCanonicalEntity(
-      item,
-      this.store.get(item.id),
-    );
+    const latest = this.getLatestCopy(item);
 
-    // the list already holds the copy that wins and placed it when it was stored (`onEntitiesChanged`
-    // places copies other lists store): nothing to place
+    // the list already holds this copy and placed it when it was stored (`onEntitiesChanged` places
+    // copies other lists store): nothing to place
     if (this.getItem(latest.id) === latest) return false;
 
     return this.placeItem(latest);
+  }
+
+  public updateItem(item: ScheduledMessageResponse): boolean {
+    if (!this._itemIndex.has(item.id)) return false;
+
+    return this.ingestItem(item);
+  }
+
+  private getLatestCopy(item: ScheduledMessageResponse) {
+    const stored = this.store.get(item.id);
+    const latest = stored && isOlderCopy(item, stored) ? stored : item;
+
+    return latest;
+  }
+
+  private filterPageRequestedAt(
+    items: ScheduledMessageResponse[],
+    itemIdsAtRequest: ReadonlySet<string>,
+  ) {
+    const removedSinceRequest = (id: string) =>
+      itemIdsAtRequest.has(id) && !this._itemIndex.has(id);
+    const currentItems = items.filter(({ id }) => !removedSinceRequest(id));
+
+    return this.filterQueryResults(currentItems);
   }
 
   /** Places `item` by the list's filter and order: moves it, or takes it out when it no longer matches. */
@@ -208,7 +228,7 @@ export class ScheduledMessagePaginator extends BasePaginator<
     scheduledMessages: ScheduledMessageResponse[],
     itemIdsAtRequest: ReadonlySet<string> = new Set(),
   ) {
-    const snapshot = this.filterQueryResults(scheduledMessages);
+    const snapshot = this.filterPageRequestedAt(scheduledMessages, itemIdsAtRequest);
 
     if (!this.holdsCompleteList) {
       this.replaceWithFirstPage({ itemIdsAtRequest, page: snapshot, tailward: null });
@@ -270,7 +290,7 @@ export class ScheduledMessagePaginator extends BasePaginator<
       if (tailward) {
         this.replaceWithFirstPage({
           itemIdsAtRequest,
-          page: this.filterQueryResults(items),
+          page: this.filterPageRequestedAt(items, itemIdsAtRequest),
           tailward,
         });
       } else {
