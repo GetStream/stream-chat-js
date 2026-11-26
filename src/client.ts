@@ -1186,6 +1186,28 @@ export class StreamChat extends ChatApi {
     }
   }
 
+  private _refreshUnreadChannelCountsAfterTruncation(cid: string) {
+    const channel = this.channelManager.get(cid);
+    if (!channel || channel.state.unreadCount === 0) return;
+
+    const countsAtRequest = this.globalUnreadCounts.getLatestValue();
+
+    this.unreadCounts()
+      .then(({ total_unread_count, channels }) => {
+        if (this.globalUnreadCounts.getLatestValue() !== countsAtRequest) return;
+
+        this.globalUnreadCounts.partialNext({
+          totalUnreadCount: total_unread_count,
+          unreadChannelsCount: channels.length,
+        });
+      })
+      .catch((error) =>
+        logger
+          .withExtraTags('_refreshUnreadChannelCountsAfterTruncation')
+          .warn('Refreshing the unread counts after a truncation failed.', { error }),
+      );
+  }
+
   _handleClientEvent(event: WSEvent) {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const client = this;
@@ -1220,6 +1242,10 @@ export class StreamChat extends ChatApi {
     }
 
     this._reflectUnreadChannelCounts(event);
+
+    if (event.type === 'channel.truncated' && event.cid) {
+      this._refreshUnreadChannelCountsAfterTruncation(event.cid);
+    }
 
     if (event.type === 'notification.message_new' && event.channel) {
       const { channel } = event;
