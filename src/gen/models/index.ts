@@ -1942,6 +1942,7 @@ export const ChannelOwnCapability = {
   SHARE_LOCATION: 'share-location',
   SKIP_SLOW_MODE: 'skip-slow-mode',
   SLOW_MODE: 'slow-mode',
+  TRANSCRIBE_VOICE_MESSAGE: 'transcribe-voice-message',
   TYPING_EVENTS: 'typing-events',
   UPDATE_ANY_MESSAGE: 'update-any-message',
   UPDATE_CHANNEL: 'update-channel',
@@ -11822,6 +11823,13 @@ export interface Thresholds {
   explicit?: LabelThresholds;
   spam?: LabelThresholds;
   toxic?: LabelThresholds;
+}
+
+export interface TranscribeMessageResponse {
+  /**
+   * Duration of the request in milliseconds
+   */
+  duration: string;
 }
 
 export interface TranscriptLanguageResponse {
