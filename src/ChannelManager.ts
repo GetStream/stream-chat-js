@@ -155,8 +155,9 @@ const updateLists: EventHandlerPipelineHandler<EventHandlerContext> = async ({
 };
 
 /**
- * Re-inserts a loaded channel whose data changed in place (`channel.updated`, `channel.truncated`), so
- * lists sorted or filtered by a changed field move or drop it. Unknown channels are ignored.
+ * Re-inserts a loaded channel whose data changed in place (`channel.updated`, `channel.truncated`,
+ * `channel.rewound`), so lists sorted or filtered by a changed field move or drop it. Unknown
+ * channels are ignored.
  */
 const reinsertItem: EventHandlerPipelineHandler<EventHandlerContext> = ({
   event,
@@ -186,6 +187,12 @@ const channelUpdatedHandler: LabeledEventHandler<EventHandlerContext> = {
 const channelTruncatedHandler: LabeledEventHandler<EventHandlerContext> = {
   handle: reinsertItem,
   id: 'ChannelManager:default-handler:channel.truncated',
+};
+
+// a rewind moves the channel's `last_message_at` back
+const channelRewoundHandler: LabeledEventHandler<EventHandlerContext> = {
+  handle: reinsertItem,
+  id: 'ChannelManager:default-handler:channel.rewound',
 };
 
 // a hard delete of the last message might move the channel's `last_message_at` back
@@ -396,6 +403,7 @@ export class ChannelManager extends WithSubscriptions {
     'channel.deleted': [channelDeletedHandler],
     'channel.updated': [channelUpdatedHandler],
     'channel.truncated': [channelTruncatedHandler],
+    'channel.rewound': [channelRewoundHandler],
     'channel.hidden': [channelHiddenHandler],
     'channel.visible': [channelVisibleHandler],
     'member.updated': [memberUpdatedHandler],
@@ -405,6 +413,8 @@ export class ChannelManager extends WithSubscriptions {
     'message.read_locally': [readStateChangedHandler],
     'notification.added_to_channel': [notificationAddedToChannelHandler],
     'notification.channel_mutes_updated': [notificationChannelMutesUpdatedHandler],
+    // carries the own unread count after the rewind took the hidden messages out of it
+    'notification.channel_rewound': [readStateChangedHandler],
     'notification.mark_read': [readStateChangedHandler],
     'notification.mark_unread': [readStateChangedHandler],
     'notification.message_new': [notificationMessageNewHandler],

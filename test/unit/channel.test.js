@@ -2320,6 +2320,157 @@ describe('Channel _handleChannelEvent', function () {
 		});
 	});
 
+	describe('channel.rewound', () => {
+		const at = (minute) => new Date(Date.UTC(2020, 0, 1, 0, minute, 0));
+		const msg = (id, minute) => generateMsg({ id, cid: channel.cid, date: at(minute) });
+		const rewoundEvent = (overrides = {}) => ({
+			type: 'channel.rewound',
+			cid: channel.cid,
+			channel: { last_message_at: convertDateToTimestamp(at(2)) },
+			rewind: {
+				id: 'rewind-id',
+				message_id: 'm2',
+				inclusive: false,
+				hidden_count_at_rewind: 2,
+				created_at: convertDateToTimestamp(at(5)),
+			},
+			...overrides,
+		});
+
+		beforeEach(() => {
+			// `reload()` re-watches, and `watch()` waits for a live socket.
+			client.wsConnection._setStatus({ isHealthy: true, connectionId: 'connection-id' });
+		});
+
+		afterEach(() => {
+			vi.restoreAllMocks();
+		});
+
+		it('drops the rewound messages by reloading the newest messages', async () => {
+			seedLatestWindow(channel, [msg('m1', 1), msg('m2', 2), msg('m3', 3), msg('m4', 4)]);
+			const getOrCreate = vi.spyOn(channel, 'getOrCreate').mockResolvedValue(
+				generateChannel({
+					channel: { id: channel.id, type: channel.type },
+					messages: [msg('m1', 1), msg('m2', 2)],
+				}),
+			);
+
+			channel._handleChannelEvent(rewoundEvent());
+
+			expect(getOrCreate).toHaveBeenCalledTimes(1);
+			await vi.waitFor(() => {
+				expect(channel.messagePaginator.items.map((m) => m.id)).toEqual(['m1', 'm2']);
+			});
+			expect(channel.messagePaginator.getItem('m3')).toBeUndefined();
+			expect(channel.messagePaginator.getItem('m4')).toBeUndefined();
+		});
+
+		it('takes the own unread count from the reloaded read state', async () => {
+			seedLatestWindow(channel, [msg('m1', 1), msg('m2', 2), msg('m3', 3)]);
+			seedOwnUnreadCount(channel, 2);
+			vi.spyOn(channel, 'getOrCreate').mockResolvedValue(
+				generateChannel({
+					channel: { id: channel.id, type: channel.type },
+					messages: [msg('m1', 1), msg('m2', 2)],
+					read: [
+						{
+							user: { id: user.id },
+							last_read: convertDateToTimestamp(at(1)),
+							unread_messages: 1,
+						},
+					],
+				}),
+			);
+
+			channel._handleChannelEvent(rewoundEvent());
+
+			await vi.waitFor(() => {
+				expect(channel.state.read[user.id].unread_messages).to.equal(1);
+			});
+		});
+
+		it('takes the unread snapshot again, so it no longer points at a hidden message', async () => {
+			seedLatestWindow(channel, [msg('m1', 1), msg('m2', 2), msg('m3', 3)]);
+			channel.messagePaginator.setUnreadSnapshot({
+				firstUnreadMessageId: 'm3',
+				lastReadAt: convertDateToTimestamp(at(2)),
+				lastReadMessageId: 'm2',
+				unreadCount: 1,
+			});
+			vi.spyOn(channel, 'getOrCreate').mockResolvedValue(
+				generateChannel({
+					channel: { id: channel.id, type: channel.type },
+					messages: [msg('m1', 1), msg('m2', 2)],
+					read: [
+						{
+							user: { id: user.id },
+							last_read: convertDateToTimestamp(at(2)),
+							last_read_message_id: 'm2',
+							unread_messages: 0,
+						},
+					],
+				}),
+			);
+
+			channel._handleChannelEvent(rewoundEvent());
+
+			await vi.waitFor(() => {
+				expect(channel.messagePaginator.unreadStateSnapshot.getLatestValue()).toEqual({
+					firstUnreadMessageId: null,
+					lastReadAt: convertDateToTimestamp(at(2)),
+					lastReadMessageId: 'm2',
+					unreadCount: 0,
+				});
+			});
+		});
+
+		it('takes the channel data from the event and keeps the fields it leaves out', () => {
+			vi.spyOn(channel, 'getOrCreate').mockResolvedValue(
+				generateChannel({ channel: { id: channel.id, type: channel.type } }),
+			);
+			channel.data = { ...channel.data, hidden: false };
+			const lastMessageAt = convertDateToTimestamp(at(2));
+
+			channel._handleChannelEvent(rewoundEvent());
+
+			expect(channel.data.last_message_at).to.equal(lastMessageAt);
+			expect(channel.data.hidden).to.equal(false);
+		});
+	});
+
+	describe('notification.channel_rewound', () => {
+		it('sets the own unread count from the event without querying the channel', () => {
+			seedOwnUnreadCount(channel, 4);
+			const getOrCreate = vi.spyOn(channel, 'getOrCreate');
+
+			channel._handleChannelEvent({
+				type: 'notification.channel_rewound',
+				cid: channel.cid,
+				channel: { last_message_at: convertDateToTimestamp('2020-01-01T00:02:00.000Z') },
+				unread_count: 1,
+			});
+
+			expect(channel.state.read[user.id].unread_messages).to.equal(1);
+			expect(channel.data.last_message_at).to.equal(
+				convertDateToTimestamp('2020-01-01T00:02:00.000Z'),
+			);
+			expect(getOrCreate).not.toHaveBeenCalled();
+			getOrCreate.mockRestore();
+		});
+
+		it('keeps the own unread count when the event carries none', () => {
+			seedOwnUnreadCount(channel, 4);
+
+			channel._handleChannelEvent({
+				type: 'notification.channel_rewound',
+				cid: channel.cid,
+				channel: {},
+			});
+
+			expect(channel.state.read[user.id].unread_messages).to.equal(4);
+		});
+	});
+
 	describe('message.deleted', () => {
 		it('message.delete removes quoted messages references', function () {
 			const originalMessage = generateMsg({ cid: channel.cid, silent: true });
