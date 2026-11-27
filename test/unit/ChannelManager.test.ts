@@ -1650,53 +1650,54 @@ describe('ChannelManager', () => {
     },
   );
 
-  describe.each(['channel.updated', 'channel.truncated'] as EventTypes[])(
-    'event %s',
-    (eventType) => {
-      it('re-inserts the channel into matching lists and removes it from the rest', async () => {
-        const channelManager = useClientManager();
-        const ch = makeChannel('messaging:3');
-        client.channelManager.getOrCreateChannel(ch.cid, () => ch);
+  describe.each([
+    'channel.updated',
+    'channel.truncated',
+    'channel.rewound',
+  ] as EventTypes[])('event %s', (eventType) => {
+    it('re-inserts the channel into matching lists and removes it from the rest', async () => {
+      const channelManager = useClientManager();
+      const ch = makeChannel('messaging:3');
+      client.channelManager.getOrCreateChannel(ch.cid, () => ch);
 
-        const p = new ChannelPaginator({ client });
-        const matchesFilterSpy = vi.spyOn(p, 'matchesFilter').mockReturnValue(true);
-        const ingestItemSpy = vi.spyOn(p, 'ingestItem').mockReturnValue(true);
-        const removeItemSpy = vi
-          .spyOn(p, 'removeItem')
-          .mockReturnValue({ state: { currentIndex: 0, insertionIndex: 1 } });
-        channelManager.insertPaginator({ paginator: p });
-        channelManager.registerSubscriptions();
+      const p = new ChannelPaginator({ client });
+      const matchesFilterSpy = vi.spyOn(p, 'matchesFilter').mockReturnValue(true);
+      const ingestItemSpy = vi.spyOn(p, 'ingestItem').mockReturnValue(true);
+      const removeItemSpy = vi
+        .spyOn(p, 'removeItem')
+        .mockReturnValue({ state: { currentIndex: 0, insertionIndex: 1 } });
+      channelManager.insertPaginator({ paginator: p });
+      channelManager.registerSubscriptions();
 
-        client.dispatchEvent({ type: eventType, cid: ch.cid });
-        await vi.waitFor(() => {
-          expect(ingestItemSpy).toHaveBeenCalledWith(ch);
-          expect(removeItemSpy).not.toHaveBeenCalled();
-        });
-
-        matchesFilterSpy.mockReturnValue(false);
-        client.dispatchEvent({ type: eventType, cid: ch.cid });
-        await vi.waitFor(() => {
-          expect(removeItemSpy).toHaveBeenCalledWith({ item: ch });
-          expect(ingestItemSpy).toHaveBeenCalledTimes(1);
-        });
+      client.dispatchEvent({ type: eventType, cid: ch.cid });
+      await vi.waitFor(() => {
+        expect(ingestItemSpy).toHaveBeenCalledWith(ch);
+        expect(removeItemSpy).not.toHaveBeenCalled();
       });
 
-      it('ignores a channel that is not loaded', async () => {
-        const channelManager = useClientManager();
-        const p = new ChannelPaginator({ client });
-        vi.spyOn(p, 'matchesFilter').mockReturnValue(true);
-        const ingestItemSpy = vi.spyOn(p, 'ingestItem');
-        channelManager.insertPaginator({ paginator: p });
-        channelManager.registerSubscriptions();
-
-        client.dispatchEvent({ type: eventType, cid: 'messaging:unknown' });
-        await new Promise((resolve) => setTimeout(resolve, 0));
-
-        expect(watchSpy).not.toHaveBeenCalled();
-        expect(ingestItemSpy).not.toHaveBeenCalled();
+      matchesFilterSpy.mockReturnValue(false);
+      client.dispatchEvent({ type: eventType, cid: ch.cid });
+      await vi.waitFor(() => {
+        expect(removeItemSpy).toHaveBeenCalledWith({ item: ch });
+        expect(ingestItemSpy).toHaveBeenCalledTimes(1);
       });
-    },
-  );
+    });
+
+    it('ignores a channel that is not loaded', async () => {
+      const channelManager = useClientManager();
+      const p = new ChannelPaginator({ client });
+      vi.spyOn(p, 'matchesFilter').mockReturnValue(true);
+      const ingestItemSpy = vi.spyOn(p, 'ingestItem');
+      channelManager.insertPaginator({ paginator: p });
+      channelManager.registerSubscriptions();
+
+      client.dispatchEvent({ type: eventType, cid: 'messaging:unknown' });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(watchSpy).not.toHaveBeenCalled();
+      expect(ingestItemSpy).not.toHaveBeenCalled();
+    });
+  });
 
   it('moves a channel in a list sorted by name after channel.updated renames it', async () => {
     const paginator = new ChannelPaginator({
@@ -2273,6 +2274,27 @@ describe('ChannelManager', () => {
 
       await vi.waitFor(() => {
         expect(paginator.items?.map((c) => c.cid)).toEqual([channel.cid]);
+      });
+    });
+
+    it('drops a channel a rewind left without unread messages', async () => {
+      const channel = makeChannel('messaging:303');
+      seedUnread(channel);
+      const { paginator } = loadedUnreadList(channel);
+
+      expect(paginator.items).toHaveLength(1);
+
+      client.dispatchEvent({
+        channel_id: channel.id,
+        channel_type: channel.type,
+        cid: channel.cid,
+        created_at: convertDateToTimestamp(new Date()),
+        type: 'notification.channel_rewound',
+        unread_count: 0,
+      });
+
+      await vi.waitFor(() => {
+        expect(paginator.items).toHaveLength(0);
       });
     });
 

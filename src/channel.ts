@@ -2775,6 +2775,27 @@ export class Channel extends ChannelApi {
 
         break;
       }
+      case 'channel.rewound': {
+        // A rewind hides the messages after a point (`rewind.message_id`), but the event carries no
+        // range bounds, so the hidden ones cannot be picked out locally. The reload re-queries the
+        // newest messages and removes the loaded ones the page no longer has, and refreshes the
+        // read state and pinned messages with them. A reload already running is not repeated.
+        if (event.channel) channel.data = { ...channel.data, ...event.channel };
+        runDetached(this.reload(), {
+          context: 'channelRewound',
+          // A reload onto a loaded head keeps the unread snapshot, which may count or point at a
+          // hidden message: it is taken again from the read state the reload brought.
+          onSuccessCallback: () => this.messagePaginator.seedUnreadSnapshot(),
+        });
+        break;
+      }
+      // Sent instead of `channel.rewound` to members that are not watching: only the channel data
+      // and the own unread count are updated, since a reload would watch the channel.
+      case 'notification.channel_rewound': {
+        if (event.channel) channel.data = { ...channel.data, ...event.channel };
+        if (event.unread_count != null) this._setOwnUnreadCount(event.unread_count);
+        break;
+      }
       case 'member.added':
       case 'member.updated': {
         const memberCopy: ChannelMemberResponse = {
