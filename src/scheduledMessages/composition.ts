@@ -114,6 +114,47 @@ export const toScheduledMessagePayload = (
   return scheduledMessagePayload;
 };
 
+/**
+ * A failed scheduled message as a new message to schedule in its place at `scheduledAt`: its whole
+ * content, without what the server sets. A live location keeps its duration, counted from the new
+ * send time as it was from the old one.
+ */
+export const toRescheduledMessagePayload = (
+  { message: storedMessage, scheduled_at: previousScheduledAt }: ScheduledMessageResponse,
+  scheduledAt: Date,
+): MessageRequest => {
+  const { pin_expires: pinExpires, shared_location: location } = storedMessage;
+  const { shared_location: _storedLocation, ...content } = omitFields(
+    storedMessage,
+    COMPOSED_FIELDS_DROPPED_ON_UPDATE,
+  );
+  const hasCoordinates =
+    location?.latitude !== undefined && location.longitude !== undefined;
+
+  return {
+    ...content,
+    ...(pinExpires === undefined ? {} : { pin_expires: nsToDate(pinExpires) }),
+    ...(location && hasCoordinates
+      ? {
+          shared_location: {
+            created_by_device_id: location.created_by_device_id,
+            latitude: location.latitude as number,
+            longitude: location.longitude as number,
+            ...(location.end_at === undefined
+              ? {}
+              : {
+                  end_at: new Date(
+                    scheduledAt.getTime() +
+                      (nsToDate(location.end_at).getTime() -
+                        nsToDate(previousScheduledAt).getTime()),
+                  ),
+                }),
+          },
+        }
+      : {}),
+  };
+};
+
 export const toScheduledMessagePreview = (
   scheduledMessage: ScheduledMessageResponse,
 ): LocalMessage => {

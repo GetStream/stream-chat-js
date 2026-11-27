@@ -739,6 +739,172 @@ describe("a channel's scheduled messages", () => {
       expect(client.scheduledMessageStore.get(sm.id)).toBeUndefined();
     });
 
+    it('reschedules a pending message by moving its time', async () => {
+      const { channel, client, sm } = setupWithMessage();
+      const scheduledAt = new Date(Date.now() + 2 * 60 * 60 * 1000);
+      const updated = { ...sm, updated_at: at(10) };
+      const update = vi
+        .spyOn(client, 'updateScheduledMessage')
+        .mockResolvedValue({ duration: '', scheduled_message: updated });
+      const send = vi.spyOn(client, 'sendMessage');
+
+      const result = await channel.messageOperations.rescheduleScheduledMessage(
+        sm,
+        scheduledAt,
+      );
+
+      expect(update).toHaveBeenCalledWith({ id: sm.id }, { scheduled_at: scheduledAt });
+      expect(send).not.toHaveBeenCalled();
+      expect(result).toEqual(updated);
+    });
+
+    it('reschedules a failed message as a new one with all its content, then deletes it', async () => {
+      const { channel, client } = setup();
+      const failed = generateScheduledMessage({
+        message: {
+          attachments: [{ type: 'image', image_url: 'https://example.com/a.png' }],
+          custom: { mood: 'happy' },
+          html: '<p>hi @team</p>',
+          mentioned_group_ids: ['group-1'],
+          mentioned_roles: ['admin'],
+          mentioned_users: ['user2'],
+          parent_id: 'parent-1',
+          pin_expires: at(50),
+          pinned: true,
+          quoted_message_id: 'quoted-1',
+          restricted_visibility: ['user2'],
+          silent: true,
+          text: 'hi @team',
+          type: 'regular',
+        } as never,
+        status: 'failed',
+        updated_at: at(0),
+      });
+      channel.scheduledMessagesPaginator.hydrate([failed]);
+      const replacement = generateScheduledMessage({ updated_at: at(10) });
+      const send = vi.spyOn(client, 'sendMessage').mockResolvedValue({
+        duration: '',
+        message: { id: 'm-1', text: 'hi @team' },
+        scheduled_message: replacement,
+      } as never);
+      const remove = vi.spyOn(client, 'deleteScheduledMessage').mockResolvedValue({
+        duration: '',
+        scheduled_message: failed,
+      });
+      const scheduledAt = new Date(Date.now() + 2 * 60 * 60 * 1000);
+
+      const result = await channel.messageOperations.rescheduleScheduledMessage(
+        failed,
+        scheduledAt,
+      );
+
+      expect(send).toHaveBeenCalledTimes(1);
+      const [, request] = send.mock.calls[0] as unknown as [
+        unknown,
+        Record<string, unknown>,
+      ];
+      expect(request.scheduled_at).toEqual(scheduledAt);
+      expect(request.message).toEqual({
+        attachments: [{ type: 'image', image_url: 'https://example.com/a.png' }],
+        custom: { mood: 'happy' },
+        mentioned_group_ids: ['group-1'],
+        mentioned_roles: ['admin'],
+        mentioned_users: ['user2'],
+        parent_id: 'parent-1',
+        pin_expires: new Date(Date.UTC(2030, 0, 1, 0, 0, 50)),
+        pinned: true,
+        quoted_message_id: 'quoted-1',
+        restricted_visibility: ['user2'],
+        silent: true,
+        text: 'hi @team',
+      });
+      expect(remove).toHaveBeenCalledWith({ id: failed.id });
+      expect(result).toEqual(replacement);
+      expect(listed(channel)).toEqual([replacement]);
+    });
+
+    it('reschedules a failed live location with the same sharing duration', async () => {
+      const { channel, client } = setup();
+      const failed = generateScheduledMessage({
+        message: {
+          shared_location: {
+            created_by_device_id: 'device-1',
+            end_at: at(40),
+            latitude: 52.37,
+            longitude: 4.89,
+          },
+          text: '',
+        } as never,
+        scheduled_at: at(10),
+        status: 'failed',
+        updated_at: at(0),
+      });
+      channel.scheduledMessagesPaginator.hydrate([failed]);
+      const send = vi.spyOn(client, 'sendMessage').mockResolvedValue({
+        duration: '',
+        message: { id: 'm-1', text: '' },
+        scheduled_message: generateScheduledMessage({ updated_at: at(10) }),
+      } as never);
+      vi.spyOn(client, 'deleteScheduledMessage').mockResolvedValue({
+        duration: '',
+        scheduled_message: failed,
+      });
+      const scheduledAt = new Date(Date.UTC(2030, 0, 2));
+
+      await channel.messageOperations.rescheduleScheduledMessage(failed, scheduledAt);
+
+      const [, request] = send.mock.calls[0] as unknown as [
+        unknown,
+        { message: Record<string, unknown> },
+      ];
+      expect(request.message.shared_location).toEqual({
+        created_by_device_id: 'device-1',
+        end_at: new Date(scheduledAt.getTime() + 30 * 1000),
+        latitude: 52.37,
+        longitude: 4.89,
+      });
+    });
+
+    it('keeps the failed message when scheduling its replacement fails', async () => {
+      const { channel, client } = setup();
+      const failed = generateScheduledMessage({ status: 'failed', updated_at: at(0) });
+      channel.scheduledMessagesPaginator.hydrate([failed]);
+      vi.spyOn(client, 'sendMessage').mockRejectedValue(generateAPIError(4, 'nope'));
+      const remove = vi.spyOn(client, 'deleteScheduledMessage');
+
+      await expect(
+        channel.messageOperations.rescheduleScheduledMessage(
+          failed,
+          new Date(Date.now() + 1e7),
+        ),
+      ).rejects.toThrow();
+
+      expect(remove).not.toHaveBeenCalled();
+      expect(listed(channel)).toEqual([failed]);
+    });
+
+    it('resolves with the new message even when deleting the failed one fails', async () => {
+      const { channel, client } = setup();
+      const failed = generateScheduledMessage({ status: 'failed', updated_at: at(0) });
+      channel.scheduledMessagesPaginator.hydrate([failed]);
+      const replacement = generateScheduledMessage({ updated_at: at(10) });
+      vi.spyOn(client, 'sendMessage').mockResolvedValue({
+        duration: '',
+        message: { id: 'm-1', text: 'see you tomorrow' },
+        scheduled_message: replacement,
+      } as never);
+      vi.spyOn(client, 'deleteScheduledMessage').mockRejectedValue(
+        generateAPIError(4, 'nope'),
+      );
+
+      const result = await channel.messageOperations.rescheduleScheduledMessage(
+        failed,
+        new Date(Date.now() + 1e7),
+      );
+
+      expect(result).toEqual(replacement);
+    });
+
     it('sends a scheduled message now and lists the result', async () => {
       const { channel, client, sm } = setupWithMessage();
       const sending = { ...sm, status: 'sending' as const, updated_at: at(10) };

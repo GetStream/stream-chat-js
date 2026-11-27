@@ -20,6 +20,9 @@ import {
 import { dateToNs } from '../utils/time';
 import { MessageOperationStatePolicy } from './MessageOperationStatePolicy';
 import { ScheduledMessageStatePolicy } from '../scheduledMessages/ScheduledMessageStatePolicy';
+import { toRescheduledMessagePayload } from '../scheduledMessages/composition';
+import { SCHEDULED_MESSAGE_STATUS } from '../scheduledMessages/constants';
+import { chatLoggerSystem } from '../logger';
 import type { ScheduledMessageOperationKind } from '../scheduledMessages/ScheduledMessageStatePolicy';
 import type { QueueableType } from '../offline-support';
 import type {
@@ -41,6 +44,8 @@ import type {
   ScheduleMessageParams,
   UpdateScheduledMessageParams,
 } from '../scheduledMessages/types';
+
+const logger = chatLoggerSystem.getLogger('channel');
 
 export type MessageOperationsConfig = {
   /** Most failed sends kept for retry; the oldest is evicted past this (defaults to 100). */
@@ -466,6 +471,36 @@ export class MessageOperations {
     );
 
     return scheduledMessage;
+  }
+
+  /**
+   * Moves a scheduled message to another time. A failed one can't be updated, so it is scheduled
+   * again as a new message with the same content, and the failed one is deleted once that worked.
+   * Resolves with the message now scheduled, or nothing when the time had passed and it was sent.
+   */
+  async rescheduleScheduledMessage(
+    scheduledMessage: ScheduledMessageResponse,
+    scheduledAt: Date,
+  ): Promise<ScheduledMessageResponse | undefined> {
+    if (scheduledMessage.status !== SCHEDULED_MESSAGE_STATUS.Failed) {
+      return await this.updateScheduledMessage(scheduledMessage.id, {
+        request: { scheduled_at: scheduledAt },
+      });
+    }
+
+    const { scheduled_message: rescheduled } = await this.scheduleMessage({
+      message: toRescheduledMessagePayload(scheduledMessage, scheduledAt),
+      options: { scheduled_at: scheduledAt },
+    });
+
+    // The new message is in either way; a failed delete only leaves the old one listed as failed.
+    await this.deleteScheduledMessage(scheduledMessage.id).catch((error) =>
+      logger
+        .withExtraTags('rescheduleScheduledMessage', this.ctx.channel.cid)
+        .error('Deleting the failed scheduled message failed.', { error }),
+    );
+
+    return rescheduled;
   }
 
   async sendScheduledMessageNow(id: string): Promise<ScheduledMessageResponse> {
